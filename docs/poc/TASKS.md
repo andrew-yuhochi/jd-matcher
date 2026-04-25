@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 5 | In Progress: 0 | To Do: 7 | Blocked: 0
+- Done: 6 | In Progress: 0 | To Do: 6 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -156,7 +156,7 @@
 
 ### TASK-M1-006 — JD hydrator (LinkedIn + Indeed guest endpoints)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-24)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C5 (JD Hydrator) — TDD §C5
@@ -171,13 +171,13 @@
 - **Demo Artifact**: `python -m jd_matcher.hydrate --url <fixture-url>` returns full JD text from fixture HTML; rate-limit test (`pytest tests/hydrate/test_rate_limiter.py`) measurably enforces 1 req/30 s.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-006.md`
 - **Acceptance Criteria**:
-  - [ ] 100% JD extraction on 10 LinkedIn + 10 Indeed synthetic HTML fixtures
-  - [ ] Rate limiter measurably enforces 1 request per 30 seconds across the entire process (not per-instance)
-  - [ ] Per-URL failure path: posting still inserted with `hydration_status='failed'` and `posting_sources.raw_html='ERROR: <reason>'`; logged but not raised
-  - [ ] Source-level health threshold: >20% per-run fail → next `pipeline_runs` row for that source has `health_status='degraded'`
-  - [ ] 100% per-run fail → `pipeline_runs.health_status='failed'`, `failure_reason='rate_limit'` if all errors are 429, else exception text
-  - [ ] Hydrated `raw_html` cached in `posting_sources.raw_html` — never re-fetched for same URL
-  - [ ] No silent drops verified by integration test: feed 5 URLs (3 success + 2 fail), assert 5 postings end up in `postings` with correct `hydration_status`
+  - [x] 100% JD extraction on 10 LinkedIn + 10 Indeed synthetic HTML fixtures
+  - [x] Rate limiter measurably enforces 1 request per 30 seconds across the entire process (not per-instance)
+  - [x] Per-URL failure path: posting still inserted with `hydration_status='failed'` and `posting_sources.raw_html='ERROR: <reason>'`; logged but not raised
+  - [x] Source-level health threshold: >20% per-run fail → next `pipeline_runs` row for that source has `health_status='degraded'`
+  - [x] 100% per-run fail → `pipeline_runs.health_status='failed'`, `failure_reason='rate_limit'` if all errors are 429, else exception text
+  - [x] Hydrated `raw_html` cached in `posting_sources.raw_html` — never re-fetched for same URL
+  - [x] No silent drops verified by integration test: feed 5 URLs (3 success + 2 fail), assert 5 postings end up in `postings` with correct `hydration_status`
 
 ---
 

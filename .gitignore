@@ -33,6 +33,7 @@ logs/
 
 # Real data samples (sensitive — never commit)
 tests/fixtures/real/
+tests/fixtures/hydration/real/
 
 # IDE
 .vscode/
