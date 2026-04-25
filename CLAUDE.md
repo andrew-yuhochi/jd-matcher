@@ -9,9 +9,9 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 |-|-|
 | **Phase** | PoC |
 | **Milestone** | M1 — Raw pipe + URL dedup + applied/dismissed state |
-| **Last completed** | TASK-M1-004 — Gmail ingester (OAuth + fetch) (Done 2026-04-24) |
-| **Next task** | TASK-M1-005 — Email URL parsers + URL-based dedup [data-pipeline] |
-| **Next command** | /implement jd-matcher TASK-M1-005 |
+| **Last completed** | TASK-M1-007 — State manager (applied / dismissed / restore) (Done 2026-04-25) |
+| **Next task** | TASK-M1-008 — Pipeline orchestrator + non-hideable health logging [data-pipeline] |
+| **Next command** | /implement jd-matcher TASK-M1-008 |
 
 ---
 
