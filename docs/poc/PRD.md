@@ -103,7 +103,7 @@ Four milestones, each with a user-observable deliverable. Mirrors ROADMAP.md §"
 - `text-embedding-3-small` cloud embedding pipeline (config-swappable to local `all-MiniLM-L6-v2`)
 - Two-stage dedup: block by `(canonical_company, canonical_seniority, canonical_location)`; fuse cosine + structured similarity at 50/50
 - Canonical record merge logic preserving `first_seen` + `sources[]`
-- Cross-state dedup generalised to canonical-id (a new posting matching an applied/dismissed canonical is suppressed from Main)
+- Cross-state dedup generalised to canonical-id (a new posting matching an applied or dismissed canonical is suppressed from Main). **Exception**: a new posting matching a canonical that is currently in `Inactive` state is NOT suppressed — Inactive entries are treated as non-existent for dedup purposes (both URL-based and LLM content-based). The new posting surfaces on Main with a fresh posting_id; the old Inactive entry remains in the Applied tab as forensic history. (See BACKLOG.md → "Inactive state lifecycle" — implemented at MVP-M1.)
 - Repost detection (same JD, new `jobId`, 30+ days later)
 - Himalayas API source added
 
@@ -154,6 +154,8 @@ Deferred to MVP (DISCOVERY-NOTES.md §14, ROADMAP.md §"Out of scope (PoC)", UX-
 - Cron / launchd full automation (PoC: basic schedule + manual `/pipeline/run` only)
 - Greenhouse / Lever ATS API sources (curated employer slug list — deferred unless coverage gap surfaces in M4 audit)
 - Coverage expansion based on PoC audit (additional LinkedIn keywords, French embeddings, Greenhouse) → MVP-M2
+- Inactive state lifecycle (auto-Inactivate `Applied`/`Screen`/`Interview` after ~90 days of silence on `status_updated_at`; dedup bypass for Inactive entries; Applied tab Inactive sub-section/filter; manual Inactive → any-status transition by user) — supersedes the original auto-remove design — MVP-M1
+- Inactive accumulation reminder notification (separate from Inactive lifecycle; surfaces a UI prompt when Inactive count crosses a threshold, since Inactive entries never auto-remove) — MVP (separate item from Inactive lifecycle)
 
 Deferred indefinitely or to Beta (DISCOVERY-NOTES.md §3, §14, MARKET-ANALYSIS.md):
 - Google for Jobs (no free RSS path; SerpAPI free tier marginal, paid breaks budget)

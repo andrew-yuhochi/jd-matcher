@@ -53,6 +53,46 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 ---
 
+### MVP-M1 — Inactive state lifecycle (supersedes auto-remove model)
+
+**Decision date**: 2026-04-25
+**Approved by**: User (Option A — full capture)
+**Alignment verdict**: ALIGNED (see ALIGNMENT-LOG.md 2026-04-25 entry)
+
+**What**:
+Replace the original "auto-remove after 90 days of silence" model with an Inactive state model:
+1. New status value: `Inactive`. Auto-trigger after ~90 days of silence on `status_updated_at` for `Applied`/`Screen`/`Interview` only (`Offer`/`Rejected`/`Withdrew` exempt).
+2. Inactive entries stay forever in Applied tab as forensic history; user can manually transition Inactive → any status.
+3. Dedup bypass: Inactive entries are treated as non-existent for BOTH URL-based and LLM content-based dedup. A new posting matching the same role surfaces on Main with a fresh posting_id; old Inactive entry persists.
+
+**Why**:
+- Auto-remove destroys forensic context (compensation, role details) the user may want for re-application context
+- Silence ≠ dead: large-company hiring windows often exceed 3 months
+- HR repost = real signal that role is still open and worth re-applying
+- More semantically precise version of what auto-remove was attempting to do
+
+**Schema impact for M1: NONE.**
+`status` and `status_updated_at` columns already exist on `applied` table. `auto_remove_at` column is semantically dead from inception — see TDD §1.2a / §C7 superseded notes.
+
+**Scope at MVP-M1**:
+1. Schema: extend `status` allowed values to include `Inactive` (and the rest of the funnel — `Screen`, `Interview`, `Offer`, `Rejected`, `Withdrew`). No new columns.
+2. State manager (C7): replace `auto_remove_stale_applied()` with `auto_inactivate_stale_applied()`; add `update_status(posting_id, new_status)` that resets `status_updated_at`.
+3. Dedup (C5/C6): both URL-based and LLM content-based dedup add `WHERE NOT EXISTS (… applied.status='Inactive')` semantics.
+4. Scheduler (already MVP-M1 scope): daily cron/launchd job runs `auto_inactivate_stale_applied()`.
+5. UI (C8): Applied tab gains Inactive section/filter; Main tab indicates entries whose URL once mapped to an Inactive posting (e.g. "Reposted" badge).
+
+**Out of scope for this item (separate MVP item)**:
+- Inactive accumulation reminder notification (UI prompt when Inactive count crosses threshold). Logged separately because Inactive entries never auto-remove and could accumulate over years.
+
+**Caveats to action at MVP-M1 planning**:
+1. Confirm `status_updated_at` is written on every status transition (not just initial `apply`) — this is the silence clock.
+2. The dedup bypass applies to both URL-based (M1/M2) and LLM-based (MVP) dedup — explicit in PRD §5 M2 update; do not let the URL path slip through unmodified.
+3. Decide whether to drop or repurpose the `auto_remove_at` column at MVP-M1 (it's dead-code in M1; either remove it or leave as a vestigial column — small migration either way).
+
+**M1 status**: TASK-M1-007 stands as shipped. No M1 changes required.
+
+---
+
 ## Deferred to Beta (decision gate)
 
 - **Variant A (stay personal)**: durability hardening, runbook, 6-month stable use validation.
