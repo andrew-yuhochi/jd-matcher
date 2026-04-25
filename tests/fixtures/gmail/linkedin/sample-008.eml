@@ -1,0 +1,60 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0008:b0:000:0000:0008 with SMTP id ah8hhhhhhhh;
+        Fri, 25 Apr 2026 08:00:00 -0700 (PDT)
+Date: Fri, 25 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample008.1777800000000@lva1-app000008.prod.linkedin.com>
+Subject: Senior Data Scientist job you might like
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0008_000000008.1777800000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0008_000000008.1777800000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for senior data scientist
+New jobs match your preferences.
+
+Senior Data Scientist
+Duplicate Test Corp
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/6660081/?trackingId=3Ddup1a=
+bc&midToken=3DAQTEST8&trk=3Deml-digest-0
+
+---------------------------------------------------------
+
+Other interesting roles based on your profile:
+
+Senior Data Scientist
+Duplicate Test Corp
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/6660081/?trackingId=3Ddup1x=
+yz&midToken=3DAQTEST8&trk=3Deml-digest-recommendation-0
+
+---------------------------------------------------------
+
+Unsubscribe: https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=3D80000001
+
+------=_Part_0008_000000008.1777800000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Senior Data Scientist job you might like</p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/6660081/?trackingId=3Ddu=
+p1abc">Senior Data Scientist</a> - Duplicate Test Corp - Vancouver</p>
+<p>Also recommended:</p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/6660081/?trackingId=3Ddu=
+p1xyz">Senior Data Scientist</a> - Duplicate Test Corp - Vancouver</p>
+</body>
+</html>
+
+------=_Part_0008_000000008.1777800000000--

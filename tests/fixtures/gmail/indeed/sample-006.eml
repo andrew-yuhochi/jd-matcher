@@ -1,0 +1,54 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1006:b0:001:0000:0006 with SMTP id bf6fffffffffff;
+        Wed, 23 Apr 2026 08:00:00 -0700 (PDT)
+Date: Wed, 23 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample006.1777600000000@mail.indeed.com>
+Subject: New data jobs matching your search
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_006_000000006.1777600000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_006_000000006.1777600000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "data scientist" in Vancouver, BC
+
+Data Scientist (redirect URL pattern)
+Redirect Analytics
+Vancouver, BC
+
+Apply now: https://ca.indeed.com/rc/clk?jk=rt1234567890001&fq=data+scientist&=
+tk=3D1redir2redir&from=3Dalertmail&alid=3D666666
+
+--
+
+Senior ML Engineer (rt redirect pattern)
+Traffic Corp
+Remote in Canada
+
+Apply now: https://rt.indeed.com/redir/resume-advice?jk=rt1234567890002&from=
+=3Dalertmail&tk=3D2redir3redir&alid=3D666666
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D666666
+
+------=_Indeed_Part_006_000000006.1777600000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "data scientist" in Vancouver, BC</p>
+<p><a href=3D"https://ca.indeed.com/rc/clk?jk=3Drt1234567890001">Data Scienti=
+st</a> - Redirect Analytics - Vancouver</p>
+<p><a href=3D"https://rt.indeed.com/redir/resume-advice?jk=3Drt1234567890002"=
+>Senior ML Engineer</a> - Traffic Corp - Remote</p>
+</body>
+</html>
+
+------=_Indeed_Part_006_000000006.1777600000000--

@@ -1,0 +1,57 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0009:b0:000:0000:0009 with SMTP id ai9iiiiiiiii;
+        Sat, 26 Apr 2026 08:00:00 -0700 (PDT)
+Date: Sat, 26 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample009.1777900000000@lva1-app000009.prod.linkedin.com>
+Subject: 2 new data scientist opportunities
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0009_000000009.1777900000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0009_000000009.1777900000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for data scientist in Vancouver
+New jobs match your preferences.
+
+Data Scientist (bare URL pattern)
+NoBare Corp
+Vancouver, BC
+
+View job: https://www.linkedin.com/jobs/view/5550091/?trackingId=3Dbare1abc
+&refId=3Dref9&midToken=3DAQTEST9
+
+---------------------------------------------------------
+
+Analytics Engineer (bare URL pattern)
+BarePath Systems
+Remote
+
+View job: https://www.linkedin.com/jobs/view/5550092/?trackingId=3Dbare2xyz
+&refId=3Dref9&midToken=3DAQTEST9
+
+---------------------------------------------------------
+
+Unsubscribe: https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=3D90000001
+
+------=_Part_0009_000000009.1777900000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for data scientist in Vancouver</p>
+<p><a href=3D"https://www.linkedin.com/jobs/view/5550091/">Data Scientist</a>=
+ - NoBare Corp - Vancouver</p>
+<p><a href=3D"https://www.linkedin.com/jobs/view/5550092/">Analytics Engineer=
+</a> - BarePath Systems - Remote</p>
+</body>
+</html>
+
+------=_Part_0009_000000009.1777900000000--

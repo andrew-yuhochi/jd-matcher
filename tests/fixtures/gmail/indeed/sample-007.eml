@@ -1,0 +1,91 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1007:b0:001:0000:0007 with SMTP id bg7ggggggggg;
+        Thu, 24 Apr 2026 08:00:00 -0700 (PDT)
+Date: Thu, 24 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample007.1777700000000@mail.indeed.com>
+Subject: 5 new machine learning jobs in Vancouver
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_007_000000007.1777700000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_007_000000007.1777700000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "machine learning" in Vancouver, BC
+
+ML Engineer
+Alpha Data Inc
+Vancouver, BC
+$95,000 - $120,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi7001234567001&tk=3D1a2b3c4d5e=
+&from=3Dalertmail&alid=3D777777
+
+--
+
+Senior ML Scientist
+Beta Models Corp
+Remote in Canada
+$110,000 - $145,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi7001234567002&tk=3D2b3c4d5e6f=
+&from=3Dalertmail&alid=3D777777
+
+--
+
+Data Science Manager
+Gamma Metrics
+Vancouver, BC
+$130,000 - $160,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi7001234567003&tk=3D3c4d5e6f7g=
+&from=3Dalertmail&alid=3D777777
+
+--
+
+ML Platform Engineer
+Delta Cloud
+Burnaby, BC
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi7001234567004&tk=3D4d5e6f7g8h=
+&from=3Dalertmail&alid=3D777777
+
+--
+
+Applied Scientist
+Epsilon Research
+Remote, Canada
+$120,000 - $150,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi7001234567005&tk=3D5e6f7g8h9i=
+&from=3Dalertmail&alid=3D777777
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D777777
+
+------=_Indeed_Part_007_000000007.1777700000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "machine learning" in Vancouver, BC</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi7001234567001">ML Enginee=
+r at Alpha Data</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi7001234567002">Senior ML =
+Scientist at Beta Models</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi7001234567003">Data Scien=
+ce Manager at Gamma Metrics</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi7001234567004">ML Platfor=
+m Engineer at Delta Cloud</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi7001234567005">Applied Sc=
+ientist at Epsilon Research</a></p>
+</body>
+</html>
+
+------=_Indeed_Part_007_000000007.1777700000000--

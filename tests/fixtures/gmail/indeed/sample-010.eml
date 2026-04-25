@@ -1,0 +1,82 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1010:b0:001:0000:0010 with SMTP id bj10jjjjjjjj;
+        Sun, 27 Apr 2026 08:00:00 -0700 (PDT)
+Date: Sun, 27 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample010.1778000000000@mail.indeed.com>
+Subject: New data jobs with salary ranges - Indeed Alert
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_010_000000010.1778000000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_010_000000010.1778000000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "data scientist" in Vancouver, BC
+
+Data Science Lead
+Salary Corp
+Vancouver, BC
+$140,000 - $180,000 a year
+Estimated by Indeed
+
+Apply now: https://ca.indeed.com/viewjob?jk=sal0001234567001&tk=3Ds1a2b3c4d5=
+&from=3Dalertmail&alid=3D101010&salaryInfo=3D1
+
+--
+
+Principal Data Scientist
+Compensation Analytics Inc
+Remote, Canada
+$155,000 - $195,000 a year
+Employer estimate
+
+Apply now: https://ca.indeed.com/viewjob?jk=sal0001234567002&tk=3Ds2b3c4d5e6=
+&from=3Dalertmail&alid=3D101010&salaryInfo=3D1
+
+--
+
+Staff Data Scientist
+Budget Data LLC
+Burnaby, BC
+Up to $100,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=sal0001234567003&tk=3Ds3c4d5e6f7=
+&from=3Dalertmail&alid=3D101010
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D101010
+
+------=_Indeed_Part_010_000000010.1778000000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "data scientist" in Vancouver, BC</p>
+<p>
+  <a href=3D"https://ca.indeed.com/viewjob?jk=3Dsal0001234567001">Data Science=
+ Lead</a>
+  - Salary Corp - Vancouver, BC
+  <br/><em>$140,000 - $180,000 a year</em>
+</p>
+<p>
+  <a href=3D"https://ca.indeed.com/viewjob?jk=3Dsal0001234567002">Principal Da=
+ta Scientist</a>
+  - Compensation Analytics Inc - Remote, Canada
+  <br/><em>$155,000 - $195,000 a year</em>
+</p>
+<p>
+  <a href=3D"https://ca.indeed.com/viewjob?jk=3Dsal0001234567003">Staff Data S=
+cientist</a>
+  - Budget Data LLC - Burnaby, BC
+  <br/><em>Up to $100,000 a year</em>
+</p>
+</body>
+</html>
+
+------=_Indeed_Part_010_000000010.1778000000000--

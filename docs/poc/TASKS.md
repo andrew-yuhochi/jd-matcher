@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 4 | In Progress: 0 | To Do: 8 | Blocked: 0
+- Done: 5 | In Progress: 0 | To Do: 7 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -129,7 +129,7 @@
 
 ### TASK-M1-005 — Email URL parsers + URL-based dedup
 
-- **Status**: To Do
+- **Status**: Done (2026-04-24)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C4 (Email URL parser) + C6 (URL-based dedup) — TDD §C4, §C6
@@ -144,13 +144,13 @@
 - **Demo Artifact**: `python -m jd_matcher.parse --fixture linkedin/sample-1.eml` returns ParsedPosting list; running same fixture twice through full pipeline produces 0 new postings on second run.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-005.md`
 - **Acceptance Criteria**:
-  - [ ] LinkedIn parser: 100% URL extraction on 10 synthetic `.eml` fixtures (each fixture contains 1-5 postings)
-  - [ ] Indeed parser: 100% URL extraction on 10 synthetic `.eml` fixtures
-  - [ ] URL regex pattern: `linkedin.com/jobs/view/(\d+)` for LinkedIn; equivalent for Indeed; raw_body persisted in `posting_sources.raw_body` for replay
-  - [ ] Best-effort title/company/location extracted when present in email; empty string when not present (no exceptions on missing fields)
-  - [ ] `seen_urls` atomic insert (transactional) prevents duplicate inserts under concurrent calls
-  - [ ] Re-run of pipeline against same fixture set produces 0 new postings (URL dedup verified)
-  - [ ] URL-only fallback: if title/company/location all extraction fails for a posting, the posting is still inserted (URL is the canonical identifier)
+  - [x] LinkedIn parser: 100% URL extraction on 10 synthetic `.eml` fixtures (each fixture contains 1-5 postings)
+  - [x] Indeed parser: 100% URL extraction on 10 synthetic `.eml` fixtures
+  - [x] URL regex pattern: `linkedin.com/jobs/view/(\d+)` for LinkedIn; equivalent for Indeed; raw_body persisted in `posting_sources.raw_body` for replay
+  - [x] Best-effort title/company/location extracted when present in email; empty string when not present (no exceptions on missing fields)
+  - [x] `seen_urls` atomic insert (transactional) prevents duplicate inserts under concurrent calls
+  - [x] Re-run of pipeline against same fixture set produces 0 new postings (URL dedup verified)
+  - [x] URL-only fallback: if title/company/location all extraction fails for a posting, the posting is still inserted (URL is the canonical identifier)
 
 ---
 

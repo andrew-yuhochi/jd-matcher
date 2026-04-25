@@ -1,0 +1,57 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1008:b0:001:0000:0008 with SMTP id bh8hhhhhhhh;
+        Fri, 25 Apr 2026 08:00:00 -0700 (PDT)
+Date: Fri, 25 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample008.1777800000000@mail.indeed.com>
+Subject: Senior Data Scientist role - Indeed Job Alert
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_008_000000008.1777800000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_008_000000008.1777800000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "senior data scientist" in Vancouver, BC
+
+Senior Data Scientist
+Dedup Corp
+Vancouver, BC
+
+Apply now: https://ca.indeed.com/viewjob?jk=dup0001234567001&tk=3Ddup1a2b3c&=
+from=3Dalertmail&alid=3D888888
+
+--
+
+You may also be interested in:
+
+Senior Data Scientist
+Dedup Corp
+Vancouver, BC
+
+Apply now: https://ca.indeed.com/viewjob?jk=dup0001234567001&tk=3Ddup4d5e6f&=
+from=3Drecommend&alid=3D888888
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D888888
+
+------=_Indeed_Part_008_000000008.1777800000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "senior data scientist" in Vancouver</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Ddup0001234567001&tk=3Ddup1a2=
+b3c">Senior Data Scientist</a> - Dedup Corp - Vancouver</p>
+<p>Also recommended:</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Ddup0001234567001&tk=3Ddup4d5=
+e6f">Senior Data Scientist</a> - Dedup Corp - Vancouver</p>
+</body>
+</html>
+
+------=_Indeed_Part_008_000000008.1777800000000--

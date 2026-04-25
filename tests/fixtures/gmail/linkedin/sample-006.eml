@@ -1,0 +1,73 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0006:b0:000:0000:0006 with SMTP id af6fffffffffff;
+        Wed, 23 Apr 2026 08:00:00 -0700 (PDT)
+Date: Wed, 23 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample006.1777600000000@lva1-app000006.prod.linkedin.com>
+Subject: New data scientist jobs matching your search
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0006_000000006.1777600000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0006_000000006.1777600000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for data scientist in Vancouver
+New jobs match your preferences.
+
+Data Scientist, Recommendations
+Quantum Commerce Inc
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/8880061/?trackingId=3Dqp1abc=
+def&refId=3Drnd123&lipi=3Durn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3=
+Btest&midToken=3DAQTEST6&trk=3Deml-email_job_alert_digest_01-primary_job_list-=
+0-title-click-0
+
+---------------------------------------------------------
+
+Principal Data Scientist
+Ridge Analytics Corp
+Remote, Canada
+
+View job: https://www.linkedin.com/comm/jobs/view/8880062/?trackingId=3Dqp2xyz=
+abc&refId=3Drnd456&lipi=3Durn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3=
+Btest&midToken=3DAQTEST6&trk=3Deml-email_job_alert_digest_01-primary_job_list-=
+1-title-click-0
+
+---------------------------------------------------------
+
+Unsubscribe: https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=3D60000001
+
+------=_Part_0006_000000006.1777600000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for data scientist in Vancouver</p>
+<table>
+  <tr>
+    <td><a href=3D"https://www.linkedin.com/comm/jobs/view/8880061/?trackingId=
+=3Dqp1abcdef">Data Scientist, Recommendations</a></td>
+  </tr>
+  <tr><td>Quantum Commerce Inc</td></tr>
+  <tr><td>Vancouver, BC</td></tr>
+</table>
+<table>
+  <tr>
+    <td><a href=3D"https://www.linkedin.com/comm/jobs/view/8880062/?trackingId=
+=3Dqp2xyzabc">Principal Data Scientist</a></td>
+  </tr>
+  <tr><td>Ridge Analytics Corp</td></tr>
+  <tr><td>Remote, Canada</td></tr>
+</table>
+</body>
+</html>
+
+------=_Part_0006_000000006.1777600000000--

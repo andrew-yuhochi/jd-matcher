@@ -73,7 +73,7 @@ class TestFetchForSenderSkipLive:
         ingester = GmailIngester(credentials=None, db_path=test_db)
         results = ingester.fetch_for_sender("linkedin", SINCE_DATE)
 
-        assert len(results) == 5
+        assert len(results) == 10
         for msg in results:
             assert isinstance(msg, RawEmail)
             assert isinstance(msg.body_bytes, bytes)
@@ -85,7 +85,7 @@ class TestFetchForSenderSkipLive:
         ingester = GmailIngester(credentials=None, db_path=test_db)
         results = ingester.fetch_for_sender("indeed", SINCE_DATE)
 
-        assert len(results) == 5
+        assert len(results) == 10
         for msg in results:
             assert isinstance(msg, RawEmail)
             assert isinstance(msg.body_bytes, bytes)
@@ -276,14 +276,18 @@ class TestFixtureStructure:
         body_bytes = fixture_path.read_bytes()
         msg = email.message_from_bytes(body_bytes)
 
-        assert msg.is_multipart(), f"{fixture_path.name}: expected multipart message"
         assert "linkedin.com" in (msg.get("From") or "").lower(), (
             f"{fixture_path.name}: expected LinkedIn From header, got {msg.get('From')!r}"
         )
 
         content_types = [part.get_content_type() for part in msg.walk()]
-        assert "text/plain" in content_types, f"{fixture_path.name}: missing text/plain part"
-        assert "text/html" in content_types, f"{fixture_path.name}: missing text/html part"
+        # HTML-only fixtures (e.g. sample-010) are valid edge-case fixtures
+        # for parser fallback testing — they need not be multipart.
+        has_html = "text/html" in content_types
+        has_plain = "text/plain" in content_types
+        assert has_html or has_plain, (
+            f"{fixture_path.name}: must have at least text/plain or text/html"
+        )
 
     @pytest.mark.parametrize(
         "fixture_path",
@@ -294,14 +298,18 @@ class TestFixtureStructure:
         body_bytes = fixture_path.read_bytes()
         msg = email.message_from_bytes(body_bytes)
 
-        assert msg.is_multipart(), f"{fixture_path.name}: expected multipart message"
         assert "indeed.com" in (msg.get("From") or "").lower(), (
             f"{fixture_path.name}: expected Indeed From header, got {msg.get('From')!r}"
         )
 
         content_types = [part.get_content_type() for part in msg.walk()]
-        assert "text/plain" in content_types, f"{fixture_path.name}: missing text/plain part"
-        assert "text/html" in content_types, f"{fixture_path.name}: missing text/html part"
+        # HTML-only fixtures (e.g. sample-009) are valid edge-case fixtures
+        # for parser fallback testing — they need not be multipart.
+        has_html = "text/html" in content_types
+        has_plain = "text/plain" in content_types
+        assert has_html or has_plain, (
+            f"{fixture_path.name}: must have at least text/plain or text/html"
+        )
 
 
 class TestFixtureUrlPatterns:
@@ -373,5 +381,5 @@ class TestSkipLiveDoesNotInvokeGmailApi:
             ingester = GmailIngester(credentials=None, db_path=db_path)
             results = ingester.fetch_for_sender("linkedin", SINCE_DATE)
 
-            assert len(results) == 5
+            assert len(results) == 10
             mock_build.assert_not_called()
