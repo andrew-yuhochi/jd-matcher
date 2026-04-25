@@ -1,12 +1,12 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-24
+> **Last Updated**: 2026-04-25
 
 ---
 
 ## Progress Summary
-- Done: 6 | In Progress: 0 | To Do: 6 | Blocked: 0
+- Done: 7 | In Progress: 0 | To Do: 5 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -183,7 +183,7 @@
 
 ### TASK-M1-007 — State manager (applied / dismissed / restore)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-25)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C7 (State Manager) — TDD §C7
@@ -198,12 +198,12 @@
 - **Demo Artifact**: `pytest tests/state/test_state_manager.py` — integration test creates posting, marks applied, restarts in-process DB connection, verifies state preserved across restart and main-view query excludes applied + dismissed.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-007.md`
 - **Acceptance Criteria**:
-  - [ ] `mark_applied(posting_id)` creates a row in `applied` with current timestamp and `status='Applied'` (default)
-  - [ ] `dismiss(posting_id)` creates a row in `dismissed` with current timestamp; idempotent (re-dismiss is no-op)
-  - [ ] `restore(posting_id)` deletes from `dismissed`; if not in dismissed, no-op
-  - [ ] `main_view_postings()` returns postings WHERE `id NOT IN (SELECT posting_id FROM applied) AND id NOT IN (SELECT posting_id FROM dismissed)` — verified against fixture
-  - [ ] State persists across server restart (integration test closes connection, reopens, reads)
-  - [ ] `auto_remove_stale_applied(cutoff_date)` exists and is unit-tested — but not auto-triggered in M1 (scheduler is MVP)
+  - [x] `mark_applied(posting_id)` creates a row in `applied` with current timestamp and `status='Applied'` (default)
+  - [x] `dismiss(posting_id)` creates a row in `dismissed` with current timestamp; idempotent (re-dismiss is no-op)
+  - [x] `restore(posting_id)` deletes from `dismissed`; if not in dismissed, no-op
+  - [x] `main_view_postings()` returns postings WHERE `id NOT IN (SELECT posting_id FROM applied) AND id NOT IN (SELECT posting_id FROM dismissed)` — verified against fixture
+  - [x] State persists across server restart (integration test closes connection, reopens, reads)
+  - [x] `auto_remove_stale_applied(cutoff_date)` exists and is unit-tested — but not auto-triggered in M1 (scheduler is MVP)
 
 ---
 
