@@ -88,6 +88,7 @@ Replace the original "auto-remove after 90 days of silence" model with an Inacti
 1. Confirm `status_updated_at` is written on every status transition (not just initial `apply`) — this is the silence clock.
 2. The dedup bypass applies to both URL-based (M1/M2) and LLM-based (MVP) dedup — explicit in PRD §5 M2 update; do not let the URL path slip through unmodified.
 3. Decide whether to drop or repurpose the `auto_remove_at` column at MVP-M1 (it's dead-code in M1; either remove it or leave as a vestigial column — small migration either way).
+4. **Status enum reconciliation**: TDD §1.2a currently documents the `applied.status` enum as `Applied / Screen / Interview / Offer / Rejected / Ghosted`. The new design introduces `Inactive` as the auto-transitioned-when-cold state, which is the concept the original `Ghosted` placeholder was likely standing in for. The MVP-M1 enum should resolve to: `Applied / Inactive / Screen / Interview / Offer / Rejected / Withdrew` — adding `Inactive` (system-set), renaming/dropping `Ghosted`, and adding `Withdrew` (genuinely missing terminal status for user-initiated pull-out). Decide and update TDD §1.2a at MVP-M1 planning.
 
 **M1 status**: TASK-M1-007 stands as shipped. No M1 changes required.
 

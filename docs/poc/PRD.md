@@ -114,7 +114,7 @@ Four milestones, each with a user-observable deliverable. Mirrors ROADMAP.md §"
 - Main view sort + filter as a view policy (hedge 1) — below-threshold postings remain queryable
 - Taxonomy revision pass after ~100 classified postings (rename/merge/split)
 - Generic role-family-language prompt (hedge 4)
-- Optional opt-in: local-vs-cloud LLM benchmark sub-task (Ollama vs `gpt-4o-mini`)
+- Optional opt-in: local-vs-cloud LLM benchmark sub-task (Ollama vs `gpt-4o-mini`) — results (if the opt-in is run) are an input to the Beta Path B evaluation: whether local-Ollama quality is equivalent to `gpt-4o-mini` determines whether a free local + paid cloud-tier model is commercially viable.
 
 ### M4 — CV recommender + extended sources + analytics
 - CV text extraction (PyMuPDF or pdfplumber) at startup; CV embedding pipeline (same `text-embedding-3-small`); cosine rank against `role_summary + top_skills` embedding

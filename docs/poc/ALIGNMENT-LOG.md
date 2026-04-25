@@ -74,8 +74,8 @@ The following commitments in PRD §3 create future alignment anchors. Any new re
 ---
 
 - **Verdict**: ALIGNED
-- **User decision**: [To be filled after user reviews]
-- **Outcome**: [To be filled after user reviews]
+- **User decision**: Approved with documentation enhancement (optional gap addressed per BA recommendation)
+- **Outcome**: Verdict accepted (ALIGNED, no required corrections). Optional documentation gap closed: PRD updated with one-sentence annotation linking the M3 LLM benchmark opt-in to the Beta Path B evaluation (whether local-Ollama quality matches GPT-4o-mini determines free-local + paid-cloud tier viability). PRD edit delegated to architect (parallel dispatch); see commit for SHA.
 
 ---
 
