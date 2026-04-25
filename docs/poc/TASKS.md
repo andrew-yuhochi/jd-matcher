@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 1 | In Progress: 0 | To Do: 11 | Blocked: 0
+- Done: 1 | In Progress: 1 | To Do: 10 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -49,8 +49,8 @@
 
 ### TASK-M1-002 — SETUP.md + saved-search keyword discussion
 
-- **Status**: To Do
-- **Blocked reason**:
+- **Status**: In Progress
+- **Blocked reason**: Awaiting user confirmation that the 40 saved searches are set up on LinkedIn + Indeed (AC3). Documentation deliverables (SETUP.md + config/saved-searches.yaml) are complete and committed.
 - **Agent**: content-writer (with user collaboration)
 - **Component**: C12 (Setup task) — TDD §C12
 - **Description**: Produce `docs/poc/SETUP.md` — a step-by-step manual setup checklist for the user, including final list of LinkedIn (≥7) and Indeed (≥2) saved-search keywords. content-writer drafts; user reviews + finalizes keyword list interactively. Outcome unblocks user-side alert setup so emails accumulate while later tasks build.

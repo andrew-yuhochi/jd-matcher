@@ -1,0 +1,45 @@
+# Source of truth for the user's saved-search keyword + location strategy.
+# Set up by user manually on each platform per docs/poc/SETUP.md steps 5-6.
+# This file documents the canonical configuration; ingester parsers do NOT read it.
+# Update this file if the user adds or removes saved searches.
+
+version: "1.0"
+last_updated: "2026-04-24"
+philosophy: "Standardize search terms across platforms; split locations to maximize recall per location"
+
+terms:
+  - "Data Scientist"
+  - "Senior Data Scientist"
+  - "Machine Learning Engineer"
+  - "Applied Scientist"
+  - "Data Science"
+  - "Research Scientist"
+  - "Senior Data Analyst"
+  - "AI Engineer"
+  - "Applied AI Research"
+  - "Quant Research"
+
+locations:
+  - id: "vancouver-bc"
+    description: "Vancouver, British Columbia, Canada (city-specific)"
+    linkedin_filter: "Vancouver, British Columbia, Canada"
+    indeed_filter: "Vancouver, BC"
+  - id: "canada-remote"
+    description: "Anywhere in Canada with Remote work allowed"
+    linkedin_filter: "Canada (with On-site/Remote = Remote)"
+    indeed_filter: "Canada (with Remote toggle = on)"
+
+platforms:
+  linkedin:
+    sender_filter: "jobalerts-noreply@linkedin.com"
+    daily_alert: true
+    saved_search_count: 20  # 10 terms × 2 locations
+  indeed:
+    sender_filter: "alert@indeed.com"
+    daily_alert: true
+    saved_search_count: 20  # 10 terms × 2 locations
+
+total_saved_searches: 40
+
+deferred_to_m4:
+  - "Job Bank Canada (jobbank.gc.ca) — alert setup deferred to M4 per ROADMAP.md"
