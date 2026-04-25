@@ -1,0 +1,53 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0004:b0:000:0000:0004 with SMTP id ad4dddddddd;
+        Thu, 24 Apr 2026 08:00:00 -0700 (PDT)
+Date: Thu, 24 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample004.1777300000000@lva1-app000004.prod.linkedin.com>
+Subject: Senior Data Scientist at BigCorp (non-comm URL pattern)
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0004_000000004.1777300000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0004_000000004.1777300000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for senior data scientist
+New jobs match your preferences.
+
+Senior Data Scientist
+BigCorp Canada
+Vancouver, BC
+
+View job: https://www.linkedin.com/jobs/view/9990030/?trackingId=3Dnocomm01=
+&refId=3Dref4&midToken=3DAQTEST4&trk=3Deml-digest-0
+
+---------------------------------------------------------
+
+Lead ML Engineer
+Enterprise Systems Inc
+Remote, Canada
+
+View job: https://www.linkedin.com/jobs/view/9990031/?trackingId=3Dnocomm02=
+&refId=3Dref4&midToken=3DAQTEST4&trk=3Deml-digest-1
+
+------=_Part_0004_000000004.1777300000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for senior data scientist</p>
+<p><a href=3D"https://www.linkedin.com/jobs/view/9990030/">Senior Data Scien=
+tist at BigCorp Canada</a></p>
+<p><a href=3D"https://www.linkedin.com/jobs/view/9990031/">Lead ML Engineer =
+at Enterprise Systems Inc</a></p>
+</body>
+</html>
+
+------=_Part_0004_000000004.1777300000000--

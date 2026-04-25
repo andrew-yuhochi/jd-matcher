@@ -1,0 +1,54 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1004:b0:001:0000:0004 with SMTP id bd4dddddddddd;
+        Thu, 24 Apr 2026 08:00:00 -0700 (PDT)
+Date: Thu, 24 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample004.1777300000000@mail.indeed.com>
+Subject: New jobs - redirect URL pattern
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_004_000000004.1777300000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_004_000000004.1777300000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "applied scientist" near you
+
+Applied Scientist
+Redirect Analytics Co
+Vancouver, BC
+
+Apply now: https://ca.indeed.com/rc/clk?jk=jkl4567890123001&from=3Dalertmail=
+&alid=3D444444&tk=3Di9j0k1l2m3
+
+--
+
+Senior Applied Scientist
+Redirect ML Inc
+Remote, Canada
+
+Apply now: https://ca.indeed.com/rc/clk?jk=jkl4567890123002&from=3Dalertmail=
+&alid=3D444444&tk=3Dj0k1l2m3n4
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D444444
+
+------=_Indeed_Part_004_000000004.1777300000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "applied scientist" near you</p>
+<p><a href=3D"https://ca.indeed.com/rc/clk?jk=3Djkl4567890123001">Applied S=
+cientist at Redirect Analytics Co</a></p>
+<p><a href=3D"https://ca.indeed.com/rc/clk?jk=3Djkl4567890123002">Senior Ap=
+plied Scientist at Redirect ML Inc</a></p>
+</body>
+</html>
+
+------=_Indeed_Part_004_000000004.1777300000000--

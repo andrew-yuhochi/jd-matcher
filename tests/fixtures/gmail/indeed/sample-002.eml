@@ -1,0 +1,55 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1002:b0:001:0000:0002 with SMTP id bb2bbbbbbbbb;
+        Tue, 22 Apr 2026 08:00:00 -0700 (PDT)
+Date: Tue, 22 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample002.1777100000000@mail.indeed.com>
+Subject: New machine learning jobs near you
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_002_000000002.1777100000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_002_000000002.1777100000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "machine learning engineer" in Vancouver, BC
+
+Machine Learning Engineer
+CloudAI Systems
+Vancouver, BC
+
+Apply now: https://ca.indeed.com/viewjob?jk=def2345678901001&tk=3Da1b2c3d4e5=
+&from=3Dalertmail&alid=3D222222
+
+--
+
+Senior ML Engineer
+DataStream Inc
+Remote, Canada
+$120,000 - $150,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=def2345678901002&tk=3Db2c3d4e5f6=
+&from=3Dalertmail&alid=3D222222
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D222222
+
+------=_Indeed_Part_002_000000002.1777100000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "machine learning engineer" in Vancouver</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Ddef2345678901001">ML Engine=
+er at CloudAI</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Ddef2345678901002">Senior ML=
+ Engineer at DataStream</a></p>
+</body>
+</html>
+
+------=_Indeed_Part_002_000000002.1777100000000--

@@ -1,0 +1,69 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1001:b0:001:0000:0001 with SMTP id ba1aaaaaaaa;
+        Mon, 21 Apr 2026 08:00:00 -0700 (PDT)
+Date: Mon, 21 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample001.1777000000000@mail.indeed.com>
+Subject: 3 new data scientist jobs in Vancouver
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_001_000000001.1777000000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_001_000000001.1777000000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "data scientist" in Vancouver, BC
+
+Data Scientist
+Maple Commerce
+Vancouver, BC
+$95,000 - $120,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=abc1234567890001&tk=3D1a2b3c4d5e=
+&from=3Dalertmail&alid=3D111111
+
+--
+
+Senior Data Scientist
+Northern Analytics Ltd
+Remote in Canada
+$110,000 - $140,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=abc1234567890002&tk=3D2b3c4d5e6f=
+&from=3Dalertmail&alid=3D111111
+
+--
+
+ML Engineer
+Pacific Data Co
+Burnaby, BC
+$100,000 - $130,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=abc1234567890003&tk=3D3c4d5e6f7g=
+&from=3Dalertmail&alid=3D111111
+
+--
+
+Unsubscribe from these alerts: https://ca.indeed.com/unsubscribe?alid=3D11111=
+1
+
+------=_Indeed_Part_001_000000001.1777000000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "data scientist" in Vancouver, BC</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dabc1234567890001">Data Scie=
+ntist at Maple Commerce</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dabc1234567890002">Senior Da=
+ta Scientist at Northern Analytics</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dabc1234567890003">ML Engine=
+er at Pacific Data Co</a></p>
+</body>
+</html>
+
+------=_Indeed_Part_001_000000001.1777000000000--

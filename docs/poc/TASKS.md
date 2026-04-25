@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 3 | In Progress: 0 | To Do: 9 | Blocked: 0
+- Done: 4 | In Progress: 0 | To Do: 8 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -101,7 +101,7 @@
 
 ### TASK-M1-004 — Gmail ingester (OAuth + fetch)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-24)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C3 (Gmail Ingester) — TDD §C3
@@ -116,14 +116,14 @@
 - **Demo Artifact**: `python -m jd_matcher.auth` runs OAuth once and stores token; `python -m jd_matcher.ingest gmail --sender linkedin --dry-run` lists fetched messages (or fixture messages with `SKIP_LIVE=1`).
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-004.md`
 - **Acceptance Criteria**:
-  - [ ] Loopback OAuth flow completes end-to-end: opens browser, redirects to localhost, exchanges code for tokens, stores tokens at `~/.jd-matcher/tokens.json`
-  - [ ] Refresh-token reuse on subsequent runs — no browser interaction
-  - [ ] Per-sender fetch with date filter (`newer_than:2d`) and label filter
-  - [ ] Per-sender try/except: on failure, writes `pipeline_runs` row with `health_status='failed'`, `failure_reason=<exception details>`; returns empty list; never re-raises
-  - [ ] On success: writes `pipeline_runs` row with `health_status='healthy'` and updates `last_successful_fetch_at`
-  - [ ] Synthetic fixture tests: 100% on at least 5 LinkedIn + 5 Indeed `.eml` fixture files
-  - [ ] `SKIP_LIVE=1` env var bypasses live Gmail and reads from `tests/fixtures/gmail/`
-  - [ ] Live test with real Gmail account (gated by user availability) ≥95% fetch success on a 7-day window
+  - [x] Loopback OAuth flow completes end-to-end: opens browser, redirects to localhost, exchanges code for tokens, stores tokens at `~/.jd-matcher/tokens.json`
+  - [x] Refresh-token reuse on subsequent runs — no browser interaction
+  - [x] Per-sender fetch with date filter (`newer_than:2d`) and label filter
+  - [x] Per-sender try/except: on failure, writes `pipeline_runs` row with `health_status='failed'`, `failure_reason=<exception details>`; returns empty list; never re-raises
+  - [x] On success: writes `pipeline_runs` row with `health_status='healthy'` and updates `last_successful_fetch_at`
+  - [x] Synthetic fixture tests: 100% on at least 5 LinkedIn + 5 Indeed `.eml` fixture files
+  - [x] `SKIP_LIVE=1` env var bypasses live Gmail and reads from `tests/fixtures/gmail/`
+  - [x] Live test with real Gmail account (gated by user availability) ≥95% fetch success on a 7-day window
 
 ---
 

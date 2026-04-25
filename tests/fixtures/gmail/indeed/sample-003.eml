@@ -1,0 +1,100 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:1003:b0:001:0000:0003 with SMTP id bc3ccccccccc;
+        Wed, 23 Apr 2026 08:00:00 -0700 (PDT)
+Date: Wed, 23 Apr 2026 15:00:00 +0000 (UTC)
+From: Indeed Job Alerts <alert@indeed.com>
+Message-ID: <fixture.indeed.sample003.1777200000000@mail.indeed.com>
+Subject: 6 new data science openings this week
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Indeed_Part_003_000000003.1777200000000"
+To: Jobs User <jobs@example.com>
+
+------=_Indeed_Part_003_000000003.1777200000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+New jobs matching "data scientist" in Canada
+
+Data Science Lead
+QuantumLeap AI
+Vancouver, BC
+$130,000 - $160,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012001&tk=3Dc3d4e5f6g7=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Applied Data Scientist
+Horizon Analytics
+Toronto, ON (Remote)
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012002&tk=3Dd4e5f6g7h8=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Research Scientist
+Arctic ML Labs
+Remote, Canada
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012003&tk=3De5f6g7h8i9=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Data Scientist II
+Westcoast Insights
+Vancouver, BC
+$90,000 - $115,000 a year
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012004&tk=3Df6g7h8i9j0=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Senior Analytics Engineer
+Cedar Ridge Tech
+Burnaby, BC
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012005&tk=3Dg7h8i9j0k1=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Principal Data Scientist
+Global Data Corp
+Remote
+
+Apply now: https://ca.indeed.com/viewjob?jk=ghi3456789012006&tk=3Dh8i9j0k1l2=
+&from=3Dalertmail&alid=3D333333
+
+--
+
+Unsubscribe: https://ca.indeed.com/unsubscribe?alid=3D333333
+
+------=_Indeed_Part_003_000000003.1777200000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>New jobs matching "data scientist" in Canada</p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012001">Data Sci=
+ence Lead at QuantumLeap AI</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012002">Applied D=
+ata Scientist</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012003">Research =
+Scientist</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012004">Data Scie=
+ntist II</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012005">Senior An=
+alytics Engineer</a></p>
+<p><a href=3D"https://ca.indeed.com/viewjob?jk=3Dghi3456789012006">Principal=
+ Data Scientist</a></p>
+</body>
+</html>
+
+------=_Indeed_Part_003_000000003.1777200000000--

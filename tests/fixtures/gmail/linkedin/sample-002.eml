@@ -1,0 +1,112 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0002:b0:000:0000:0002 with SMTP id ab2bbbbbbbbb;
+        Tue, 22 Apr 2026 08:00:00 -0700 (PDT)
+Date: Tue, 22 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample002.1777100000000@lva1-app000002.prod.linkedin.com>
+Subject: 7 new data science jobs for you
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0002_000000002.1777100000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0002_000000002.1777100000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for machine learning engineer
+New jobs match your preferences.
+
+Staff Data Scientist
+FinTech Solutions Ltd
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990010/?trackingId=3Da1b2c=
+3&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-0
+
+---------------------------------------------------------
+
+Senior Data Scientist
+CloudBase Systems
+Remote
+
+View job: https://www.linkedin.com/comm/jobs/view/9990011/?trackingId=3Dd4e5f=
+6&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-1
+
+---------------------------------------------------------
+
+Research Scientist, NLP
+Pacific AI Labs
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990012/?trackingId=3Dg7h8i=
+9&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-2
+
+---------------------------------------------------------
+
+Machine Learning Engineer II
+Sprout Analytics
+Toronto, ON (Remote)
+
+View job: https://www.linkedin.com/comm/jobs/view/9990013/?trackingId=3Dj0k1l=
+2&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-3
+
+---------------------------------------------------------
+
+Applied Research Scientist
+Horizon ML
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990014/?trackingId=3Dm3n4o=
+5&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-4
+
+---------------------------------------------------------
+
+Data Scientist, Growth
+Cedar Commerce
+Remote, Canada
+
+View job: https://www.linkedin.com/comm/jobs/view/9990015/?trackingId=3Dp6q7r=
+8&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-5
+
+---------------------------------------------------------
+
+ML Platform Engineer
+Stellar Networks
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990016/?trackingId=3Ds9t0u=
+1&refId=3Dref1&midToken=3DAQTEST2&trk=3Deml-digest-6
+
+---------------------------------------------------------
+
+Unsubscribe: https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=3D23456789
+
+------=_Part_0002_000000002.1777100000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for machine learning engineer</p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990010/">Staff Data S=
+cientist</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990011/">Senior Data =
+Scientist</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990012/">Research Sci=
+entist NLP</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990013/">ML Engineer =
+II</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990014/">Applied Rese=
+arch Scientist</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990015/">Data Scienti=
+st Growth</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990016/">ML Platform =
+Engineer</a></p>
+</body>
+</html>
+
+------=_Part_0002_000000002.1777100000000--

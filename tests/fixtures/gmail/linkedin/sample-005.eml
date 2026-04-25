@@ -1,0 +1,46 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0005:b0:000:0000:0005 with SMTP id ae5eeeeeeeee;
+        Fri, 25 Apr 2026 08:00:00 -0700 (PDT)
+Date: Fri, 25 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample005.1777400000000@lva1-app000005.prod.linkedin.com>
+Subject: Jobs alert - garbled headers but parseable body
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0005_000000005.1777400000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-Malformed-Custom-Header: this-header-has-no-value-colon-issue
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0005_000000005.1777400000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for applied scientist
+New jobs match your preferences.
+
+NOTE: This fixture simulates a slightly malformed email (unusual headers) but =
+the body is still parseable.
+
+Applied Scientist
+Resilient AI
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990040/?trackingId=3Dmalfo=
+rmed01&midToken=3DAQTEST5&trk=3Deml-digest-0
+
+------=_Part_0005_000000005.1777400000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for applied scientist</p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990040/">Applied Scie=
+ntist at Resilient AI</a></p>
+</body>
+</html>
+
+------=_Part_0005_000000005.1777400000000--

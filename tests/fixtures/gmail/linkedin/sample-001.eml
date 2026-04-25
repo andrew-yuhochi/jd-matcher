@@ -1,0 +1,71 @@
+Delivered-To: jobs@example.com
+Received: by 2002:a05:612c:0001:b0:000:0000:0001 with SMTP id aa1aaaaaaaa;
+        Mon, 21 Apr 2026 08:00:00 -0700 (PDT)
+Date: Mon, 21 Apr 2026 15:00:00 +0000 (UTC)
+From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>
+Message-ID: <fixture.sample001.1777000000000@lva1-app000001.prod.linkedin.com>
+Subject: New data scientist jobs near Vancouver
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+	boundary="----=_Part_0001_000000001.1777000000000"
+To: Jobs User <jobs@example.com>
+X-LinkedIn-Class: SAVEDSEARCH
+X-LinkedIn-Template: email_job_alert_digest_01
+
+------=_Part_0001_000000001.1777000000000
+Content-Type: text/plain;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Your job alert for data scientist in Vancouver
+New jobs match your preferences.
+
+data scientist
+Acme Analytics
+Vancouver, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990001/?trackingId=3Dabc123=
+&refId=3Dxyz&lipi=3Durn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3Btest=
+&midToken=3DAQTEST1&trk=3Deml-email_job_alert_digest_01-primary_job_list-0
+
+---------------------------------------------------------
+
+Senior Machine Learning Engineer
+Maple Tech Inc
+Remote, Canada
+
+View job: https://www.linkedin.com/comm/jobs/view/9990002/?trackingId=3Ddef456=
+&refId=3Dxyz&lipi=3Durn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3Btest=
+&midToken=3DAQTEST1&trk=3Deml-email_job_alert_digest_01-primary_job_list-1
+
+---------------------------------------------------------
+
+Applied Scientist
+Northern Data Co
+Burnaby, BC
+
+View job: https://www.linkedin.com/comm/jobs/view/9990003/?trackingId=3Dghi789=
+&refId=3Dxyz&lipi=3Durn%3Ali%3Apage%3Aemail_email_job_alert_digest_01%3Btest=
+&midToken=3DAQTEST1&trk=3Deml-email_job_alert_digest_01-primary_job_list-2
+
+---------------------------------------------------------
+
+Unsubscribe: https://www.linkedin.com/job-alert-email-unsubscribe?savedSearchId=3D12345678
+
+------=_Part_0001_000000001.1777000000000
+Content-Type: text/html;charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html>
+<body>
+<p>Your job alert for data scientist in Vancouver</p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990001/">data scienti=
+st at Acme Analytics</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990002/">Senior ML En=
+gineer at Maple Tech Inc</a></p>
+<p><a href=3D"https://www.linkedin.com/comm/jobs/view/9990003/">Applied Scie=
+ntist at Northern Data Co</a></p>
+</body>
+</html>
+
+------=_Part_0001_000000001.1777000000000--
