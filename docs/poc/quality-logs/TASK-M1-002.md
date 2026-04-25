@@ -3,7 +3,7 @@
 
 **Date**: 2026-04-24
 **Agent**: content-writer
-**Status**: In Progress — pending AC3 user signoff
+**Status**: Done (2026-04-24)
 
 ---
 
@@ -82,3 +82,33 @@ Unit tests: 0 collected, 0 failed (no tests exist yet — skeleton stage; exit c
 Minor issue — PyYAML not in `requirements.txt`: The venv does not include `pyyaml`. YAML validation required temporary installation. If `config/saved-searches.yaml` is to be programmatically read in future tasks, `pyyaml` must be added to `requirements.txt`. Classify: **Minor** (missing dependency declaration).
 
 Overall verdict: PASS WITH NOTES (AC3 pending user signoff; Minor: pyyaml missing from requirements.txt)
+
+---
+
+## AC3 Sign-off — 2026-04-24
+
+**User confirmed**: All 40 saved searches are live (LinkedIn 20 + Indeed 20). AC3 met.
+
+**Actual allocation that emerged through interactive design:**
+
+LinkedIn (20 alerts, 20-alert cap):
+- `Data Scientist` split across 3 experience levels (Entry / Senior / Manager) × 2 locations = 6 alerts. Rationale: closest-fit term; split-by-level captures misclassified-as-Entry postings and maximizes email-digest exposure across all seniority bands.
+- 7 other terms × 1 combined-level alert × 2 locations = 14 alerts.
+- Locations: `Greater Vancouver Metropolitan Area` (NOT "Vancouver, BC" — broader catchment) and `Canada (Remote)`.
+- Dropped from LinkedIn due to cap: `Senior Data Scientist` (redundant with split-by-level filter); `Applied AI Research` (overlap with Applied Scientist + Research Scientist union).
+
+Indeed (20 alerts, no experience filter):
+- 10 terms × 2 locations = 20 alerts. No experience filter applied — Indeed's filter is unreliable; seniority triage handled by keyword prefix + pipeline seniority hard-filter (M2).
+- Terms include `Senior Data Scientist` and `Applied AI Research` (retained here because title-prefix targeting substitutes for filter, and Indeed's 10-term list fills the 20-alert cap cleanly).
+- Locations: `Vancouver, BC` and `Canada (Remote toggle ON)`.
+
+`saved-searches.yaml` updated to version 1.1 reflecting this actual allocation. `SETUP.md` steps 5 and 6 updated to match.
+
+**Final AC table:**
+
+| # | Acceptance Criterion | Status |
+|---|---------------------|--------|
+| AC1 | SETUP.md exists with 10 steps | PASS |
+| AC2 | saved-searches.yaml with ≥7 LinkedIn + ≥2 Indeed entries | PASS |
+| AC3 | User confirmed 40 alerts live on LinkedIn + Indeed | PASS (user sign-off 2026-04-24) |
+| AC4 | SETUP.md cross-references DATA-SOURCES.md | PASS |

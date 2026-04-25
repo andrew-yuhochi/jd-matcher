@@ -2,44 +2,91 @@
 # Set up by user manually on each platform per docs/poc/SETUP.md steps 5-6.
 # This file documents the canonical configuration; ingester parsers do NOT read it.
 # Update this file if the user adds or removes saved searches.
+# Reflects actual setup completed 2026-04-24 (TASK-M1-002 AC3 met).
 
-version: "1.0"
+version: "1.1"
 last_updated: "2026-04-24"
-philosophy: "Standardize search terms across platforms; split locations to maximize recall per location"
+philosophy: |
+  Allocate alert slots by term-relevance, not equally. Data Scientist (the closest-fit
+  term to the user's profile) gets dedicated split-by-experience-level alerts on LinkedIn
+  to maximize email-digest exposure across all bands and capture misclassified-as-Entry
+  postings. Other terms get one combined-level alert per location. Indeed's experience
+  filter is unreliable, so all Indeed alerts use no filter and rely on keyword + pipeline
+  seniority hard-filter for triage.
 
-terms:
-  - "Data Scientist"
-  - "Senior Data Scientist"
-  - "Machine Learning Engineer"
-  - "Applied Scientist"
-  - "Data Science"
-  - "Research Scientist"
-  - "Senior Data Analyst"
-  - "AI Engineer"
-  - "Applied AI Research"
-  - "Quant Research"
+linkedin:
+  sender_filter: "jobalerts-noreply@linkedin.com"
+  daily_alert: true
+  alert_cap: 20  # platform max
+  total_alerts: 20
+  locations:
+    - id: greater-vancouver
+      label: "Greater Vancouver Metropolitan Area"
+    - id: canada-remote
+      label: "Canada (On-site/Remote = Remote)"
+  alerts:
+    # Data Scientist — split-by-level per location (6 alerts)
+    - keyword: "Data Scientist"
+      experience: "Entry-level"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Data Scientist"
+      experience: "Senior"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Data Scientist"
+      experience: "Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    # 7 other terms — one combined-level alert per location (14 alerts)
+    - keyword: "Machine Learning Engineer"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Applied Scientist"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Data Science"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Research Scientist"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Senior Data Analyst"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "AI Engineer"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
+    - keyword: "Quant Research"
+      experience: "Entry-level + Senior + Manager"
+      location_ids: [greater-vancouver, canada-remote]
 
-locations:
-  - id: "vancouver-bc"
-    description: "Vancouver, British Columbia, Canada (city-specific)"
-    linkedin_filter: "Vancouver, British Columbia, Canada"
-    indeed_filter: "Vancouver, BC"
-  - id: "canada-remote"
-    description: "Anywhere in Canada with Remote work allowed"
-    linkedin_filter: "Canada (with On-site/Remote = Remote)"
-    indeed_filter: "Canada (with Remote toggle = on)"
-
-platforms:
-  linkedin:
-    sender_filter: "jobalerts-noreply@linkedin.com"
-    daily_alert: true
-    saved_search_count: 20  # 10 terms × 2 locations
-  indeed:
-    sender_filter: "alert@indeed.com"
-    daily_alert: true
-    saved_search_count: 20  # 10 terms × 2 locations
-
-total_saved_searches: 40
+indeed:
+  sender_filter: "alert@indeed.com"
+  daily_alert: true
+  total_alerts: 20
+  experience_filter: none  # Indeed's filter is unreliable; rely on keyword + pipeline seniority hard-filter
+  locations:
+    - id: vancouver
+      label: "Vancouver, BC"
+    - id: canada-remote
+      label: "Canada (Remote toggle ON)"
+  terms:
+    - "Data Scientist"
+    - "Senior Data Scientist"
+    - "Machine Learning Engineer"
+    - "Applied Scientist"
+    - "Data Science"
+    - "Research Scientist"
+    - "Senior Data Analyst"
+    - "AI Engineer"
+    - "Applied AI Research"
+    - "Quant Research"
 
 deferred_to_m4:
   - "Job Bank Canada (jobbank.gc.ca) — alert setup deferred to M4 per ROADMAP.md"
+
+dropped_during_setup:
+  - reason: "Redundant with Data Scientist split-by-level on LinkedIn (filter does the work)"
+    term: "Senior Data Scientist"
+    platform: "linkedin"
+  - reason: "Overlap with Applied Scientist + Research Scientist union; LinkedIn 20-alert cap forced trimming"
+    term: "Applied AI Research"
+    platform: "linkedin"

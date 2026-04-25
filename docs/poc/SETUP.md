@@ -16,14 +16,14 @@ Track progress across sessions by checking off each step below.
 | 2 | GCP project created + Gmail API enabled | [ ] |
 | 3 | OAuth 2.0 client created + credentials.json placed | [ ] |
 | 4 | Environment variables configured in `.env` | [ ] |
-| 5 | LinkedIn saved searches created (20 searches: 10 terms × 2 locations) | [ ] |
-| 6 | Indeed.ca saved searches created (20 searches: 10 terms × 2 locations) | [ ] |
+| 5 | LinkedIn saved searches created (20 alerts: 8 terms, Data Scientist split-by-level) | [x] |
+| 6 | Indeed.ca saved searches created (20 alerts: 10 terms, no experience filter) | [x] |
 | 7 | Job Bank Canada alerts — DEFERRED TO M4 | — |
 | 8 | CV variants placed in local folder — DEFERRED TO M4 | — |
 | 9 | `python -m jd_matcher.auth` — first-run OAuth (lands in TASK-M1-004) | [ ] |
 | 10 | Sanity-check pipeline run (lands in TASK-M1-008) | [ ] |
 
-**Total manual saved searches to create: 40** (LinkedIn 20 + Indeed 20). One-time setup, ~30 minutes.
+**Total saved searches: 40 alerts (LinkedIn 20 + Indeed 20).** Setup complete as of 2026-04-24.
 
 ---
 
@@ -104,50 +104,62 @@ No billing setup required for the Gmail API at personal-use volume (well under t
 
 **Why**: LinkedIn's alert emails are the primary source for Vancouver / Remote-Canada DS roles. The pipeline never logs into LinkedIn — the platform pushes the list to your Gmail via daily alert emails, which the ingester then reads. Missing a role is worse than getting duplicate emails (the dedup layer collapses overlap for free), so coverage should be generous. See DATA-SOURCES.md §"LinkedIn (via Gmail alerts)".
 
-**Location design**: Each term gets two separate saved searches — one for **Vancouver, British Columbia, Canada** specifically, and one for **Canada (Remote)** specifically. Combining both in a single saved search lets LinkedIn's algorithm distribute results across locations, which dilutes Vancouver-specific borderline matches. Splitting forces the algorithm to surface the strongest match for each location independently; the dedup layer collapses any overlap. This trades ~10 minutes of one-time setup for better recall on both dimensions.
+**LinkedIn has a 20-alert cap.** Allocate those slots by term-relevance rather than distributing them equally.
 
-**Result: 10 terms × 2 locations = 20 LinkedIn saved searches.**
+**Location design**: Each alert is scoped to one of two locations — **Greater Vancouver Metropolitan Area** (broader catchment that includes Burnaby, Surrey, and Richmond) or **Canada (On-site/Remote = Remote)**. Splitting locations forces the algorithm to surface the strongest match for each location independently; the dedup layer collapses any overlap.
 
-**Finalized keyword list (user-approved, 2026-04-24):**
+**Alert allocation strategy (actual setup, 2026-04-24):**
 
-| # | Keyword |
-|---|---------|
-| 1 | `Data Scientist` |
-| 2 | `Senior Data Scientist` |
-| 3 | `Machine Learning Engineer` |
-| 4 | `Applied Scientist` |
-| 5 | `Data Science` |
-| 6 | `Research Scientist` |
-| 7 | `Senior Data Analyst` |
-| 8 | `AI Engineer` |
-| 9 | `Applied AI Research` |
-| 10 | `Quant Research` |
+`Data Scientist` is the closest-fit term to the user's profile. It gets dedicated split-by-experience-level alerts per location to maximize email-digest exposure across all seniority bands and capture misclassified-as-Entry postings. The other 7 terms each get one combined-level (Entry + Senior + Manager) alert per location.
 
-**How to create one LinkedIn saved search (repeat this pattern 20 times):**
+| Term | Experience filter | Alerts |
+|------|------------------|--------|
+| `Data Scientist` | Entry-level (per location) | 2 |
+| `Data Scientist` | Senior (per location) | 2 |
+| `Data Scientist` | Manager (per location) | 2 |
+| `Machine Learning Engineer` | Entry + Senior + Manager (per location) | 2 |
+| `Applied Scientist` | Entry + Senior + Manager (per location) | 2 |
+| `Data Science` | Entry + Senior + Manager (per location) | 2 |
+| `Research Scientist` | Entry + Senior + Manager (per location) | 2 |
+| `Senior Data Analyst` | Entry + Senior + Manager (per location) | 2 |
+| `AI Engineer` | Entry + Senior + Manager (per location) | 2 |
+| `Quant Research` | Entry + Senior + Manager (per location) | 2 |
+| **Total** | | **20** |
 
-Example: `Data Scientist` — Vancouver location search:
+**Terms dropped due to the 20-alert cap:**
+
+- `Senior Data Scientist` — redundant with the `Data Scientist` split-by-level setup; the Senior filter already captures this tier.
+- `Applied AI Research` — overlaps strongly with the `Applied Scientist` + `Research Scientist` union; cap pressure forced trimming.
+
+Both terms are retained in the Indeed setup where no experience filter is applied and the 20-cap is filled by unique keywords only.
+
+**How to create one LinkedIn saved search:**
+
+Example: `Data Scientist` — Entry-level, Greater Vancouver Metropolitan Area:
 
 1. Go to [linkedin.com/jobs](https://linkedin.com/jobs).
 2. Enter `Data Scientist` in the search bar → press Enter.
-3. In the **Location** filter, type and select `Vancouver, British Columbia, Canada`.
-4. Leave On-site/Remote filter at its default (or set to All — this is the city-specific search).
-5. Optionally set **Experience level** to Mid-Senior and above.
+3. In the **Location** filter, type and select `Greater Vancouver Metropolitan Area`.
+4. Open the **Experience level** filter → select **Entry level** only.
+5. Leave the On-site/Remote filter at its default (this is the city-specific search).
 6. Click the bell icon on the results page → set frequency to **Daily** → confirm.
 
-Then repeat for the Remote-Canada search:
+Then repeat for the Remote-Canada search (same term + experience level, different location):
 
-1. Same keyword `Data Scientist`.
+1. Same keyword `Data Scientist`, same Experience level filter (`Entry level`).
 2. Clear the location field; type and select `Canada`.
 3. Open **On-site/Remote** filter → select **Remote** only.
 4. Bell icon → Daily → confirm.
 
-> If the platform UI has changed and the filter combos above don't map cleanly, apply the concept: one search scoped to Vancouver city, one scoped to Remote-Canada only.
+For the 7 other terms (no experience-level split): set **Experience level** to Entry level + Senior + Manager combined, and repeat the two-location pattern per term.
+
+> If the platform UI has changed and the filter combos above don't map cleanly, apply the concept: one search scoped to Greater Vancouver, one scoped to Remote-Canada; Data Scientist split by level, all others combined-level.
 
 Estimated time: ~30 seconds per search × 20 searches = **~10 minutes**.
 
 Sender filter the ingester uses: `jobalerts-noreply@linkedin.com` (DATA-SOURCES.md §"LinkedIn (via Gmail alerts)").
 
-> Final list is machine-readable in `config/saved-searches.yaml`.
+> Full alert specification is machine-readable in `config/saved-searches.yaml` (linkedin.alerts).
 
 ---
 
@@ -155,24 +167,26 @@ Sender filter the ingester uses: `jobalerts-noreply@linkedin.com` (DATA-SOURCES.
 
 **Why**: Indeed is the second-highest-coverage source for Canada. The Publisher API was deprecated in 2023; daily email alerts are the only zero-risk path. See DATA-SOURCES.md §"Indeed.ca (via Gmail alerts)".
 
-**Location design**: Same split-location strategy as LinkedIn — one search scoped to `Vancouver, BC`, one scoped to `Canada` with the Remote toggle on. Same 10 terms apply.
+**No experience filter applied.** Indeed's experience-level filter is unreliable — it frequently miscategorizes postings or omits results that should match. All 20 Indeed alerts are set up without any experience filter. Seniority triage is handled downstream by the keyword prefix (e.g. `Senior Data Scientist`) combined with the pipeline's seniority hard-filter (implemented in M2).
+
+**Location design**: One search scoped to `Vancouver, BC` (Where field), one scoped to `Canada` with the Remote toggle on. Same split-location rationale as LinkedIn — forces the algorithm to surface the strongest match for each location independently; dedup collapses overlap.
 
 **Result: 10 terms × 2 locations = 20 Indeed saved searches.**
 
-**Finalized keyword list (same 10 terms, user-approved):**
+**Finalized keyword list (user-approved 2026-04-24):**
 
-| # | Keyword |
-|---|---------|
-| 1 | `Data Scientist` |
-| 2 | `Senior Data Scientist` |
-| 3 | `Machine Learning Engineer` |
-| 4 | `Applied Scientist` |
-| 5 | `Data Science` |
-| 6 | `Research Scientist` |
-| 7 | `Senior Data Analyst` |
-| 8 | `AI Engineer` |
-| 9 | `Applied AI Research` |
-| 10 | `Quant Research` |
+| # | Keyword | Notes |
+|---|---------|-------|
+| 1 | `Data Scientist` | |
+| 2 | `Senior Data Scientist` | Title prefix covers seniority (no filter needed) |
+| 3 | `Machine Learning Engineer` | |
+| 4 | `Applied Scientist` | |
+| 5 | `Data Science` | |
+| 6 | `Research Scientist` | |
+| 7 | `Senior Data Analyst` | Title prefix covers seniority |
+| 8 | `AI Engineer` | |
+| 9 | `Applied AI Research` | Retained on Indeed (dropped from LinkedIn due to cap) |
+| 10 | `Quant Research` | |
 
 **How to create one Indeed saved search (repeat this pattern 20 times):**
 
@@ -181,17 +195,18 @@ Example: `Data Scientist` — Vancouver location search:
 1. Go to [indeed.ca](https://indeed.ca).
 2. In the **What** field, enter `Data Scientist`.
 3. In the **Where** field, enter `Vancouver, BC`.
-4. Run the search. On the results page, click **Get new jobs by email** (or the bell icon if shown).
-5. Select frequency **Daily** → enter your dedicated job-search Gmail address → confirm.
+4. Run the search. Do NOT apply any experience-level filter.
+5. On the results page, click **Get new jobs by email** (or the bell icon if shown).
+6. Select frequency **Daily** → enter your dedicated job-search Gmail address → confirm.
 
 Then repeat for the Remote-Canada search:
 
 1. Same keyword `Data Scientist`.
 2. **Where** field: enter `Canada`.
-3. After the search runs, locate the **Remote** toggle or filter and enable it.
+3. After the search runs, locate the **Remote** toggle or filter and enable it. Do NOT apply any experience-level filter.
 4. Get new jobs by email → Daily → confirm.
 
-> If the platform UI has changed and the filter combos above don't map cleanly, apply the concept: one search scoped to Vancouver city, one scoped to Remote-Canada only.
+> If the platform UI has changed and the filter combos above don't map cleanly, apply the concept: one search scoped to Vancouver city, one scoped to Remote-Canada only. No experience filter on any Indeed alert.
 
 Estimated time: ~30 seconds per search × 20 searches = **~10 minutes**.
 
