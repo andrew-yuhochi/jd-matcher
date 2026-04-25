@@ -10,8 +10,8 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 | **Phase** | PoC |
 | **Milestone** | M1 — Raw pipe + URL dedup + applied/dismissed state |
 | **Last completed** | TASK-M1-001 — Repo bootstrap + project skeleton (2026-04-24) |
-| **Next task** | TASK-M1-002 — SETUP.md + saved-search keyword discussion [content-writer] |
-| **Next command** | /implement jd-matcher TASK-M1-002 |
+| **Next task** | TASK-M1-003 — Data model + idempotent init_db [data-pipeline] |
+| **Next command** | /implement jd-matcher TASK-M1-003 |
 
 ---
 
