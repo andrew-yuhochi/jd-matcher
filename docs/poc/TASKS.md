@@ -22,8 +22,8 @@
 
 ### TASK-M1-001 — Repo bootstrap + project skeleton
 
-- **Status**: To Do
-- **Blocked reason**:
+- **Status**: In Progress
+- **Blocked reason**: GitHub push blocked — `gh auth login` required (see quality log)
 - **Agent**: data-pipeline
 - **Component**: C1 (Repo bootstrap) — TDD §C1
 - **Description**: Stand up public GitHub repo for jd-matcher with MIT license, README, project skeleton, and Python tooling. Implements commercial hedge 5 (open-source from day 1).
