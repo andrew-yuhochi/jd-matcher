@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 2 | In Progress: 0 | To Do: 10 | Blocked: 0
+- Done: 3 | In Progress: 0 | To Do: 9 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -73,7 +73,7 @@
 
 ### TASK-M1-003 — Data model + idempotent init_db
 
-- **Status**: To Do
+- **Status**: Done (2026-04-24)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C2 (Data model / SQLite schema) — TDD §C2
@@ -88,14 +88,14 @@
 - **Demo Artifact**: `sqlite3 ~/.jd-matcher/jd-matcher.db ".tables"` shows all 8 tables; running `init_db()` twice produces no errors.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-003.md`
 - **Acceptance Criteria**:
-  - [ ] All 8 tables created with documented columns + types
-  - [ ] Every table has `user_id TEXT NOT NULL DEFAULT 'default'` column
-  - [ ] `postings.hydration_status` column with `CHECK` constraint on (`complete`, `partial`, `failed`)
-  - [ ] `pipeline_runs.health_status` column with `CHECK` constraint on (`healthy`, `degraded`, `failed`)
-  - [ ] `init_db()` is idempotent — re-running on existing DB does not error and does not modify data
-  - [ ] UNIQUE constraints on `seen_urls.url`, `(applied.posting_id, applied.user_id)`, `(dismissed.posting_id, dismissed.user_id)`
-  - [ ] Indexes on `postings.first_seen`, `events.timestamp`, `pipeline_runs.run_id` for query performance
-  - [ ] Smoke insert test passes: insert one posting, verify retrievable
+  - [x] All 8 tables created with documented columns + types
+  - [x] Every table (except `users`, which is the identity anchor with `id` as PK) has `user_id TEXT NOT NULL DEFAULT 'default'` column
+  - [x] `postings.hydration_status` column with `CHECK` constraint on (`complete`, `partial`, `failed`)
+  - [x] `pipeline_runs.health_status` column with `CHECK` constraint on (`healthy`, `degraded`, `failed`)
+  - [x] `init_db()` is idempotent — re-running on existing DB does not error and does not modify data
+  - [x] UNIQUE constraints on `seen_urls(user_id, url)` (composite for multi-user namespacing), `(applied.posting_id, applied.user_id)`, `(dismissed.posting_id, dismissed.user_id)`
+  - [x] Indexes on `postings.first_seen`, `events.timestamp`, `pipeline_runs.run_id` for query performance
+  - [x] Smoke insert test passes: insert one posting, verify retrievable
 
 ---
 
