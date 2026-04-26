@@ -1,36 +1,40 @@
 {# Partial: single posting card for Main tab.
    Variables: posting (dict with id, canonical_title, canonical_company,
-              canonical_location, hydration_status, first_seen) #}
-<article class="card" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}">
+              canonical_location, hydration_status, first_seen, source_url?) #}
+<article class="card" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}"
+         data-url="{{ posting.source_url or '' }}">
   <div class="card-line1">
     <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
     {% if posting.canonical_company %}
       — <strong>{{ posting.canonical_company }}</strong>
     {% endif %}
+    {% if posting.hydration_status in ('partial', 'failed') %}
+      <span class="warning" title="JD hydration incomplete — open at source for full description.">&#x26A0; JD incomplete</span>
+    {% endif %}
   </div>
   <div class="card-line2">
     {% if posting.canonical_location %}
-      <span class="card-location">{{ posting.canonical_location }}</span> ·
+      <span class="card-location">{{ posting.canonical_location }}</span>
     {% endif %}
-    {% if posting.hydration_status != 'complete' %}
-      <span class="hydration-warning" title="JD hydration incomplete — open at source for full description">⚠ JD incomplete</span>
+    {% if posting.source_url %}
+      {% if posting.canonical_location %} · {% endif %}
+      <a class="card-apply-link" href="{{ posting.source_url }}" target="_blank" rel="noopener noreferrer">Apply</a>
     {% endif %}
   </div>
   <div class="card-line3">
     <span class="card-date">First seen: {{ posting.first_seen[:10] if posting.first_seen else "?" }}</span>
   </div>
+  <!-- Action buttons: hidden by default; keyboard-driven; present for accessibility -->
   <div class="card-actions">
-    <button
-      class="btn-apply"
-      hx-post="/postings/{{ posting.id }}/apply"
-      hx-swap="outerHTML"
-      hx-target="#card-{{ posting.id }}"
-    >Mark Applied</button>
-    <button
-      class="btn-dismiss"
-      hx-post="/postings/{{ posting.id }}/dismiss"
-      hx-swap="outerHTML"
-      hx-target="#card-{{ posting.id }}"
-    >Dismiss</button>
+    <button class="btn-apply" data-posting-id="{{ posting.id }}" hidden>Mark Applied</button>
+    <button class="btn-dismiss" data-posting-id="{{ posting.id }}" hidden>Dismiss</button>
+  </div>
+  <!-- Expanded body: hidden until `e` is pressed -->
+  <div class="card-expanded-body" hidden>
+    {% if posting.full_jd %}
+      <p class="card-full-jd">{{ posting.full_jd }}</p>
+    {% else %}
+      <p class="card-full-jd-empty">Full job description not available. Open at source for details.</p>
+    {% endif %}
   </div>
 </article>

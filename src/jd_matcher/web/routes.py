@@ -20,15 +20,16 @@ orchestrator rows via: run_id NOT LIKE '%_ingest_%'.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -67,6 +68,29 @@ class PostingActionResponse(BaseModel):
     posting_id: int
     action: str
     status: str
+
+
+# M1 active event set — cv_overridden and search_performed wired in schema, emitted M3/M4+
+_M1_EVENT_TYPES = Literal[
+    "card_viewed",
+    "card_expanded",
+    "card_dismissed",
+    "card_marked_applied",
+    "sync_triggered",
+    "sync_completed",
+    "tab_switched",
+    "card_restored",
+    "session_start",
+    "session_end",
+    "source_failure",
+]
+
+
+class EventWriteRequest(BaseModel):
+    event_type: _M1_EVENT_TYPES
+    posting_id: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+    session_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -211,23 +235,41 @@ def _source_health_query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
+def _source_url_for_posting(conn: sqlite3.Connection, posting_id: int) -> Optional[str]:
+    """Return the most recently first-seen source URL for a posting (best-effort)."""
+    row = conn.execute(
+        """
+        SELECT source_url FROM posting_sources
+        WHERE posting_id = ?
+        ORDER BY source_first_seen DESC
+        LIMIT 1
+        """,
+        (posting_id,),
+    ).fetchone()
+    return row[0] if row else None
+
+
 def _main_view_postings_list(
     conn: sqlite3.Connection, user_id: str = "default"
 ) -> list[dict[str, Any]]:
     """All postings not in applied or dismissed — NO hydration_status filter."""
     postings = main_view_postings(user_id=user_id, conn=conn)
-    return [
-        {
-            "id": p.id,
-            "canonical_title": p.canonical_title,
-            "canonical_company": p.canonical_company,
-            "canonical_location": p.canonical_location,
-            "hydration_status": p.hydration_status,
-            "first_seen": p.first_seen,
-            "last_seen": p.last_seen,
-        }
-        for p in postings
-    ]
+    result = []
+    for p in postings:
+        result.append(
+            {
+                "id": p.id,
+                "canonical_title": p.canonical_title,
+                "canonical_company": p.canonical_company,
+                "canonical_location": p.canonical_location,
+                "hydration_status": p.hydration_status,
+                "first_seen": p.first_seen,
+                "last_seen": p.last_seen,
+                "source_url": _source_url_for_posting(conn, p.id),
+                "full_jd": None,  # not loaded in list view — expanded body shows nothing until M3
+            }
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -401,3 +443,47 @@ async def source_health() -> JSONResponse:
         conn.close()
 
     return JSONResponse(entries)
+
+
+# ---------------------------------------------------------------------------
+# Events write endpoint (C10)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/events")
+async def write_event(body: EventWriteRequest) -> Response:
+    """Write one event row. Best-effort: DB failures log WARNING and return 204.
+
+    session_id is read from the request body.  The client generates it via
+    crypto.randomUUID() on page load and sends it with every event payload.
+    """
+    db_path = _get_db_path()
+    _ensure_db(db_path)
+    try:
+        conn = _open_conn(db_path)
+        try:
+            conn.execute(
+                """
+                INSERT INTO events
+                    (user_id, session_id, event_type, posting_id, metadata, timestamp)
+                VALUES ('default', ?, ?, ?, ?, ?)
+                """,
+                (
+                    body.session_id,
+                    body.event_type,
+                    body.posting_id,
+                    json.dumps(body.metadata) if body.metadata is not None else None,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning(
+            "Event write failed — dropping event (best-effort): %s", exc,
+            extra={"event_type": body.event_type},
+        )
+
+    # Always 204 — never let a write failure surface to the UI
+    return Response(status_code=204)

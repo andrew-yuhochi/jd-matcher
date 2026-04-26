@@ -9,25 +9,51 @@
 <body>
   <header>
     <nav class="tabs">
-      <a href="/" class="tab {% block tab_main %}{% endblock %}">Main {% block main_badge %}{% endblock %}</a>
-      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}">Applied</a>
-      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}">Dismissed</a>
+      <a href="/" class="tab {% block tab_main %}{% endblock %}" data-tab="main">Main {% block main_badge %}{% endblock %}</a>
+      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}" data-tab="applied">Applied</a>
+      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}" data-tab="dismissed">Dismissed</a>
     </nav>
 
     <div class="sub-bar" id="sub-bar">
-      <form action="/sync" method="post" style="display:inline">
-        <button type="submit" class="btn-sync">Run sync now</button>
-      </form>
+      <button class="btn-sync" id="btn-sync" type="button">Run sync now</button>
       <span class="source-badges" id="source-badges">
-        <!-- Source health badges rendered by frontend (M1-010) -->
+        <span class="badge badge-never_run" data-source="gmail_linkedin" id="badge-gmail_linkedin" title="">LI-email</span>
+        <span class="badge badge-never_run" data-source="gmail_indeed"   id="badge-gmail_indeed"   title="">IN-email</span>
+        <span class="badge badge-never_run" data-source="hydrator_linkedin" id="badge-hydrator_linkedin" title="">LI-hydrate</span>
+        <span class="badge badge-never_run" data-source="hydrator_indeed"   id="badge-hydrator_indeed"   title="">IN-hydrate</span>
       </span>
     </div>
   </header>
 
-  <main>
+  <main id="main-content">
     {% block content %}{% endblock %}
   </main>
 
-  <script src="/static/js/keyboard.js"></script>
+  <!-- Cheatsheet modal — shown by `?`, closed by Esc -->
+  <div class="cheatsheet" id="cheatsheet" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <div class="cheatsheet-inner">
+      <h2>Keyboard shortcuts</h2>
+      <table>
+        <tbody>
+          <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Focus next card</td></tr>
+          <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Focus previous card</td></tr>
+          <tr><td><kbd>e</kbd></td><td>Expand / collapse focused card</td></tr>
+          <tr><td><kbd>d</kbd></td><td>Dismiss focused card (slide-left 180ms)</td></tr>
+          <tr><td><kbd>a</kbd></td><td>Mark applied (fade-out 150ms)</td></tr>
+          <tr><td><kbd>o</kbd></td><td>Open apply URL in new tab</td></tr>
+          <tr><td><kbd>c</kbd></td><td>Copy recommended CV filename (active post-M4)</td></tr>
+          <tr><td><kbd>1</kbd></td><td>Switch to Main tab</td></tr>
+          <tr><td><kbd>2</kbd></td><td>Switch to Applied tab</td></tr>
+          <tr><td><kbd>3</kbd></td><td>Switch to Dismissed tab</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Focus search input</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show this cheatsheet</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close cheatsheet / collapse expanded card</td></tr>
+        </tbody>
+      </table>
+      <p class="cheatsheet-close-hint">Press <kbd>Esc</kbd> to close</p>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

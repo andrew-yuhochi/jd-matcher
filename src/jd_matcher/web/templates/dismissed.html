@@ -16,7 +16,7 @@
 
   {% if postings %}
     {% for posting in postings %}
-      <article class="card card-dismissed" id="card-dismissed-{{ posting.id }}">
+      <article class="card card-dismissed" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}">
         <div class="card-line1">
           <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
           {% if posting.canonical_company %}
@@ -34,9 +34,7 @@
         <div class="card-actions">
           <button
             class="btn-restore"
-            hx-post="/postings/{{ posting.id }}/restore"
-            hx-swap="outerHTML"
-            hx-target="#card-dismissed-{{ posting.id }}"
+            data-posting-id="{{ posting.id }}"
           >Restore to Main</button>
         </div>
       </article>

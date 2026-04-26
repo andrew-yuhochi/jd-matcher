@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 11 | In Progress: 0 | To Do: 3 | Blocked: 0
+- Done: 12 | In Progress: 0 | To Do: 2 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -335,7 +335,7 @@
 
 ### TASK-M1-010 — Web UI frontend + events instrumentation
 
-- **Status**: To Do
+- **Status**: Done (2026-04-26)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C9 (Web UI: frontend) + C10 (Events instrumentation) — TDD §C9, §C10
@@ -350,14 +350,14 @@
 - **Demo Artifact**: User opens `http://localhost:8765/`, navigates with `j/k`, expands with `e`, dismisses with `d` (sees slide-left animation), switches tabs with `1/2/3`; `sqlite3 ... "SELECT type, count(*) FROM events GROUP BY type"` shows event counts matching interactions.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-010.md`
 - **Acceptance Criteria**:
-  - [ ] Three tabs (Main / Applied / Dismissed) render correctly with seeded fixture postings
-  - [ ] Keyboard shortcuts work: `j`/`k` (next/prev card), `e` (expand), `d` (dismiss with 180ms slide-left), `a` (mark applied), `o` (open URL in new tab), `1`/`2`/`3` (switch tabs), `?` (cheatsheet overlay), `Esc` (close cheatsheet/collapse expanded card)
-  - [ ] Sub-bar shows 4 health badges: `LI-email`, `IN-email`, `LI-hydrate`, `IN-hydrate` — colors per `/api/source-health`
-  - [ ] Health badges are NOT dismissible (no close button); auto-clear only when `/api/source-health` reports the source returned to `healthy`
-  - [ ] Hover on a non-green badge shows `failure_reason` tooltip
-  - [ ] Cards with `hydration_status='partial'` or `'failed'` show inline `⚠ JD incomplete` indicator on line 2; all keyboard shortcuts (`e`/`d`/`a`/`o`) still work on these cards
-  - [ ] Events instrumentation: every interaction (`card_viewed`, `card_expanded`, `card_dismissed`, `card_marked_applied`, `sync_triggered`, `sync_completed`, `tab_switched`, `card_restored`) writes exactly one correctly-typed row to `events` with `time_to_decide_ms` (where applicable) and `session_id`
-  - [ ] Structural DOM tests with Playwright (or equivalent) — 100% pass
+  - [x] Three tabs (Main / Applied / Dismissed) render correctly with seeded fixture postings
+  - [x] Keyboard shortcuts work: `j`/`k` (next/prev card), `e` (expand), `d` (dismiss with 180ms slide-left), `a` (mark applied), `o` (open URL in new tab), `1`/`2`/`3` (switch tabs), `?` (cheatsheet overlay), `Esc` (close cheatsheet/collapse expanded card)
+  - [x] Sub-bar shows 4 health badges: `LI-email`, `IN-email`, `LI-hydrate`, `IN-hydrate` — colors per `/api/source-health`
+  - [x] Health badges are NOT dismissible (no close button); auto-clear only when `/api/source-health` reports the source returned to `healthy`
+  - [x] Hover on a non-green badge shows `failure_reason` tooltip
+  - [x] Cards with `hydration_status='partial'` or `'failed'` show inline `⚠ JD incomplete` indicator on line 2; all keyboard shortcuts (`e`/`d`/`a`/`o`) still work on these cards
+  - [x] Events instrumentation: every interaction (`card_viewed`, `card_expanded`, `card_dismissed`, `card_marked_applied`, `sync_triggered`, `sync_completed`, `tab_switched`, `card_restored`) writes exactly one correctly-typed row to `events` with `time_to_decide_ms` (where applicable) and `session_id`
+  - [x] Structural DOM tests with Playwright (or equivalent) — 100% pass
 
 ---
 

@@ -7,7 +7,7 @@
 <section class="applied-list">
   {% if postings %}
     {% for posting in postings %}
-      <article class="card card-applied" id="card-applied-{{ posting.id }}">
+      <article class="card card-applied" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}">
         <div class="card-line1">
           <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
           {% if posting.canonical_company %}

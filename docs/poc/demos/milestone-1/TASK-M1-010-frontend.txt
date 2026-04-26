@@ -1,0 +1,133 @@
+TASK-M1-010 — Web UI frontend + events instrumentation
+Demo artifact — generated 2026-04-26
+===========================================================
+
+Server: uvicorn jd_matcher.web:app --host 127.0.0.1 --port 8765
+DB:     /tmp/jdm-demo-010.db (seeded: 3 complete, 1 partial, 1 failed postings)
+
+
+--- GET / (Main tab, first 40 lines) ---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>jd-matcher — Main</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <header>
+    <nav class="tabs">
+      <a href="/" class="tab active" data-tab="main">Main <span class="badge">5</span></a>
+      <a href="/applied" class="tab " data-tab="applied">Applied</a>
+      <a href="/dismissed" class="tab " data-tab="dismissed">Dismissed</a>
+    </nav>
+
+    <div class="sub-bar" id="sub-bar">
+      <button class="btn-sync" id="btn-sync" type="button">Run sync now</button>
+      <span class="source-badges" id="source-badges">
+        <span class="badge badge-never_run" data-source="gmail_linkedin" id="badge-gmail_linkedin" title="">LI-email</span>
+        <span class="badge badge-never_run" data-source="gmail_indeed"   id="badge-gmail_indeed"   title="">IN-email</span>
+        <span class="badge badge-never_run" data-source="hydrator_linkedin" id="badge-hydrator_linkedin" title="">LI-hydrate</span>
+        <span class="badge badge-never_run" data-source="hydrator_indeed"   id="badge-hydrator_indeed"   title="">IN-hydrate</span>
+      </span>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="postings-list" id="postings-list">
+      <article class="card" id="card-5" data-posting-id="5" data-url="">
+        <div class="card-line1">
+          <span class="card-title">LLM Engineer</span>
+          — <strong>Startup XYZ</strong>
+          <span class="warning" title="JD hydration incomplete — open at source for full description.">⚠ JD incomplete</span>
+        </div>
+        ...
+      </article>
+      <article class="card" id="card-4" data-posting-id="4" data-url="">
+        <div class="card-line1">
+          <span class="card-title">ML Platform Engineer</span>
+          — <strong>Cloud Co</strong>
+          <span class="warning" title="JD hydration incomplete — open at source for full description.">⚠ JD incomplete</span>
+        </div>
+        ...
+      </article>
+      <!-- 3 more complete cards without ⚠ -->
+    </section>
+  </main>
+
+  <!-- Cheatsheet modal (hidden by default) -->
+  <div class="cheatsheet" id="cheatsheet" role="dialog" ...>
+    ...j/k/e/d/a/o/1/2/3/?/Esc entries...
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
+
+
+--- GET /applied (Applied tab) ---
+
+Three tabs render; active tab = "applied"; empty-state message shown.
+
+
+--- GET /dismissed (Dismissed tab) ---
+
+Three tabs render; active tab = "dismissed"; search box present; empty-state shown.
+
+
+--- GET /api/source-health ---
+
+[
+    {"source": "gmail_linkedin", "health_status": "healthy", "last_run": "2026-04-25T10:00:00+00:00", "last_successful_fetch_at": "2026-04-25T10:00:00+00:00", "failure_reason": null},
+    {"source": "gmail_indeed",   "health_status": "never_run", "last_run": null, "last_successful_fetch_at": null, "failure_reason": null},
+    {"source": "hydrator_linkedin", "health_status": "failed",  "last_run": "2026-04-25T10:00:00+00:00", "last_successful_fetch_at": null, "failure_reason": "Rate limit exceeded"},
+    {"source": "hydrator_indeed",   "health_status": "never_run", "last_run": null, "last_successful_fetch_at": null, "failure_reason": null}
+]
+
+Badge JS updates: gmail_linkedin → green, hydrator_linkedin → red (failure_reason shown in tooltip),
+gmail_indeed + hydrator_indeed → grey.  NO dismiss/close button rendered for any badge.
+
+
+--- GET /healthz ---
+
+{"status": "ok", "timestamp": "2026-04-26T21:15:50.356348+00:00"}
+
+
+--- POST /api/events × 4 (all returned HTTP 204) ---
+
+Request 1: {"event_type": "card_viewed",   "posting_id": 1, "session_id": "demo-sess-001"}
+Request 2: {"event_type": "card_dismissed","posting_id": 1, "metadata": {"time_to_decide_ms": 3200}, "session_id": "demo-sess-001"}
+Request 3: {"event_type": "tab_switched",  "metadata": {"tab": "applied"}, "session_id": "demo-sess-001"}
+Request 4: {"event_type": "session_start", "session_id": "demo-sess-001"}
+
+
+--- events table after 4 POST /api/events calls ---
+
+event_type           | posting_id | session_id      | metadata
+---------------------|------------|-----------------|-------------------------------------
+card_viewed          | 1          | demo-sess-001   | NULL
+card_dismissed       | 1          | demo-sess-001   | {"time_to_decide_ms": 3200}
+tab_switched         | NULL       | demo-sess-001   | {"tab": "applied"}
+session_start        | NULL       | demo-sess-001   | NULL
+
+All 4 events written correctly. metadata stored as JSON string. session_id propagated.
+time_to_decide_ms present on card_dismissed.
+
+
+===========================================================
+KNOWN GAP — Browser-based keyboard interaction NOT verified by data-pipeline (no browser access).
+User must verify keyboard shortcuts manually at the M1 demo (TASK-M1-012):
+  1. Open http://localhost:8765/ with seeded data
+  2. Press j/k — focus ring moves between cards
+  3. Press e — card expands; press e again to collapse
+  4. Press d — 180ms slide-left animation, card removed, focus moves to next
+  5. Press a — 150ms fade-out, card removed from list
+  6. Press o — apply URL opens in new tab
+  7. Press 1/2/3 — tab navigation (also emits tab_switched event)
+  8. Press ? — cheatsheet modal appears with full shortcut table
+  9. Press Esc — cheatsheet closes (or expanded card collapses)
+  10. Check events: sqlite3 ~/.jd-matcher/jd-matcher.db \
+        "SELECT event_type, count(*) FROM events GROUP BY event_type"
+===========================================================

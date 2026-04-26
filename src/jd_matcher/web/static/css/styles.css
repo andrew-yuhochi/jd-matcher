@@ -1,20 +1,229 @@
-/* Base styles placeholder — full visual design implemented in TASK-M1-010. */
+/* jd-matcher — M1 styles (~180 lines) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; background: #f9f9f9; color: #111; }
-header { border-bottom: 1px solid #ddd; padding: 0.5rem 1rem; }
-.tabs { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
-.tab { text-decoration: none; color: #555; padding: 0.25rem 0.5rem; }
-.tab.active { color: #000; border-bottom: 2px solid #000; font-weight: 600; }
-.badge { background: #333; color: #fff; border-radius: 999px; padding: 0 6px; font-size: 0.75rem; }
-.sub-bar { display: flex; align-items: center; gap: 0.75rem; }
-.btn-sync { cursor: pointer; }
-main { padding: 1rem; }
-.card { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; background: #fff; }
-.card-line1 { font-size: 1rem; margin-bottom: 0.25rem; }
-.card-line2 { font-size: 0.85rem; color: #555; margin-bottom: 0.25rem; }
-.card-line3 { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
-.card-actions { display: flex; gap: 0.5rem; }
-.hydration-warning { color: #b45309; font-size: 0.75rem; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f5f5f5;
+  color: #111;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ── Header / nav ─────────────────────────────────────────── */
+header {
+  border-bottom: 1px solid #ddd;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.tab {
+  text-decoration: none;
+  color: #555;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+  color: #000;
+  border-bottom: 2px solid #000;
+  font-weight: 600;
+}
+
+/* ── Sub-bar ──────────────────────────────────────────────── */
+.sub-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-sync {
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+}
+
+.btn-sync:hover { background: #f0f0f0; }
+
+/* ── Source-health badges ─────────────────────────────────── */
+.source-badges { display: flex; gap: 0.4rem; align-items: center; }
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: default;
+  /* NO close button. NO dismiss affordance. */
+}
+
+/* Badge colours per source-health endpoint */
+.badge-healthy    { background: #22c55e; color: #fff; }
+.badge-degraded   { background: #f59e0b; color: #fff; }
+.badge-failed     { background: #ef4444; color: #fff; }
+.badge-never_run  { background: #9ca3af; color: #fff; }
+
+/* ── Main content ─────────────────────────────────────────── */
+main { padding: 1rem; max-width: 780px; margin: 0 auto; }
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: #fff;
+  position: relative;
+  transition: border-color 0.1s;
+}
+
+/* Visible keyboard-focus ring */
+.card.card-focused {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+/* Dismiss animation: slide-left 180ms, then collapse 100ms (collapse via JS) */
+.card.dismissing {
+  transform: translateX(-110%);
+  transition: transform 180ms ease-in;
+  overflow: hidden;
+}
+
+/* Apply animation: fade-out 150ms */
+.card.applying {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.card-line1 { font-size: 1rem; margin-bottom: 0.2rem; }
+.card-line2 { font-size: 0.85rem; color: #555; margin-bottom: 0.15rem; }
+.card-line3 { font-size: 0.78rem; color: #888; margin-bottom: 0.4rem; }
+
+/* Hydration-failure inline warning */
+.warning {
+  display: inline-block;
+  color: #b45309;
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+  cursor: help;
+}
+
+/* Apply URL link */
+.card-apply-link { color: #2563eb; font-size: 0.85rem; }
+
+/* Action buttons (keyboard-driven; present for accessibility) */
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  visibility: hidden; /* hidden by default; shown on hover/focus via accessibility */
+}
+
+.card:hover .card-actions,
+.card.card-focused .card-actions {
+  visibility: visible;
+}
+
+.btn-apply, .btn-dismiss, .btn-restore {
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fafafa;
+}
+
+.btn-apply:hover { background: #dcfce7; border-color: #22c55e; }
+.btn-dismiss:hover { background: #fee2e2; border-color: #ef4444; }
+.btn-restore:hover { background: #eff6ff; border-color: #2563eb; }
+
+/* Expanded body — shown when card has .expanded class */
+.card-expanded-body { display: none; margin-top: 0.5rem; font-size: 0.85rem; color: #444; }
+.card.expanded .card-expanded-body { display: block; }
+
+.card-full-jd { white-space: pre-wrap; }
+.card-full-jd-empty { font-style: italic; color: #999; }
+
+/* ── Empty states ─────────────────────────────────────────── */
+.empty-state {
+  color: #888;
+  padding: 2.5rem 0;
+  text-align: center;
+}
+
+.empty-state .btn-sync { font-size: 0.9rem; margin-top: 0.75rem; }
+
+/* ── Search bar (Dismissed tab) ───────────────────────────── */
 .search-bar { margin-bottom: 1rem; }
-.search-bar input { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; }
-.empty-state { color: #888; padding: 2rem 0; text-align: center; }
+.search-bar input {
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* ── Cheatsheet modal ─────────────────────────────────────── */
+.cheatsheet {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+
+.cheatsheet.open { display: flex; }
+
+.cheatsheet-inner {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem 2rem;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.cheatsheet-inner h2 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+.cheatsheet-inner table { width: 100%; border-collapse: collapse; }
+.cheatsheet-inner td { padding: 0.2rem 0.4rem; font-size: 0.85rem; }
+.cheatsheet-inner td:first-child { text-align: right; white-space: nowrap; }
+
+kbd {
+  background: #f0f0f0;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.cheatsheet-close-hint {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  color: #888;
+  text-align: center;
+}
