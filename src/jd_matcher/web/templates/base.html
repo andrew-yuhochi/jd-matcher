@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>jd-matcher{% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <header>
+    <nav class="tabs">
+      <a href="/" class="tab {% block tab_main %}{% endblock %}">Main {% block main_badge %}{% endblock %}</a>
+      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}">Applied</a>
+      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}">Dismissed</a>
+    </nav>
+
+    <div class="sub-bar" id="sub-bar">
+      <form action="/sync" method="post" style="display:inline">
+        <button type="submit" class="btn-sync">Run sync now</button>
+      </form>
+      <span class="source-badges" id="source-badges">
+        <!-- Source health badges rendered by frontend (M1-010) -->
+      </span>
+    </div>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/keyboard.js"></script>
+</body>
+</html>

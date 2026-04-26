@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %} — Applied{% endblock %}
+{% block tab_applied %}active{% endblock %}
+
+{% block content %}
+<section class="applied-list">
+  {% if postings %}
+    {% for posting in postings %}
+      <article class="card card-applied" id="card-applied-{{ posting.id }}">
+        <div class="card-line1">
+          <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
+          {% if posting.canonical_company %}
+            — <strong>{{ posting.canonical_company }}</strong>
+          {% endif %}
+        </div>
+        <div class="card-line2">
+          {% if posting.canonical_location %}
+            <span class="card-location">{{ posting.canonical_location }}</span>
+          {% endif %}
+        </div>
+        <div class="card-line3">
+          <span class="card-status">Status: {{ posting.status }}</span> ·
+          <span class="card-date">Applied: {{ posting.applied_at[:10] if posting.applied_at else "?" }}</span>
+        </div>
+        {% if posting.notes %}
+          <div class="card-notes">{{ posting.notes }}</div>
+        {% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <p>No applied postings yet. Mark postings as applied from the Main tab.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

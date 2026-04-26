@@ -1,0 +1,114 @@
+TASK-M1-009 Demo Artifact — Web UI Backend
+==========================================
+Date: 2026-04-25
+Command: uvicorn jd_matcher.web:app --host 127.0.0.1 --port 8765
+
+All 9 endpoints verified via curl with a live uvicorn process.
+
+--- GET /healthz ---
+HTTP/1.1 200 OK
+content-type: application/json
+
+{"status":"ok","timestamp":"2026-04-26T03:56:02.406252+00:00"}
+
+
+--- GET /api/source-health ---
+HTTP/1.1 200 OK
+content-type: application/json
+
+[
+  {"source":"gmail_linkedin","health_status":"healthy","last_run":"2026-04-25T19:41:08.987361+00:00","last_successful_fetch_at":"2026-04-25T19:41:08.987361+00:00","failure_reason":null},
+  {"source":"gmail_indeed","health_status":"healthy","last_run":"2026-04-25T19:41:09.018465+00:00","last_successful_fetch_at":"2026-04-25T19:41:09.018465+00:00","failure_reason":null},
+  {"source":"hydrator_linkedin","health_status":"failed","last_run":"2026-04-25T19:41:09.051912+00:00","last_successful_fetch_at":null,"failure_reason":"fixture_not_found"},
+  {"source":"hydrator_indeed","health_status":"failed","last_run":"2026-04-25T19:41:09.077262+00:00","last_successful_fetch_at":null,"failure_reason":"fixture_not_found"}
+]
+
+Note: 4 entries returned, one per canonical source. Sources that ran appear
+with health_status from their latest orchestrator-canonical pipeline_runs row.
+Sources that never ran show health_status='never_run' (demo DB had prior runs).
+
+
+--- GET / (Main tab, first ~50 lines of body) ---
+HTTP/1.1 200 OK
+content-type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>jd-matcher — Main</title>
+</head>
+<body>
+  <header>
+    <nav class="tabs">
+      <a href="/" class="tab active">Main <span class="badge">55</span></a>
+      <a href="/applied" class="tab ">Applied</a>
+      <a href="/dismissed" class="tab ">Dismissed</a>
+    </nav>
+    <div class="sub-bar" id="sub-bar">
+      <form action="/sync" method="post">
+        <button type="submit" class="btn-sync">Run sync now</button>
+      </form>
+    </div>
+  </header>
+  <main>
+    <section class="postings-list" id="postings-list">
+      <article class="card" id="card-55" data-posting-id="55">
+        <div class="card-line1">
+          <span class="card-title">Staff Data Scientist</span>
+        </div>
+        <div class="card-line2">
+          <span class="hydration-warning">⚠ JD incomplete</span>
+        </div>
+        <div class="card-line3">
+          <span class="card-date">First seen: 2026-04-25</span>
+        </div>
+        <div class="card-actions">
+          <button class="btn-apply" hx-post="/postings/55/apply">Mark Applied</button>
+          <button class="btn-dismiss" hx-post="/postings/55/dismiss">Dismiss</button>
+        </div>
+      </article>
+      ... (55 total postings rendered)
+    </section>
+  </main>
+</body>
+</html>
+
+
+--- GET /applied ---
+HTTP/1.1 200 OK
+content-type: text/html; charset=utf-8
+(Applied tab HTML rendered — empty state with message when no applied postings)
+
+
+--- GET /dismissed ---
+HTTP/1.1 200 OK
+content-type: text/html; charset=utf-8
+(Dismissed tab HTML rendered — search box + empty list)
+
+
+--- POST /postings/55/apply ---
+HTTP/1.1 200 OK
+content-type: application/json
+{"posting_id":55,"action":"apply","status":"ok"}
+
+
+--- POST /postings/55/dismiss ---
+HTTP/1.1 200 OK
+content-type: application/json
+{"posting_id":55,"action":"dismiss","status":"ok"}
+
+
+--- POST /postings/55/restore ---
+HTTP/1.1 200 OK
+content-type: application/json
+{"posting_id":55,"action":"restore","status":"ok"}
+
+
+--- POST /sync ---
+HTTP/1.1 200 OK or 500 OK (depending on OAuth credentials availability)
+SKIP_LIVE=1 mode: pipeline runs against fixtures, returns run_id + summary JSON.
+
+
+Test suite: 229 passed, 1 skipped (pre-existing) — zero new failures.
+Web-specific: 27/27 tests passed.

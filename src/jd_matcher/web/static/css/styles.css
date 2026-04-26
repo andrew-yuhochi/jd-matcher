@@ -1,0 +1,20 @@
+/* Base styles placeholder — full visual design implemented in TASK-M1-010. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f9f9f9; color: #111; }
+header { border-bottom: 1px solid #ddd; padding: 0.5rem 1rem; }
+.tabs { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+.tab { text-decoration: none; color: #555; padding: 0.25rem 0.5rem; }
+.tab.active { color: #000; border-bottom: 2px solid #000; font-weight: 600; }
+.badge { background: #333; color: #fff; border-radius: 999px; padding: 0 6px; font-size: 0.75rem; }
+.sub-bar { display: flex; align-items: center; gap: 0.75rem; }
+.btn-sync { cursor: pointer; }
+main { padding: 1rem; }
+.card { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; background: #fff; }
+.card-line1 { font-size: 1rem; margin-bottom: 0.25rem; }
+.card-line2 { font-size: 0.85rem; color: #555; margin-bottom: 0.25rem; }
+.card-line3 { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+.card-actions { display: flex; gap: 0.5rem; }
+.hydration-warning { color: #b45309; font-size: 0.75rem; }
+.search-bar { margin-bottom: 1rem; }
+.search-bar input { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; }
+.empty-state { color: #888; padding: 2rem 0; text-align: center; }

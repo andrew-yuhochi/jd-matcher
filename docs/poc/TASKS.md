@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 8 | In Progress: 0 | To Do: 4 | Blocked: 0
+- Done: 9 | In Progress: 0 | To Do: 3 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -235,7 +235,7 @@
 
 ### TASK-M1-009 — Web UI backend (FastAPI + 8 endpoints + source-health)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-25)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C8 (Web UI: backend) — TDD §C8
@@ -250,12 +250,12 @@
 - **Demo Artifact**: `uvicorn jd_matcher.web:app --host 127.0.0.1 --port 8765` then `curl localhost:8765/healthz` returns 200; opening `http://localhost:8765/` in browser renders Main tab with seeded fixture postings.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-009.md`
 - **Acceptance Criteria**:
-  - [ ] All 8 endpoints respond per contract: `GET /` (Main HTML), `GET /applied` (Applied HTML), `GET /dismissed` (Dismissed HTML), `POST /sync`, `POST /postings/{id}/dismiss`, `POST /postings/{id}/apply`, `POST /postings/{id}/restore`, `GET /healthz`, `GET /api/source-health` (JSON)
-  - [ ] `GET /api/source-health` returns latest per-source state from `pipeline_runs` — schema: `[{source, status, last_run, last_success}, ...]`
-  - [ ] Main view query does NOT filter by `hydration_status` — postings with `partial`/`failed` hydration appear (verified by test that seeds 3 hydration-failed postings + asserts they appear in Main HTML response)
-  - [ ] Bind address is exclusively `127.0.0.1` — `0.0.0.0` rejected (configurable but defaulted to 127.0.0.1; integration test verifies)
-  - [ ] State-mutation endpoints (`/apply`, `/dismiss`, `/restore`) are idempotent — calling twice produces same DB state
-  - [ ] All endpoints have integration tests with seeded fixture DB; 100% pass
+  - [x] All 9 endpoints respond per contract: `GET /` (Main HTML), `GET /applied` (Applied HTML), `GET /dismissed` (Dismissed HTML), `POST /sync`, `POST /postings/{id}/dismiss`, `POST /postings/{id}/apply`, `POST /postings/{id}/restore`, `GET /healthz`, `GET /api/source-health` (JSON)
+  - [x] `GET /api/source-health` returns latest per-source state from `pipeline_runs` — schema: `[{source, health_status, last_run, last_successful_fetch_at, failure_reason}, ...]`
+  - [x] Main view query does NOT filter by `hydration_status` — postings with `partial`/`failed` hydration appear (verified by test that seeds 3 hydration-failed postings + asserts they appear in Main HTML response)
+  - [x] Bind address is exclusively `127.0.0.1` — `0.0.0.0` rejected (configurable but defaulted to 127.0.0.1; integration test verifies)
+  - [x] State-mutation endpoints (`/apply`, `/dismiss`, `/restore`) are idempotent — calling twice produces same DB state
+  - [x] All endpoints have integration tests with seeded fixture DB; 100% pass
 
 ---
 

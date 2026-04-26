@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %} — Main{% endblock %}
+{% block tab_main %}active{% endblock %}
+{% block main_badge %}<span class="badge">{{ count }}</span>{% endblock %}
+
+{% block content %}
+<section class="postings-list" id="postings-list">
+  {% if postings %}
+    {% for posting in postings %}
+      {% include "_card.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <p>No new postings. Run sync to fetch the latest job alerts.</p>
+      <form action="/sync" method="post">
+        <button type="submit" class="btn-sync">Run sync now</button>
+      </form>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

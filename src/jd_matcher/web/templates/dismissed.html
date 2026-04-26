@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %} — Dismissed{% endblock %}
+{% block tab_dismissed %}active{% endblock %}
+
+{% block content %}
+<section class="dismissed-list">
+  <div class="search-bar">
+    <input
+      type="search"
+      id="dismissed-search"
+      placeholder="Search dismissed postings..."
+      autocomplete="off"
+    />
+  </div>
+
+  {% if postings %}
+    {% for posting in postings %}
+      <article class="card card-dismissed" id="card-dismissed-{{ posting.id }}">
+        <div class="card-line1">
+          <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
+          {% if posting.canonical_company %}
+            — <strong>{{ posting.canonical_company }}</strong>
+          {% endif %}
+        </div>
+        <div class="card-line2">
+          {% if posting.canonical_location %}
+            <span class="card-location">{{ posting.canonical_location }}</span>
+          {% endif %}
+        </div>
+        <div class="card-line3">
+          <span class="card-date">Dismissed: {{ posting.dismissed_at[:10] if posting.dismissed_at else "?" }}</span>
+        </div>
+        <div class="card-actions">
+          <button
+            class="btn-restore"
+            hx-post="/postings/{{ posting.id }}/restore"
+            hx-swap="outerHTML"
+            hx-target="#card-dismissed-{{ posting.id }}"
+          >Restore to Main</button>
+        </div>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <p>No dismissed postings.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

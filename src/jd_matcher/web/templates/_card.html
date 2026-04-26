@@ -1,0 +1,36 @@
+{# Partial: single posting card for Main tab.
+   Variables: posting (dict with id, canonical_title, canonical_company,
+              canonical_location, hydration_status, first_seen) #}
+<article class="card" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}">
+  <div class="card-line1">
+    <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
+    {% if posting.canonical_company %}
+      — <strong>{{ posting.canonical_company }}</strong>
+    {% endif %}
+  </div>
+  <div class="card-line2">
+    {% if posting.canonical_location %}
+      <span class="card-location">{{ posting.canonical_location }}</span> ·
+    {% endif %}
+    {% if posting.hydration_status != 'complete' %}
+      <span class="hydration-warning" title="JD hydration incomplete — open at source for full description">⚠ JD incomplete</span>
+    {% endif %}
+  </div>
+  <div class="card-line3">
+    <span class="card-date">First seen: {{ posting.first_seen[:10] if posting.first_seen else "?" }}</span>
+  </div>
+  <div class="card-actions">
+    <button
+      class="btn-apply"
+      hx-post="/postings/{{ posting.id }}/apply"
+      hx-swap="outerHTML"
+      hx-target="#card-{{ posting.id }}"
+    >Mark Applied</button>
+    <button
+      class="btn-dismiss"
+      hx-post="/postings/{{ posting.id }}/dismiss"
+      hx-swap="outerHTML"
+      hx-target="#card-{{ posting.id }}"
+    >Dismiss</button>
+  </div>
+</article>
