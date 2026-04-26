@@ -78,17 +78,22 @@ class GmailIngester:
         sender_filter: str,
         since_date: datetime,
         run_id: str | None = None,
+        canonical_run_id: str | None = None,
     ) -> list[RawEmail]:
         """Fetch all emails matching *sender_filter* received after *since_date*.
 
         Args:
-            sender_filter: Short name key ("linkedin" or "indeed") **or** the
-                full Gmail query string (``from:…``).  Short-name keys are
-                resolved via the internal lookup table.
-            since_date:    Lower bound on message recency.  The Gmail query
-                           uses ``newer_than:Nd`` derived from this date.
-            run_id:        Caller-supplied idempotency key.  Defaults to a
-                           random UUID prefixed with ``manual-``.
+            sender_filter:    Short name key ("linkedin" or "indeed") **or** the
+                              full Gmail query string (``from:…``).  Short-name
+                              keys are resolved via the internal lookup table.
+            since_date:       Lower bound on message recency.  The Gmail query
+                              uses ``newer_than:Nd`` derived from this date.
+            run_id:           Caller-supplied idempotency key for the ingester's
+                              own pipeline_runs row.  Defaults to a random UUID
+                              prefixed with ``manual-``.
+            canonical_run_id: The orchestrator's canonical run_id, written into
+                              email_ingest_log.pipeline_run_id.  When None, the
+                              ingester's own run_id is used (stand-alone runs).
 
         Returns:
             A list of :class:`RawEmail` objects, or ``[]`` on any failure.
@@ -107,12 +112,18 @@ class GmailIngester:
 
         source_name = f"gmail_{sender_short}"
         started_at = datetime.now(timezone.utc)
+        # Use the canonical orchestrator run_id for email_ingest_log; fall back
+        # to the ingester's own run_id when called in stand-alone mode.
+        log_run_id = canonical_run_id if canonical_run_id is not None else run_id
 
         try:
             if os.environ.get("SKIP_LIVE") == "1":
                 emails = self._fetch_from_fixtures(sender_short, since_date)
             else:
                 emails = self._fetch_from_gmail(gmail_query_prefix, since_date)
+
+            # C3 writer hook — one row per fetched email in email_ingest_log.
+            self._write_email_ingest_log_rows(emails, source=sender_short, pipeline_run_id=log_run_id)
 
             finished_at = datetime.now(timezone.utc)
             self._write_pipeline_run(
@@ -263,6 +274,35 @@ class GmailIngester:
     # ------------------------------------------------------------------
     # DB helpers
     # ------------------------------------------------------------------
+
+    def _write_email_ingest_log_rows(
+        self,
+        emails: list[RawEmail],
+        *,
+        source: str,
+        pipeline_run_id: str,
+    ) -> None:
+        """C3 writer hook — insert one email_ingest_log row per fetched email."""
+        from jd_matcher.db.email_ingest_log import insert_email_log
+
+        for raw_email in emails:
+            try:
+                insert_email_log(
+                    gmail_message_id=raw_email.id,
+                    source=source,
+                    sender=raw_email.sender,
+                    subject=raw_email.subject,
+                    received_at=raw_email.received_at,
+                    pipeline_run_id=pipeline_run_id,
+                    db_path=self._db_path,
+                )
+            except Exception:
+                # Best-effort telemetry — never block the ingestion path.
+                logger.warning(
+                    "C3 email_ingest_log insert failed for gmail_message_id=%s",
+                    raw_email.id,
+                    exc_info=True,
+                )
 
     def _write_pipeline_run(
         self,

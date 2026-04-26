@@ -135,3 +135,30 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pipeline_runs_run_id ON pipeline_runs (run_id);
+
+-- -------------------------------------------------------------------------
+-- email_ingest_log — per-email ingestion telemetry (M1, TASK-M1-005c)
+-- One row per Gmail message fetched; counters updated in place by C4/C5.
+-- gmail_message_id UNIQUE ensures re-ingesting the same message is idempotent.
+-- pipeline_run_id is the canonical orchestrator run_id (NOT ingester sub-run).
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS email_ingest_log (
+    id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                         TEXT NOT NULL DEFAULT 'default',
+    gmail_message_id                TEXT NOT NULL UNIQUE,
+    source                          TEXT NOT NULL,
+    sender                          TEXT NOT NULL,
+    subject                         TEXT NOT NULL,
+    received_at                     TIMESTAMP NOT NULL,
+    ingested_at                     TIMESTAMP NOT NULL,
+    pipeline_run_id                 TEXT NOT NULL,
+    urls_extracted_count            INTEGER NOT NULL DEFAULT 0,
+    urls_new_count                  INTEGER NOT NULL DEFAULT 0,
+    postings_created_count          INTEGER NOT NULL DEFAULT 0,
+    postings_hydrated_count         INTEGER NOT NULL DEFAULT 0,
+    postings_hydration_failed_count INTEGER NOT NULL DEFAULT 0,
+    notes                           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_ingest_log_run      ON email_ingest_log (pipeline_run_id);
+CREATE INDEX IF NOT EXISTS idx_email_ingest_log_received ON email_ingest_log (received_at);

@@ -1,12 +1,12 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-25
+> **Last Updated**: 2026-04-26
 
 ---
 
 ## Progress Summary
-- Done: 10 | In Progress: 0 | To Do: 4 | Blocked: 0
+- Done: 11 | In Progress: 0 | To Do: 3 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -300,7 +300,7 @@
 
 ### TASK-M1-005c — Per-email ingest log + report
 
-- **Status**: To Do
+- **Status**: Done (2026-04-26)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C3 / C4 / C5 (writer hooks) + new C27 (Ingest Report CLI) — TDD §C3, §C4, §C5, §C27, §1.2a (`email_ingest_log` schema)
@@ -319,17 +319,17 @@
 - **Demo Artifact**: `python -m jd_matcher.report ingest --since 2026-04-25` outputs a markdown table to stdout with one row per email ingested in the date range (Date · Source · Subject · URLs · New · Posts · Hydrated · Failed) plus aggregate totals row. User opens Gmail and visually compares.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-005c.md`
 - **Acceptance Criteria**:
-  - [ ] `email_ingest_log` table created via idempotent `init_db()` (re-running init_db on existing DB does NOT recreate or fail)
-  - [ ] C3 inserts one row per fetched email with `gmail_message_id`, `source`, `sender`, `subject`, `received_at`, `ingested_at`, `pipeline_run_id` populated; counters default to 0
-  - [ ] C4 updates `urls_extracted_count` and `urls_new_count` for the matching `gmail_message_id` row
-  - [ ] C5 updates `postings_hydrated_count` / `postings_hydration_failed_count` for the matching `gmail_message_id` row (per-posting accumulator across the batch)
-  - [ ] All writers use the canonical orchestrator `pipeline_run_id` (NOT `_ingest_<sender>` sub-run-id) — verified by integration test querying `SELECT DISTINCT pipeline_run_id FROM email_ingest_log` and asserting 1 row per orchestrator invocation
-  - [ ] `python -m jd_matcher.report ingest` (no args) renders a markdown table to stdout with all log rows
-  - [ ] `--since YYYY-MM-DD` filters to rows with `received_at >= date`
-  - [ ] `--source X` filters to rows where `source = X`
-  - [ ] `--format csv` outputs valid CSV (parseable by `csv.DictReader`) instead of markdown
-  - [ ] Bottom of report shows aggregate totals (total emails, total URLs, total new, total posts, total hydrated, total failed) matching column sums
-  - [ ] Integration test: run full pipeline against fixture mailbox of 5 emails, then assert `email_ingest_log` has exactly 5 rows with non-zero counters
+  - [x] `email_ingest_log` table created via idempotent `init_db()` (re-running init_db on existing DB does NOT recreate or fail)
+  - [x] C3 inserts one row per fetched email with `gmail_message_id`, `source`, `sender`, `subject`, `received_at`, `ingested_at`, `pipeline_run_id` populated; counters default to 0
+  - [x] C4 updates `urls_extracted_count` and `urls_new_count` for the matching `gmail_message_id` row
+  - [x] C5 updates `postings_hydrated_count` / `postings_hydration_failed_count` for the matching `gmail_message_id` row (per-posting accumulator across the batch)
+  - [x] All writers use the canonical orchestrator `pipeline_run_id` (NOT `_ingest_<sender>` sub-run-id) — verified by integration test querying `SELECT DISTINCT pipeline_run_id FROM email_ingest_log` and asserting 1 row per orchestrator invocation
+  - [x] `python -m jd_matcher.report ingest` (no args) renders a markdown table to stdout with all log rows
+  - [x] `--since YYYY-MM-DD` filters to rows with `received_at >= date`
+  - [x] `--source X` filters to rows where `source = X`
+  - [x] `--format csv` outputs valid CSV (parseable by `csv.DictReader`) instead of markdown
+  - [x] Bottom of report shows aggregate totals (total emails, total URLs, total new, total posts, total hydrated, total failed) matching column sums
+  - [x] Integration test: run full pipeline against fixture mailbox of 5 emails, then assert `email_ingest_log` has exactly 5 rows with non-zero counters
 
 ---
 

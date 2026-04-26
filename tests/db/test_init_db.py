@@ -21,6 +21,7 @@ ALL_TABLES = {
     "dismissed",
     "events",
     "pipeline_runs",
+    "email_ingest_log",
 }
 
 

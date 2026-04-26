@@ -231,10 +231,10 @@ class TestPerSourceIsolation:
                 self._inner = original_ingester(credentials, db_path)
                 self._db_path = db_path
 
-            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "", canonical_run_id: str | None = None) -> list:
                 if sender == "indeed":
                     raise RuntimeError("Simulated gmail_indeed ingester failure")
-                return self._inner.fetch_for_sender(sender, since_date, run_id=run_id)
+                return self._inner.fetch_for_sender(sender, since_date, run_id=run_id, canonical_run_id=canonical_run_id)
 
         with patch("jd_matcher.pipeline.GmailIngester", FaultyIngester):
             summary = run_pipeline(db_path=test_db)
@@ -320,7 +320,7 @@ class TestSourceFailureEvents:
             def __init__(self, credentials: Any, db_path: Path) -> None:
                 pass
 
-            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "", canonical_run_id: str | None = None) -> list:
                 return []
 
         with patch("jd_matcher.pipeline.GmailIngester", _NoOpIngester), \
@@ -490,8 +490,8 @@ class TestEndToEndFixtureRun:
                 from jd_matcher.ingest.gmail import GmailIngester as _GI
                 self._inner = _GI(credentials, db_path)
 
-            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
-                result = self._inner.fetch_for_sender(sender, since_date, run_id=run_id)
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "", canonical_run_id: str | None = None) -> list:
+                result = self._inner.fetch_for_sender(sender, since_date, run_id=run_id, canonical_run_id=canonical_run_id)
                 return result[:5]
 
         with patch("jd_matcher.pipeline.GmailIngester", _LimitedIngester):

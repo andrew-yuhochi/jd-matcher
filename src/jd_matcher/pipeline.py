@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
+from jd_matcher.db.email_ingest_log import increment_hydration, update_url_counts
 from jd_matcher.db.init_db import init_db
 from jd_matcher.dedup.url_dedup import register_new
 from jd_matcher.hydrate import compute_source_health
@@ -71,6 +72,8 @@ class SourceResult:
     failure_reason: Optional[str] = None
     new_postings: int = 0
     hydrated: int = 0
+    # url → gmail_message_id mapping built during Gmail phase; consumed by hydrator phase.
+    url_to_gmail_id: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -155,6 +158,11 @@ def run_pipeline(
             })
         )
 
+    # Build a combined url → gmail_message_id mapping from all Gmail source results.
+    url_to_gmail_id: dict[str, str] = {}
+    for gmail_result in source_results:
+        url_to_gmail_id.update(gmail_result.url_to_gmail_id)
+
     # Collect canonical URLs for hydration — query DB after dedup so we only
     # hydrate postings that were actually registered (dedup-respected).
     li_urls = _get_pending_hydration_urls(resolved_db, "linkedin")
@@ -175,6 +183,7 @@ def run_pipeline(
             run_id=run_id,
             resolved_db=resolved_db,
             urls=hydration_urls.get(sender, []),
+            url_to_gmail_id=url_to_gmail_id,
         )
         source_results.append(result)
 
@@ -246,19 +255,51 @@ def _run_gmail_source(
         since_date = datetime.now(timezone.utc) - timedelta(days=since_days)
 
         ingester = GmailIngester(credentials=credentials, db_path=resolved_db)
-        emails = ingester.fetch_for_sender(sender, since_date, run_id=ingester_run_id)
+        emails = ingester.fetch_for_sender(
+            sender,
+            since_date,
+            run_id=ingester_run_id,
+            canonical_run_id=run_id,
+        )
 
         new_urls: list[str] = []
+        # url → gmail_message_id: threaded to C5 for per-posting hydration accounting.
+        url_to_gmail_id: dict[str, str] = {}
         parser = parse_linkedin if sender == "linkedin" else parse_indeed
         conn = sqlite3.connect(resolved_db)
         conn.execute("PRAGMA foreign_keys = ON;")
         try:
             for raw_email in emails:
                 postings = parser(raw_email)
+                urls_extracted = len(postings)
+                urls_new = 0
+                urls_created = 0
                 for posting in postings:
+                    # Track url → gmail_message_id before dedup so C5 can find the row.
+                    url_to_gmail_id[posting.url] = raw_email.id
                     outcome, _ = register_new(posting, conn=conn, db_path=resolved_db)
                     if outcome == "new":
                         new_urls.append(posting.url)
+                        urls_new += 1
+                        urls_created += 1
+
+                # C4 writer hook — update URL counts for this email's row.
+                try:
+                    update_url_counts(
+                        gmail_message_id=raw_email.id,
+                        urls_extracted_count=urls_extracted,
+                        urls_new_count=urls_new,
+                        postings_created_count=urls_created,
+                        db_path=resolved_db,
+                        conn=conn,
+                    )
+                except Exception:
+                    logger.warning(
+                        "C4 update_url_counts failed for gmail_message_id=%s",
+                        raw_email.id,
+                        exc_info=True,
+                    )
+
             conn.commit()
         finally:
             conn.close()
@@ -294,6 +335,7 @@ def _run_gmail_source(
             source=source_name,
             health_status="healthy",
             new_postings=len(new_urls),
+            url_to_gmail_id=url_to_gmail_id,
         )
 
     except Exception as exc:
@@ -338,10 +380,13 @@ def _run_hydrator_source(
     run_id: str,
     resolved_db: Path,
     urls: list[str],
+    url_to_gmail_id: dict[str, str] | None = None,
 ) -> SourceResult:
     """Hydrate all pending JDs for one sender. ALWAYS writes pipeline_runs row."""
     started_at = datetime.now(timezone.utc)
     prev_status = _get_previous_status(resolved_db, source_name)
+    if url_to_gmail_id is None:
+        url_to_gmail_id = {}
 
     try:
         hydrate_fn = linkedin_hydrate if sender == "linkedin" else indeed_hydrate
@@ -350,6 +395,24 @@ def _run_hydrator_source(
             jd = hydrate_fn(url)
             results.append(jd)
             _update_posting_hydration(resolved_db, url, jd)
+
+            # C5 writer hook — increment hydration counter on the originating email row.
+            gmail_id = url_to_gmail_id.get(url)
+            if gmail_id:
+                try:
+                    success = getattr(jd, "hydration_status", "failed") in ("complete", "partial")
+                    increment_hydration(
+                        gmail_message_id=gmail_id,
+                        success=success,
+                        db_path=resolved_db,
+                    )
+                except Exception:
+                    logger.warning(
+                        "C5 increment_hydration failed for gmail_message_id=%s url=%s",
+                        gmail_id,
+                        url,
+                        exc_info=True,
+                    )
 
         health_status, failure_reason = compute_source_health(results)  # type: ignore[arg-type]
 
