@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 7 | In Progress: 0 | To Do: 5 | Blocked: 0
+- Done: 8 | In Progress: 0 | To Do: 4 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -209,7 +209,7 @@
 
 ### TASK-M1-008 — Pipeline orchestrator + non-hideable health logging
 
-- **Status**: To Do
+- **Status**: Done (2026-04-25)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C11 (Pipeline orchestrator) — TDD §C11
@@ -224,12 +224,12 @@
 - **Demo Artifact**: `python -m jd_matcher.pipeline` runs end-to-end on synthetic mailbox; `sqlite3 ... "SELECT source, health_status FROM pipeline_runs"` shows 4 rows (gmail_linkedin, gmail_indeed, hydrator_linkedin, hydrator_indeed); JSON log file shows step-by-step events.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-008.md`
 - **Acceptance Criteria**:
-  - [ ] One `pipeline_runs` row per source per run, with non-null `health_status` — verified by integration test that runs pipeline 3 times and asserts 12 rows total
-  - [ ] Per-source isolation: integration test forces failure in `hydrator_linkedin` (mock raises) → `gmail_linkedin`, `gmail_indeed`, `hydrator_indeed` still complete with `health_status='healthy'`
-  - [ ] Health transition emits `source_failure` event in `events` table — fields: `source`, `previous_status`, `new_status`, `failure_reason`, `timestamp`
-  - [ ] Structured JSON log written to `logs/pipeline-<run_id>.jsonl` — one line per pipeline step
-  - [ ] End-to-end fixture run: feeding 5 LinkedIn + 5 Indeed fixture emails produces N postings in `postings` table where N matches expected unique URL count
-  - [ ] Idempotency: re-running on same fixture mailbox produces 0 new postings (URL dedup respected)
+  - [x] One `pipeline_runs` row per source per run, with non-null `health_status` — verified by integration test that runs pipeline 3 times and asserts 12 rows total
+  - [x] Per-source isolation: integration test forces failure in `hydrator_linkedin` (mock raises) → `gmail_linkedin`, `gmail_indeed`, `hydrator_indeed` still complete with `health_status='healthy'`
+  - [x] Health transition emits `source_failure` event in `events` table — fields: `source`, `previous_status`, `new_status`, `failure_reason`, `timestamp`
+  - [x] Structured JSON log written to `logs/pipeline-<run_id>.jsonl` — one line per pipeline step
+  - [x] End-to-end fixture run: feeding 5 LinkedIn + 5 Indeed fixture emails produces N postings in `postings` table where N matches expected unique URL count
+  - [x] Idempotency: re-running on same fixture mailbox produces 0 new postings (URL dedup respected)
 
 ---
 

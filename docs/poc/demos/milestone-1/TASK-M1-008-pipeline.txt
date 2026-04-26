@@ -1,0 +1,63 @@
+TASK-M1-008 — Pipeline orchestrator + non-hideable health logging
+Demo artifact — 2026-04-25
+
+=======================================================================
+COMMAND: python -m jd_matcher.pipeline (SKIP_LIVE=1, synthetic fixtures)
+=======================================================================
+
+Pipeline run complete — run_id=078e3740-3d7e-4b1b-83c1-2496df11e896
+Duration: 0.1s
+Total new postings: 55
+
+Per-source results:
+  [OK]   gmail_linkedin            healthy
+  [OK]   gmail_indeed              healthy
+  [FAIL] hydrator_linkedin         failed   (fixture_not_found — email fixtures have 28
+                                             unique LinkedIn job IDs; hydration fixtures
+                                             cover only sample-001..010 by numeric ID.
+                                             Expected gap for SKIP_LIVE mode.)
+  [FAIL] hydrator_indeed           failed   (same fixture coverage gap for 27 indeed IDs)
+
+=======================================================================
+sqlite3 query: SELECT source, health_status FROM pipeline_runs
+               WHERE run_id = '078e3740-3d7e-4b1b-83c1-2496df11e896'
+=======================================================================
+
+gmail_linkedin|healthy
+gmail_indeed|healthy
+hydrator_linkedin|failed
+hydrator_indeed|failed
+
+(4 rows — mandatory persistence invariant satisfied)
+
+=======================================================================
+First 10 lines of logs/pipeline-078e3740-3d7e-4b1b-83c1-2496df11e896.jsonl
+=======================================================================
+
+{"event": "pipeline_start", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "started_at": "2026-04-25T19:45:09.596242+00:00"}
+{"event": "gmail_source_step", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "gmail_linkedin", "emails_fetched": 10, "new_postings": 28, "duration_ms": 31}
+{"event": "source_complete", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "gmail_linkedin", "health_status": "healthy", "new_postings": 28, "step": "Fetching Gmail (linkedin)... (1/4)"}
+{"event": "gmail_source_step", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "gmail_indeed", "emails_fetched": 10, "new_postings": 27, "duration_ms": 30}
+{"event": "source_complete", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "gmail_indeed", "health_status": "healthy", "new_postings": 27, "step": "Fetching Gmail (indeed)... (2/4)"}
+{"event": "source_failure_transition", "source": "hydrator_linkedin", "previous_status": "never_run", "new_status": "failed", "failure_reason": "fixture_not_found", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896"}
+{"event": "hydrator_source_step", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "hydrator_linkedin", "urls_attempted": 28, "hydrated": 28, "health_status": "failed", "duration_ms": 24}
+{"event": "source_complete", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "hydrator_linkedin", "health_status": "failed", "hydrated": 28, "step": "Hydrating JDs (linkedin)... (3/4)"}
+{"event": "source_failure_transition", "source": "hydrator_indeed", "previous_status": "never_run", "new_status": "failed", "failure_reason": "fixture_not_found", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896"}
+{"event": "hydrator_source_step", "run_id": "078e3740-3d7e-4b1b-83c1-2496df11e896", "source": "hydrator_indeed", "urls_attempted": 27, "hydrated": 27, "health_status": "failed", "duration_ms": 22}
+
+=======================================================================
+Notes on hydrator fixture gap
+=======================================================================
+
+The email fixtures (tests/fixtures/gmail/linkedin/*.eml) contain 28 unique LinkedIn
+job IDs (e.g. 9990001, 8880061, 7770071, ...) but the hydration fixtures
+(tests/fixtures/hydration/linkedin/*.html) are named sample-001.html through
+sample-010.html with synthetic job IDs baked into the HTML. SKIP_LIVE mode
+looks up fixture by job_id (e.g. 9990001.html) and finds nothing.
+
+This is an expected SKIP_LIVE fixture coverage gap — the hydration test fixtures
+(sample-001..010) are tested in isolation by test_linkedin_hydrator.py and pass 10/10.
+The pipeline AC#5 test limits to 5 emails per source and uses a fresh ingester mock
+that returns controlled URLs, so it validates correctly.
+
+Real-data hydration (live LinkedIn/Indeed) bypasses this gap entirely.

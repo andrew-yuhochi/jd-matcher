@@ -1,0 +1,579 @@
+"""
+Tests for src/jd_matcher/pipeline.py (C11 — Pipeline orchestrator).
+
+AC coverage:
+  AC1 — 3 runs × 4 sources = 12 pipeline_runs rows, all with non-null health_status
+  AC2 — hydrator_linkedin failure does not cascade to other sources
+  AC3 — source_failure event emitted on healthy → failed transition
+  AC4 — structured JSON log written; ≥1 line per step; all lines parse; no stdout
+  AC5 — 5 LinkedIn + 5 Indeed fixture emails → N unique postings in DB
+  AC6 — idempotency: second run on same mailbox produces 0 new postings
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+from jd_matcher.db.init_db import init_db
+from jd_matcher.pipeline import run_pipeline, PipelineRunSummary
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+FIXTURES_ROOT = Path(__file__).parent.parent / "fixtures"
+LINKEDIN_EML_DIR = FIXTURES_ROOT / "gmail" / "linkedin"
+INDEED_EML_DIR = FIXTURES_ROOT / "gmail" / "indeed"
+LINKEDIN_HTML_DIR = FIXTURES_ROOT / "hydration" / "linkedin"
+INDEED_HTML_DIR = FIXTURES_ROOT / "hydration" / "indeed"
+
+
+@pytest.fixture()
+def test_db(tmp_path: Path) -> Path:
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+    return db_path
+
+
+@pytest.fixture()
+def skip_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKIP_LIVE", "1")
+
+
+@pytest.fixture()
+def logs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Override _LOGS_DIR to a temp directory so tests don't pollute project logs/."""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    import jd_matcher.pipeline as pipeline_mod
+    monkeypatch.setattr(pipeline_mod, "_LOGS_DIR", log_dir)
+    return log_dir
+
+
+def _pipeline_runs_for_run(db_path: Path, run_id: str) -> list[tuple]:
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute(
+            "SELECT source, health_status, failure_reason FROM pipeline_runs "
+            "WHERE run_id = ? ORDER BY source",
+            (run_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _all_pipeline_runs(db_path: Path) -> list[tuple]:
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute(
+            "SELECT run_id, source, health_status FROM pipeline_runs ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _count_postings(db_path: Path) -> int:
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _events_of_type(db_path: Path, event_type: str) -> list[dict]:
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT metadata, timestamp FROM events WHERE event_type = ? ORDER BY id",
+            (event_type,),
+        ).fetchall()
+        return [{"metadata": json.loads(r[0]), "timestamp": r[1]} for r in rows]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# AC1 — 3 runs × 4 sources = 12 pipeline_runs rows, all with non-null health_status
+# ---------------------------------------------------------------------------
+
+
+class TestMandatoryPersistence:
+    def test_three_runs_produce_twelve_rows(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """Each of 3 pipeline runs writes exactly 4 rows — 12 total."""
+        run_ids = []
+        for _ in range(3):
+            summary = run_pipeline(db_path=test_db)
+            run_ids.append(summary.run_id)
+
+        rows = _all_pipeline_runs(test_db)
+        # Filter to rows with run_ids from the orchestrator (not sub-run ingester rows)
+        orch_rows = [r for r in rows if r[0] in run_ids]
+        assert len(orch_rows) == 12, (
+            f"Expected 12 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
+        )
+
+    def test_all_rows_have_non_null_health_status(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """health_status must never be NULL."""
+        run_pipeline(db_path=test_db)
+        conn = sqlite3.connect(test_db)
+        try:
+            null_rows = conn.execute(
+                "SELECT source, run_id FROM pipeline_runs WHERE health_status IS NULL"
+            ).fetchall()
+        finally:
+            conn.close()
+        assert null_rows == [], f"Found rows with NULL health_status: {null_rows}"
+
+    def test_four_sources_per_run(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """Each run produces exactly one row for each of the 4 M1 sources."""
+        summary = run_pipeline(db_path=test_db)
+        rows = _pipeline_runs_for_run(test_db, summary.run_id)
+        sources_written = {r[0] for r in rows}
+        expected = {"gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"}
+        assert sources_written == expected, (
+            f"Sources in pipeline_runs mismatch. Got: {sources_written}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC2 — per-source isolation: hydrator_linkedin failure does not cascade
+# ---------------------------------------------------------------------------
+
+
+class TestPerSourceIsolation:
+    def test_hydrator_linkedin_failure_does_not_cascade_to_gmail_sources(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """Forcing hydrator_linkedin to raise must not prevent Gmail sources from completing.
+
+        Note: hydrator_indeed may also be degraded/failed depending on fixture coverage
+        (many indeed job IDs from emails have no matching hydration fixture), so we only
+        assert that the Gmail sources remain healthy and that linkedin failure is isolated.
+        """
+        from jd_matcher.hydrate.indeed import HydratedIndeedJD
+        from datetime import date
+
+        def _raise_on_linkedin(url: str, fixtures_dir: Any = None) -> None:
+            raise RuntimeError("Simulated hydrator_linkedin failure")
+
+        def _healthy_indeed(url: str, fixtures_dir: Any = None) -> HydratedIndeedJD:
+            return HydratedIndeedJD(
+                url=url,
+                job_id="test",
+                title="Test Job",
+                company="Test Co",
+                location="Vancouver",
+                description="Test description",
+                posted_date=None,
+                seniority_level=None,
+                employment_type=None,
+                industries=None,
+                raw_html=b"<html>ok</html>",
+                hydration_status="complete",
+                failure_reason=None,
+            )
+
+        with patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise_on_linkedin), \
+             patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_healthy_indeed):
+            summary = run_pipeline(db_path=test_db)
+
+        rows = _pipeline_runs_for_run(test_db, summary.run_id)
+        row_by_source = {r[0]: r for r in rows}
+
+        # Confirm all 4 sources have rows
+        assert set(row_by_source.keys()) == {
+            "gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"
+        }
+
+        # hydrator_linkedin must be failed (it raised)
+        assert row_by_source["hydrator_linkedin"][1] == "failed", (
+            "hydrator_linkedin should be failed when linkedin_hydrate raises"
+        )
+        assert row_by_source["hydrator_linkedin"][2] is not None, (
+            "failure_reason must be populated"
+        )
+
+        # Gmail sources are isolated from hydrator failures
+        for source in ("gmail_linkedin", "gmail_indeed"):
+            assert row_by_source[source][1] == "healthy", (
+                f"{source} should be healthy but got {row_by_source[source][1]}"
+            )
+
+        # indeed hydrator should be healthy (mocked to return complete results)
+        assert row_by_source["hydrator_indeed"][1] == "healthy", (
+            "hydrator_indeed should be healthy (mocked to return complete results)"
+        )
+
+    def test_gmail_indeed_failure_does_not_cascade(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """Forcing gmail_indeed ingester to fail must not affect gmail_linkedin."""
+        import jd_matcher.pipeline as pipeline_mod
+
+        original_ingester = pipeline_mod.GmailIngester
+
+        class FaultyIngester:
+            def __init__(self, credentials: Any, db_path: Path) -> None:
+                self._inner = original_ingester(credentials, db_path)
+                self._db_path = db_path
+
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
+                if sender == "indeed":
+                    raise RuntimeError("Simulated gmail_indeed ingester failure")
+                return self._inner.fetch_for_sender(sender, since_date, run_id=run_id)
+
+        with patch("jd_matcher.pipeline.GmailIngester", FaultyIngester):
+            summary = run_pipeline(db_path=test_db)
+
+        rows = _pipeline_runs_for_run(test_db, summary.run_id)
+        row_by_source = {r[0]: r for r in rows}
+
+        assert row_by_source["gmail_indeed"][1] == "failed"
+        assert row_by_source["gmail_linkedin"][1] == "healthy"
+
+
+# ---------------------------------------------------------------------------
+# AC3 — source_failure event emitted on healthy → failed transition
+# ---------------------------------------------------------------------------
+
+
+class TestSourceFailureEvents:
+    def _make_healthy_indeed_mock(self):
+        """Return a mock for indeed_hydrate that always returns complete results."""
+        from jd_matcher.hydrate.indeed import HydratedIndeedJD
+
+        def _healthy(url: str, fixtures_dir: Any = None) -> HydratedIndeedJD:
+            return HydratedIndeedJD(
+                url=url, job_id="test", title="Test", company="Co",
+                location="Vancouver", description="desc", posted_date=None,
+                seniority_level=None, employment_type=None, industries=None,
+                raw_html=b"<html/>", hydration_status="complete", failure_reason=None,
+            )
+        return _healthy
+
+    def test_source_failure_event_emitted_on_first_failure(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """healthy → failed transition must write a source_failure event row.
+
+        Strategy: seed a healthy pipeline_runs row for hydrator_linkedin, then
+        force the hydrator to raise on the next run. The transition event fires
+        because the previous status is 'healthy' and the new status is 'failed'.
+        We use a mocked Gmail ingester that returns no emails so the hydration
+        URLs come from a manually seeded postings row with partial hydration_status.
+        """
+        import sqlite3 as _sqlite3
+
+        # Seed: one linkedin posting with partial hydration so it queues for hydration
+        conn = _sqlite3.connect(test_db)
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute("PRAGMA foreign_keys = ON;")
+            cur = conn.execute(
+                "INSERT INTO postings (user_id, canonical_title, hydration_status, first_seen, last_seen) "
+                "VALUES ('default', 'Test Job', 'partial', ?, ?)",
+                (now, now),
+            )
+            posting_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO seen_urls (url, user_id, posting_id, seen_at) VALUES (?, 'default', ?, ?)",
+                ("https://linkedin.com/jobs/view/9999999", posting_id, now),
+            )
+            # Seed a healthy pipeline_runs row for hydrator_linkedin
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, source, health_status, started_at, finished_at) "
+                "VALUES ('seed-run-001', 'hydrator_linkedin', 'healthy', ?, ?)",
+                (now, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        events_before = _events_of_type(test_db, "source_failure")
+        assert len(events_before) == 0
+
+        # Now force hydrator_linkedin to raise — previous status is 'healthy'
+        def _raise(url: str, fixtures_dir: Any = None) -> None:
+            raise RuntimeError("forced transition failure")
+
+        healthy_indeed = self._make_healthy_indeed_mock()
+
+        # Patch GmailIngester to return no emails (avoid fixture noise)
+        import jd_matcher.pipeline as pipeline_mod
+        original_ingester = pipeline_mod.GmailIngester
+
+        class _NoOpIngester:
+            def __init__(self, credentials: Any, db_path: Path) -> None:
+                pass
+
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
+                return []
+
+        with patch("jd_matcher.pipeline.GmailIngester", _NoOpIngester), \
+             patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise), \
+             patch("jd_matcher.pipeline.indeed_hydrate", side_effect=healthy_indeed):
+            run_pipeline(db_path=test_db)
+
+        events_after = _events_of_type(test_db, "source_failure")
+        li_events = [e for e in events_after if e["metadata"]["source"] == "hydrator_linkedin"]
+        assert len(li_events) == 1, (
+            f"Expected exactly one source_failure event for hydrator_linkedin, got {len(li_events)}"
+        )
+
+        meta = li_events[0]["metadata"]
+        assert meta["previous_status"] == "healthy"
+        assert meta["new_status"] == "failed"
+        assert meta["failure_reason"] is not None
+        assert li_events[0]["timestamp"] is not None
+
+    def test_never_run_to_failed_emits_event(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """never_run → failed transition (first ever run fails) must also emit event."""
+        def _raise(url: str, fixtures_dir: Any = None) -> None:
+            raise RuntimeError("initial failure")
+
+        healthy_indeed = self._make_healthy_indeed_mock()
+        with patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise), \
+             patch("jd_matcher.pipeline.indeed_hydrate", side_effect=healthy_indeed):
+            run_pipeline(db_path=test_db)
+
+        events = _events_of_type(test_db, "source_failure")
+        li_events = [e for e in events if e["metadata"]["source"] == "hydrator_linkedin"]
+        assert len(li_events) == 1
+        assert li_events[0]["metadata"]["previous_status"] == "never_run"
+        assert li_events[0]["metadata"]["new_status"] == "failed"
+
+    def test_repeated_failure_does_not_duplicate_event(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """failed → failed does NOT emit a second source_failure event."""
+        def _raise(url: str, fixtures_dir: Any = None) -> None:
+            raise RuntimeError("persistent failure")
+
+        healthy_indeed = self._make_healthy_indeed_mock()
+        with patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise), \
+             patch("jd_matcher.pipeline.indeed_hydrate", side_effect=healthy_indeed):
+            run_pipeline(db_path=test_db)  # first failure — event emitted
+            run_pipeline(db_path=test_db)  # second failure — no new event
+
+        events = _events_of_type(test_db, "source_failure")
+        li_events = [e for e in events if e["metadata"]["source"] == "hydrator_linkedin"]
+        assert len(li_events) == 1, (
+            "Only one source_failure event should be emitted per transition, "
+            f"got {len(li_events)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC4 — structured JSON log written; all lines parse; no stdout from orchestrator
+# ---------------------------------------------------------------------------
+
+
+class TestStructuredLogging:
+    def test_log_file_created_with_run_id(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        log_file = logs_dir / f"pipeline-{summary.run_id}.jsonl"
+        assert log_file.exists(), f"Log file not found: {log_file}"
+
+    def test_log_lines_are_valid_json(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        log_file = logs_dir / f"pipeline-{summary.run_id}.jsonl"
+        lines = [ln for ln in log_file.read_text().splitlines() if ln.strip()]
+        assert len(lines) >= 4, f"Expected ≥4 log lines (one per source step), got {len(lines)}"
+        for i, line in enumerate(lines):
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as e:
+                pytest.fail(f"Log line {i} is not valid JSON: {line!r} — {e}")
+
+    def test_log_contains_pipeline_events(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        log_file = logs_dir / f"pipeline-{summary.run_id}.jsonl"
+        parsed_lines = [json.loads(ln) for ln in log_file.read_text().splitlines() if ln.strip()]
+        event_types = {ln.get("event") for ln in parsed_lines}
+        assert "pipeline_start" in event_types
+        assert "pipeline_complete" in event_types
+
+    def test_no_stdout_from_pipeline(
+        self, test_db: Path, skip_live: None, logs_dir: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        run_pipeline(db_path=test_db)
+        captured = capsys.readouterr()
+        assert captured.out == "", (
+            f"Pipeline produced stdout output (must use logging): {captured.out!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC5 — 5 LinkedIn + 5 Indeed fixture emails → expected unique postings in DB
+# ---------------------------------------------------------------------------
+
+
+class TestEndToEndFixtureRun:
+    def _count_unique_urls_in_fixtures(self, limit_per_source: int = 5) -> int:
+        """Count unique canonical URLs that the parsers extract from the first N fixtures."""
+        import re
+        from jd_matcher.ingest.gmail import GmailIngester, RawEmail
+        from jd_matcher.parse.linkedin_email import parse as parse_li
+        from jd_matcher.parse.indeed_email import parse as parse_in
+        from datetime import datetime, timezone
+        import email as _email_module
+
+        li_files = sorted(LINKEDIN_EML_DIR.glob("*.eml"))[:limit_per_source]
+        in_files = sorted(INDEED_EML_DIR.glob("*.eml"))[:limit_per_source]
+
+        seen: set[str] = set()
+        for path in li_files:
+            body = path.read_bytes()
+            msg = _email_module.message_from_bytes(body)
+            raw = RawEmail(
+                id=path.stem,
+                sender=msg.get("From", ""),
+                subject=msg.get("Subject", ""),
+                received_at=datetime.now(timezone.utc),
+                body_bytes=body,
+            )
+            for p in parse_li(raw):
+                seen.add(p.url)
+        for path in in_files:
+            body = path.read_bytes()
+            msg = _email_module.message_from_bytes(body)
+            raw = RawEmail(
+                id=path.stem,
+                sender=msg.get("From", ""),
+                subject=msg.get("Subject", ""),
+                received_at=datetime.now(timezone.utc),
+                body_bytes=body,
+            )
+            for p in parse_in(raw):
+                seen.add(p.url)
+        return len(seen)
+
+    def test_e2e_fixture_run_produces_expected_postings(
+        self,
+        test_db: Path,
+        logs_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """5 LinkedIn + 5 Indeed fixtures → exactly N unique postings (N computed from fixtures)."""
+        monkeypatch.setenv("SKIP_LIVE", "1")
+
+        # Patch the fixture root to use only the first 5 of each
+        import jd_matcher.ingest.gmail as gmail_mod
+
+        original_root = gmail_mod._FIXTURES_ROOT
+
+        class _LimitedIngester:
+            """Ingester that only returns the first 5 .eml files per sender."""
+            def __init__(self, credentials: Any, db_path: Path) -> None:
+                from jd_matcher.ingest.gmail import GmailIngester as _GI
+                self._inner = _GI(credentials, db_path)
+
+            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "") -> list:
+                result = self._inner.fetch_for_sender(sender, since_date, run_id=run_id)
+                return result[:5]
+
+        with patch("jd_matcher.pipeline.GmailIngester", _LimitedIngester):
+            summary = run_pipeline(db_path=test_db)
+
+        expected = self._count_unique_urls_in_fixtures(limit_per_source=5)
+        actual = _count_postings(test_db)
+        assert actual == expected, (
+            f"Expected {expected} postings from 5+5 fixtures, got {actual}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC6 — idempotency: second run on same mailbox produces 0 new postings
+# ---------------------------------------------------------------------------
+
+
+class TestIdempotency:
+    def test_second_run_produces_zero_new_postings(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """Re-running the pipeline on the same fixture mailbox must not create new postings."""
+        run_pipeline(db_path=test_db)
+        count_after_first = _count_postings(test_db)
+
+        run_pipeline(db_path=test_db)
+        count_after_second = _count_postings(test_db)
+
+        assert count_after_second == count_after_first, (
+            f"Second run created {count_after_second - count_after_first} new postings "
+            f"(expected 0)"
+        )
+
+    def test_idempotency_seen_urls_respected(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """URL dedup table must still have the same rows after a second run."""
+        run_pipeline(db_path=test_db)
+
+        conn = sqlite3.connect(test_db)
+        try:
+            urls_after_first = {row[0] for row in conn.execute("SELECT url FROM seen_urls").fetchall()}
+        finally:
+            conn.close()
+
+        run_pipeline(db_path=test_db)
+
+        conn = sqlite3.connect(test_db)
+        try:
+            urls_after_second = {row[0] for row in conn.execute("SELECT url FROM seen_urls").fetchall()}
+        finally:
+            conn.close()
+
+        assert urls_after_second == urls_after_first, (
+            "seen_urls changed between runs — idempotency violated"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Return model validation
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunSummary:
+    def test_summary_has_four_source_results(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        assert isinstance(summary, PipelineRunSummary)
+        assert len(summary.sources) == 4
+
+    def test_summary_source_names_correct(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        source_names = {s.source for s in summary.sources}
+        assert source_names == {
+            "gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"
+        }
+
+    def test_summary_has_steps(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        summary = run_pipeline(db_path=test_db)
+        assert len(summary.steps) == 4
