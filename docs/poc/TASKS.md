@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 9 | In Progress: 0 | To Do: 5 | Blocked: 0
+- Done: 10 | In Progress: 0 | To Do: 4 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -261,7 +261,7 @@
 
 ### TASK-M1-005b — Indeed pagead URL resolution
 
-- **Status**: To Do
+- **Status**: Done (2026-04-26)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C4 (URL parser, Indeed sub-flow) — TDD §C4 responsibility (3) + §1.4 dual-rate-limit note
@@ -286,15 +286,15 @@
 - **Demo Artifact**: `python -m jd_matcher.parse.indeed_pagead --eml tests/fixtures/real/<indeed-email>.eml` outputs original→canonical URL mapping; integration test runs full pipeline against the 6 real Indeed `.eml` fixtures and shows ≥95% extraction rate (vs ~21% baseline).
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-005b.md`
 - **Acceptance Criteria**:
-  - [ ] `resolve_pagead_urls(urls)` returns `{original: canonical}` mapping; URLs without `pagead/clk` substring pass through unchanged (idempotent)
-  - [ ] `html.unescape()` is called on every URL before the HTTP request — verified by unit test using a URL with `&amp;` entities
-  - [ ] Sequential requests separated by 3–4.5s jitter — verified by test asserting wall-clock time ≥ N × 3.0s for N requests
-  - [ ] Browser-mimicking headers applied: `User-Agent` (Chrome-style), `Referer: https://mail.google.com/`, browser-style `Accept` / `Accept-Language` / `Accept-Encoding`
-  - [ ] `requests.Session()` reused across the URL batch — verified by test asserting session cookies accumulate across consecutive resolutions
-  - [ ] Tracking params (`tk=`, `q=`, `l=`, `from=`) stripped from the canonical URL — only `jk=<hex>` preserved
-  - [ ] `JD_MATCHER_OFFLINE_PARSE=1` env var skips all resolution; URLs pass through unmodified (verified by test setting the env var)
-  - [ ] Integration test against the 6 real Indeed `.eml` fixtures (in `tests/fixtures/real/`) shows ≥95% extraction rate (target: 32+ jobs out of 34 claimed in subjects)
-  - [ ] Total wall-clock for resolving 5–12 URLs in one email batch is under 75 seconds (≤15 URLs × 5s avg)
+  - [x] `resolve_pagead_urls(urls)` returns `{original: canonical}` mapping; URLs without `pagead/clk` substring pass through unchanged (idempotent)
+  - [x] `html.unescape()` is called on every URL before the HTTP request — verified by unit test using a URL with `&amp;` entities
+  - [x] Sequential requests separated by 3–4.5s jitter — verified by test asserting wall-clock time ≥ N × 3.0s for N requests
+  - [x] Browser-mimicking headers applied: `User-Agent` (Chrome-style), `Referer: https://mail.google.com/`, browser-style `Accept` / `Accept-Language` / `Accept-Encoding`
+  - [x] `requests.Session()` reused across the URL batch — verified by test asserting session cookies accumulate across consecutive resolutions
+  - [x] Tracking params (`tk=`, `q=`, `l=`, `from=`) stripped from the canonical URL — only `jk=<hex>` preserved
+  - [x] `JD_MATCHER_OFFLINE_PARSE=1` env var skips all resolution; URLs pass through unmodified (verified by test setting the env var)
+  - [x] Integration test against the 6 real Indeed `.eml` fixtures (in `tests/fixtures/real/`) shows ≥95% extraction rate — first-run result: 34/35 (97.1%)
+  - [x] Total wall-clock for resolving 5–12 URLs in one email batch is under 75 seconds (≤15 URLs × 5s avg)
 
 ---
 

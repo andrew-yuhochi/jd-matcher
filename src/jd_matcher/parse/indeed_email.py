@@ -21,12 +21,14 @@ import email as _email_module
 import logging
 import re
 from datetime import datetime, timezone
+from html import unescape
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 
 from jd_matcher.ingest.gmail import RawEmail
+from jd_matcher.parse.indeed_pagead import _is_pagead, resolve_pagead_urls
 from jd_matcher.parse.linkedin_email import ParsedPosting, _get_decoded_part
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,12 @@ logger = logging.getLogger(__name__)
 # alert.indeed.com/..., and plain indeed.com/viewjob variants.
 _INDEED_URL_RE = re.compile(
     r'https?://(?:[a-z]+\.)?indeed\.com/[^\s"\'<>]*?jk=([a-z0-9]+)',
+    re.IGNORECASE,
+)
+
+# Matches pagead/clk redirect URLs in HTML (no jk= visible until resolved).
+_PAGEAD_URL_RE = re.compile(
+    r'https?://[^"\'<>\s]*pagead/clk[^"\'<>\s]*',
     re.IGNORECASE,
 )
 
@@ -85,6 +93,48 @@ def _parse(raw_email: RawEmail) -> list[ParsedPosting]:
             raw_email.id,
         )
         return []
+
+    # Collect pagead/clk URLs from the HTML part — these have no jk= until resolved.
+    pagead_urls: list[str] = []
+    if html_text:
+        seen_pagead: set[str] = set()
+        for raw_match in _PAGEAD_URL_RE.findall(html_text):
+            unescaped = unescape(raw_match)
+            if unescaped not in seen_pagead:
+                seen_pagead.add(unescaped)
+                pagead_urls.append(unescaped)
+
+    # Resolve pagead URLs via HTTP redirect following (skipped under OFFLINE_PARSE=1).
+    if pagead_urls:
+        logger.info(
+            "indeed_email.parse: resolving %d pagead URL(s) for message id=%s",
+            len(pagead_urls),
+            raw_email.id,
+        )
+        resolved_map = resolve_pagead_urls(pagead_urls)
+        for orig_url, canonical_url in resolved_map.items():
+            if canonical_url == orig_url:
+                # Passthrough — resolution failed or offline mode; log but don't drop.
+                logger.debug(
+                    "indeed_email.parse: pagead passthrough (unresolved): %s",
+                    orig_url[:80],
+                )
+                continue
+            from urllib.parse import parse_qs as _parse_qs, urlparse as _urlparse
+            qs = _parse_qs(_urlparse(canonical_url).query)
+            jk_vals = qs.get("jk")
+            if not jk_vals:
+                logger.warning(
+                    "indeed_email.parse: resolved URL missing jk=: %s",
+                    canonical_url[:120],
+                )
+                continue
+            job_key = jk_vals[0].lower()
+            if job_key not in job_key_to_raw_url:
+                job_key_to_raw_url[job_key] = orig_url
+                logger.debug(
+                    "indeed_email.parse: pagead resolved job_key=%s", job_key
+                )
 
     if not job_key_to_raw_url:
         logger.debug(
