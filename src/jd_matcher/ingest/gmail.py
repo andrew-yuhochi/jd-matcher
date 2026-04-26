@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Canonical sender-filter strings sourced from config/saved-searches.yaml
 _SENDER_FILTERS: dict[str, str] = {
     "linkedin": "from:jobalerts-noreply@linkedin.com",
-    "indeed": "from:alert@indeed.com",
+    "indeed": "from:@jobalert.indeed.com",
 }
 
 # Maps short sender name to the fixture subdirectory name (same here, but
@@ -126,15 +126,19 @@ class GmailIngester:
             self._write_email_ingest_log_rows(emails, source=sender_short, pipeline_run_id=log_run_id)
 
             finished_at = datetime.now(timezone.utc)
-            self._write_pipeline_run(
-                run_id=run_id,
-                source=source_name,
-                health_status="healthy",
-                failure_reason=None,
-                started_at=started_at,
-                finished_at=finished_at,
-                last_successful_fetch_at=started_at,
-            )
+            # When the orchestrator owns the canonical pipeline_runs row
+            # (canonical_run_id is provided), skip the internal write to avoid
+            # double-writes and phantom ADC-credential failures.
+            if canonical_run_id is None:
+                self._write_pipeline_run(
+                    run_id=run_id,
+                    source=source_name,
+                    health_status="healthy",
+                    failure_reason=None,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    last_successful_fetch_at=started_at,
+                )
             logger.info(
                 "fetch_for_sender: source=%s fetched=%d run_id=%s",
                 source_name,
@@ -153,19 +157,20 @@ class GmailIngester:
                 run_id,
             )
 
-            # Carry forward the most recent successful fetch timestamp so the
-            # UI sub-bar can render a stale indicator with a known last-good time.
-            last_successful = self._last_successful_fetch_at(source_name)
+            if canonical_run_id is None:
+                # Carry forward the most recent successful fetch timestamp so the
+                # UI sub-bar can render a stale indicator with a known last-good time.
+                last_successful = self._last_successful_fetch_at(source_name)
 
-            self._write_pipeline_run(
-                run_id=run_id,
-                source=source_name,
-                health_status="failed",
-                failure_reason=failure_reason,
-                started_at=started_at,
-                finished_at=finished_at,
-                last_successful_fetch_at=last_successful,
-            )
+                self._write_pipeline_run(
+                    run_id=run_id,
+                    source=source_name,
+                    health_status="failed",
+                    failure_reason=failure_reason,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    last_successful_fetch_at=last_successful,
+                )
             return []
 
     # ------------------------------------------------------------------

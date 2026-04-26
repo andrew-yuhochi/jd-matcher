@@ -259,6 +259,50 @@ class TestPipelineIngestLogIntegration:
         distinct = _get_distinct_pipeline_run_ids(test_db)
         assert summary1.run_id in distinct
 
+    def test_no_ingest_sub_run_rows_written_by_orchestrator(
+        self,
+        test_db: Path,
+        skip_live: None,
+        logs_dir: Path,
+    ) -> None:
+        """REGRESSION (Bug 2): orchestrator-driven runs must not leave _ingest_ sub-run rows.
+
+        When canonical_run_id is provided to GmailIngester.fetch_for_sender, the ingester
+        must not write its own pipeline_runs row. Previously, the internal write attempted
+        Gmail API calls with Application Default Credentials (ADC), polluting pipeline_runs
+        with phantom 'failed' rows and triggering DefaultCredentialsError in production.
+        """
+        LimitedIngester = self._make_limited_ingester(5)
+
+        with (
+            patch("jd_matcher.pipeline.GmailIngester", LimitedIngester),
+            patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_make_complete_linkedin_jd),
+            patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_make_complete_indeed_jd),
+        ):
+            run_pipeline(db_path=test_db)
+
+        conn = sqlite3.connect(test_db)
+        try:
+            ingest_row_count = conn.execute(
+                "SELECT count(*) FROM pipeline_runs WHERE run_id LIKE '%_ingest_%'"
+            ).fetchone()[0]
+            total_row_count = conn.execute(
+                "SELECT count(*) FROM pipeline_runs"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+        assert ingest_row_count == 0, (
+            f"Found {ingest_row_count} pipeline_runs rows with '_ingest_' in run_id. "
+            "GmailIngester must not write its own row when canonical_run_id is provided."
+        )
+        # Orchestrator writes exactly 4 canonical rows: gmail_linkedin, gmail_indeed,
+        # hydrator_linkedin, hydrator_indeed.
+        assert total_row_count == 4, (
+            f"Expected exactly 4 pipeline_runs rows (one per canonical source), got {total_row_count}. "
+            "Double-write or missing orchestrator rows detected."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Option A threading proof: duplicate URL across two emails credits correctly

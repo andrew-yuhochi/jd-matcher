@@ -366,6 +366,86 @@ class TestFixtureUrlPatterns:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Bug 3 regression — Indeed sender filter matches real fixture senders
+# ---------------------------------------------------------------------------
+
+_REAL_FIXTURES_ROOT = Path(__file__).parent.parent / "fixtures" / "real"
+
+
+def _indeed_sender_filter() -> str:
+    """Return the Indeed sender filter string from the module under test."""
+    from jd_matcher.ingest.gmail import _SENDER_FILTERS
+    return _SENDER_FILTERS["indeed"]
+
+
+def _filter_matches_address(gmail_query: str, email_address: str) -> bool:
+    """Check whether a Gmail query of the form 'from:X' matches an address.
+
+    Supports exact match ('from:a@b.com') and domain-suffix match ('from:@b.com').
+    """
+    prefix = gmail_query.removeprefix("from:")
+    if prefix.startswith("@"):
+        # Domain-suffix pattern — match any address ending in the domain part.
+        return email_address.lower().endswith(prefix.lower())
+    return email_address.lower() == prefix.lower()
+
+
+@pytest.mark.skipif(
+    not _REAL_FIXTURES_ROOT.exists(),
+    reason="tests/fixtures/real/ not present — skipping real-sender validation",
+)
+class TestIndeedSenderFilterMatchesRealFixtures:
+    """REGRESSION (Bug 3): Indeed sender filter must match every real Indeed .eml fixture.
+
+    Verified against tests/fixtures/real/ — the real Indeed sender is
+    donotreply@jobalert.indeed.com, NOT the old filter value alert@indeed.com.
+    The loose pattern 'from:@jobalert.indeed.com' is preferred so future
+    variations on that domain are also caught.
+    """
+
+    @staticmethod
+    def _extract_raw_from_address(eml_path: Path) -> str | None:
+        """Return the bare email address from the From: header, or None."""
+        body_bytes = eml_path.read_bytes()
+        msg = email.message_from_bytes(body_bytes)
+        from_hdr = msg.get("From", "")
+        # Extract the address inside angle brackets if present, else use the raw value.
+        import re
+        match = re.search(r"<([^>]+)>", from_hdr)
+        if match:
+            return match.group(1).strip()
+        return from_hdr.strip() or None
+
+    @staticmethod
+    def _is_indeed_fixture(eml_path: Path) -> bool:
+        body_bytes = eml_path.read_bytes()
+        msg = email.message_from_bytes(body_bytes)
+        from_hdr = (msg.get("From") or "").lower()
+        return "indeed" in from_hdr
+
+    @pytest.mark.parametrize(
+        "eml_path",
+        [p for p in sorted(_REAL_FIXTURES_ROOT.glob("*.eml"))],
+        ids=lambda p: p.name,
+    )
+    def test_indeed_sender_filter_matches_real_indeed_fixtures(
+        self, eml_path: Path
+    ) -> None:
+        if not self._is_indeed_fixture(eml_path):
+            pytest.skip("Not an Indeed fixture — skipping")
+
+        address = self._extract_raw_from_address(eml_path)
+        assert address is not None, f"{eml_path.name}: could not extract From address"
+
+        sender_filter = _indeed_sender_filter()
+        assert _filter_matches_address(sender_filter, address), (
+            f"{eml_path.name}: Indeed sender filter {sender_filter!r} does not match "
+            f"real From address {address!r}. "
+            "Update _SENDER_FILTERS['indeed'] in gmail.py."
+        )
+
+
 class TestSkipLiveDoesNotInvokeGmailApi:
     def test_skip_live_does_not_invoke_gmail_api(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

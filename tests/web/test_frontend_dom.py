@@ -361,3 +361,21 @@ def test_cheatsheet_modal_in_dom(client: TestClient) -> None:
     html = client.get("/").text
     assert 'id="cheatsheet"' in html, "cheatsheet modal element missing"
     assert 'class="cheatsheet"' in html
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 regression — no form-submit sync trigger (renders raw JSON)
+# ---------------------------------------------------------------------------
+
+
+def test_no_form_action_sync_in_main_tab(client: TestClient) -> None:
+    """REGRESSION: empty-state must not contain a form that POSTs to /sync.
+
+    The form-submit path navigates the browser to /sync and renders raw JSON.
+    The canonical sync trigger is btn-sync in base.html, driven by app.js fetch.
+    """
+    response = client.get("/")
+    assert b'action="/sync"' not in response.content, (
+        "Found form action='/sync' in main tab — this navigates the browser to /sync "
+        "and renders raw JSON. Remove the form; use the header btn-sync instead."
+    )

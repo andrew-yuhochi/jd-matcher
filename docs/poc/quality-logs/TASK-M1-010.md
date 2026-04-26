@@ -76,6 +76,54 @@ Rationale: simpler than cookie management, more explicit than a custom header, a
 
 ---
 
+---
+
+## Real-data validation findings (fix-forward commit on top of 56592a3) — 3 bugs fixed
+
+Discovered during first live Gmail sync against the user's real account (real OAuth, production DB).
+Validated against 46 real `.eml` fixtures in `tests/fixtures/real/`.
+
+### Bug 1 — Form-submit fallback in main.html showed raw JSON
+
+**Root cause**: `templates/main.html` had a `<form action="/sync" method="post">` in the empty-state. When the user clicked "Run sync now", the browser navigated to `/sync` and rendered raw JSON instead of using the JS-driven fetch path.
+
+**Fix**: Removed the `<form>` and submit button from `main.html`. The empty-state paragraph remains; the canonical sync trigger is `btn-sync` in `base.html` (always visible in the header, driven by `app.js` fetch).
+
+**Test added**: `tests/web/test_frontend_dom.py::test_no_form_action_sync_in_main_tab` — asserts `b'action="/sync"' not in response.content` on GET `/`.
+
+---
+
+### Bug 2 — GmailIngester double-wrote pipeline_runs with ADC failure
+
+**Root cause**: When the orchestrator calls `GmailIngester.fetch_for_sender` with `canonical_run_id` set, the ingester was still writing its own `pipeline_runs` row. The internal `run_id` was `{canonical_run_id}_ingest_{sender}`. These internal writes attempted to call the Gmail API using Application Default Credentials (ADC), which the user doesn't have configured. This produced phantom `failed` rows in `pipeline_runs` with `DefaultCredentialsError` as the failure reason, in addition to the orchestrator's canonical healthy row.
+
+**Fix**: `GmailIngester.fetch_for_sender` now skips the internal `_write_pipeline_run` call on both success and failure paths when `canonical_run_id is not None`. The orchestrator is the sole writer of the canonical `pipeline_runs` row. The standalone CLI path (`canonical_run_id=None`) is unaffected — it still writes its own row.
+
+**Side effects verified**:
+- `/api/source-health` filter `WHERE run_id NOT LIKE '%_ingest_%'` still works (no such rows for orchestrator-driven runs).
+- Standalone CLI invocations still write correctly.
+- Existing `TestPipelineRunsHealthy` tests call without `canonical_run_id`, so they still exercise the write path and are unaffected.
+
+**Test added**: `tests/test_pipeline_log_integration.py::TestPipelineIngestLogIntegration::test_no_ingest_sub_run_rows_written_by_orchestrator` — asserts `count(*) WHERE run_id LIKE '%_ingest_%' = 0` and `total pipeline_runs rows = 4` after a full orchestrated run.
+
+---
+
+### Bug 3 — Indeed sender filter didn't match real Indeed emails
+
+**Root cause**: `_SENDER_FILTERS["indeed"]` was `"from:alert@indeed.com"`. Real Indeed alert emails come from `donotreply@jobalert.indeed.com` (verified in 29/46 real fixtures). The old filter matched 0 of the user's Indeed emails; ~63% of alert volume was silently dropped.
+
+**Fix**: Changed filter to `"from:@jobalert.indeed.com"` (loose domain-suffix pattern). Chosen over the exact `donotreply@` address to catch future addresses on the same domain (e.g. `weekly-digest@jobalert.indeed.com`).
+
+**Test added**: `tests/ingest/test_gmail.py::TestIndeedSenderFilterMatchesRealFixtures` — parameterized over all 46 real `.eml` fixtures; non-Indeed fixtures skip automatically. 29 Indeed fixtures verified all pass. Guarded by `@pytest.mark.skipif` so CI without `tests/fixtures/real/` doesn't break.
+
+---
+
+**Suite result after fixes**: `SKIP_LIVE=1 python -m pytest tests/` — 397 passed, 19 skipped, 0 failed (up from 353 passed pre-M1-010).
+
+**Note**: This validation is essentially M1-011 done early. M1-011 will re-validate once the user retriggers a live sync with the corrected Indeed filter to confirm real Indeed emails flow through end-to-end.
+
+---
+
 ## Tag chip / salary / CV chip — NOT rendered at M1
 
 Confirmed absent from `_card.html`. The template renders exactly:
