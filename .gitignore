@@ -23,6 +23,10 @@ htmlcov/
 # Environment / secrets
 .env
 *.env.local
+credentials.json
+tokens.json
+*.credentials.json
+*.tokens.json
 
 # Project-specific runtime artefacts
 *.db
