@@ -127,3 +127,24 @@ One prior ALIGNMENT-LOG anchor to note: the 2026-04-24 entry lists "Any proposal
 
 **User decision**: Approved (Option A — full capture: BACKLOG + PRD + TDD updates)
 **Outcome**: Added to BACKLOG.md as MVP-M1 design item ("Inactive state lifecycle — supersedes auto-remove model"). PRD.md updated (§5 M2 cross-state dedup bullet extended with Inactive-bypass exception; §6 Scope OUT gained two new "Deferred to MVP" lines for Inactive lifecycle + reminder). TDD.md updated (§1.2a applied table and §C7 Responsibility (5) gained "superseded at MVP-M1" notes for auto_remove_at column and purge_stale_applied helper). M1 untouched — TASK-M1-007 stands as shipped. PRD/TDD/BACKLOG edits delegated to architect (parallel dispatch); see commit for SHA.
+
+---
+
+## 2026-04-26 — Expired status for dead-link postings (extends Inactive state lifecycle BACKLOG entry)
+
+**Verdict**: ALIGNED
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN — M2: "Cross-state dedup generalised to canonical-id... Exception: a new posting matching a canonical that is currently in `Inactive` state is NOT suppressed — Inactive entries are treated as non-existent for dedup purposes (both URL-based and LLM content-based)."
+- PRD §5 Scope IN — M1: "JD hydration via LinkedIn / Indeed public guest endpoints (rate-limited 1 req / 30s)"
+- PRD §5 Scope IN — M1: "`applied` and `dismissed` state tables; state-aware Main view query"
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- BACKLOG.md — MVP-M1 Inactive state lifecycle: "Dedup bypass: Inactive entries are treated as non-existent for BOTH URL-based and LLM content-based dedup."
+- ALIGNMENT-LOG 2026-04-25 Inactive entry — Analysis: "The dedup bypass (Inactive entries treated as non-existent for ingest dedup) is the load-bearing new behavior; it correctly extends the existing 'cross-state dedup' pattern already documented in PRD §5 M2"
+
+**Analysis**: Expired is semantically distinct from Inactive (system-failure vs. cold-application) and from Dismissed (system-unavailable vs. user-uninterested). The dedup bypass mechanic is architecturally identical to Inactive, and the primary trigger (hydrator HTTP 404 auto-mark Expired) is a natural extension of C5/C6 which are already in MVP-M1 scope for the dedup bypass wiring. Bundling Expired into the existing MVP-M1 BACKLOG entry is coherent — both statuses share the same implementation pattern (new status value, dedup bypass, UI sub-section) and implementing the pattern twice in separate milestones is waste. The manual-button fallback is appropriately phased to MVP-M2, keeping the MVP-M1 scope increment minimal. The Expired concept does not touch any Scope OUT clause and does not contradict any existing PRD principle. No pattern of repeated status-model drift has been observed across prior log entries — this is the second status addition (Inactive being the first) but both are grounded in concrete real-world edge cases, not speculative coverage.
+
+**Recommendation**: ALIGNED — bundle Expired into the existing MVP-M1 BACKLOG entry ("Inactive state lifecycle"). Ask user: "Add Expired to the MVP-M1 BACKLOG entry now, or park it for now?"
+
+**User decision**: Approved — bundle Expired with Inactive at MVP-M1 (auto-detect via hydrator HTTP 404 only; manual "Job link is dead" button deferred to MVP-M2 per BA recommendation).
+**Outcome**: BACKLOG.md updated by architect: existing "MVP-M1 — Inactive state lifecycle" entry renamed to "Inactive AND Expired state lifecycle"; scope expanded from 5 items to 6 (added Hydrator auto-detect on HTTP 404 → mark_expired); status enum reconciliation caveat extended to include Expired; M1 workaround documented (users use Dismiss for dead links until MVP-M1 lands proper Expired handling). PRD.md updated: §5 M2 dedup-bypass exception extended to Inactive OR Expired; §6 Scope OUT lifecycle line gained Expired clauses. TDD.md updated: §C7 supersession note now references mark_expired alongside auto_inactivate; §C5 (Hydrator) gained a 2026-04-26 note about HTTP 404 detection. M1 untouched. See commit for SHA.

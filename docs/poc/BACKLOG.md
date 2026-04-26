@@ -53,42 +53,54 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 ---
 
-### MVP-M1 — Inactive state lifecycle (supersedes auto-remove model)
+### MVP-M1 — Inactive AND Expired state lifecycle (supersedes auto-remove model)
 
-**Decision date**: 2026-04-25
-**Approved by**: User (Option A — full capture)
-**Alignment verdict**: ALIGNED (see ALIGNMENT-LOG.md 2026-04-25 entry)
+**Decision date**: 2026-04-25 (Inactive); 2026-04-26 (Expired sibling concept added)
+**Approved by**: User (Option A — full capture; Expired added 2026-04-26 from M1-005b real-data validation)
+**Alignment verdict**: ALIGNED (see ALIGNMENT-LOG.md 2026-04-25 entry; 2026-04-26 entry for Expired)
 
 **What**:
-Replace the original "auto-remove after 90 days of silence" model with an Inactive state model:
+Replace the original "auto-remove after 90 days of silence" model with an Inactive state model, plus a sibling `Expired` state for hydrator-detected dead-link postings:
 1. New status value: `Inactive`. Auto-trigger after ~90 days of silence on `status_updated_at` for `Applied`/`Screen`/`Interview` only (`Offer`/`Rejected`/`Withdrew` exempt).
 2. Inactive entries stay forever in Applied tab as forensic history; user can manually transition Inactive → any status.
 3. Dedup bypass: Inactive entries are treated as non-existent for BOTH URL-based and LLM content-based dedup. A new posting matching the same role surfaces on Main with a fresh posting_id; old Inactive entry persists.
+4. **Expired status**: hydrator-detected dead-link postings transition to `status='Expired'` automatically (HTTP 404 from LinkedIn/Indeed). Same dedup-bypass mechanic as Inactive — reposts surface as fresh on Main, old Expired entry persists as forensic history.
 
 **Why**:
 - Auto-remove destroys forensic context (compensation, role details) the user may want for re-application context
 - Silence ≠ dead: large-company hiring windows often exceed 3 months
 - HR repost = real signal that role is still open and worth re-applying
 - More semantically precise version of what auto-remove was attempting to do
+- Dead-link postings: Dismiss semantically wrong (user wants to evaluate reposts); Expired = "system unavailable" not "user uninterested"; preserves repost-surfacing for legitimate role re-openings
 
 **Schema impact for M1: NONE.**
-`status` and `status_updated_at` columns already exist on `applied` table. `auto_remove_at` column is semantically dead from inception — see TDD §1.2a / §C7 superseded notes.
+`status` and `status_updated_at` columns already exist on `applied` table. `auto_remove_at` column is semantically dead from inception — see TDD §1.2a / §C7 superseded notes. Expired adds another allowed `status` value at MVP-M1 — no new column.
 
 **Scope at MVP-M1**:
-1. Schema: extend `status` allowed values to include `Inactive` (and the rest of the funnel — `Screen`, `Interview`, `Offer`, `Rejected`, `Withdrew`). No new columns.
-2. State manager (C7): replace `auto_remove_stale_applied()` with `auto_inactivate_stale_applied()`; add `update_status(posting_id, new_status)` that resets `status_updated_at`.
-3. Dedup (C5/C6): both URL-based and LLM content-based dedup add `WHERE NOT EXISTS (… applied.status='Inactive')` semantics.
-4. Scheduler (already MVP-M1 scope): daily cron/launchd job runs `auto_inactivate_stale_applied()`.
-5. UI (C8): Applied tab gains Inactive section/filter; Main tab indicates entries whose URL once mapped to an Inactive posting (e.g. "Reposted" badge).
+1. Schema: extend `status` allowed values to include `Inactive` AND `Expired` (and the rest of the funnel — `Screen`, `Interview`, `Offer`, `Rejected`, `Withdrew`). No new columns.
+2. State manager (C7): replace `auto_remove_stale_applied()` with `auto_inactivate_stale_applied()` (sets `status='Inactive'`); add `update_status(posting_id, new_status)` that resets `status_updated_at`; **add `mark_expired(posting_id)` for hydrator-triggered transitions to `status='Expired'`**.
+3. Dedup (C5/C6): both URL-based and LLM content-based dedup add `WHERE NOT EXISTS (… applied.status IN ('Inactive', 'Expired'))` semantics. **Both Inactive AND Expired entries are treated as non-existent for dedup purposes.**
+4. Scheduler (already MVP-M1 scope): daily cron/launchd job runs `auto_inactivate_stale_applied()`. (No scheduler needed for Expired — it's hydration-triggered, not time-triggered.)
+5. UI (C8):
+   - Applied tab gains Inactive section/filter
+   - **Dismissed tab gains Expired section/filter** (or, at MVP-M1 planning, decide if a unified "Unavailable" filter spanning Inactive + Expired is cleaner)
+   - Main tab indicates entries whose URL once mapped to an Inactive OR Expired posting (e.g. "Reposted" badge)
+6. **Hydrator (C5/C6) auto-detect**:
+   - On hydration, if HTTP response is 404 (or "this job is no longer available" markers), call `mark_expired(posting_id)` — the posting transitions to `Expired` automatically, no user action required
+   - Other failure modes (403, 500, network timeout) remain `hydration_status='failed'` — those are transient, not expired
 
 **Out of scope for this item (separate MVP item)**:
 - Inactive accumulation reminder notification (UI prompt when Inactive count crosses threshold). Logged separately because Inactive entries never auto-remove and could accumulate over years.
+- Manual "Job link is dead" button on cards — deferred to MVP-M2; auto-detect via hydrator 404 covers the common case at zero user effort
 
 **Caveats to action at MVP-M1 planning**:
 1. Confirm `status_updated_at` is written on every status transition (not just initial `apply`) — this is the silence clock.
 2. The dedup bypass applies to both URL-based (M1/M2) and LLM-based (MVP) dedup — explicit in PRD §5 M2 update; do not let the URL path slip through unmodified.
 3. Decide whether to drop or repurpose the `auto_remove_at` column at MVP-M1 (it's dead-code in M1; either remove it or leave as a vestigial column — small migration either way).
 4. **Status enum reconciliation**: TDD §1.2a currently documents the `applied.status` enum as `Applied / Screen / Interview / Offer / Rejected / Ghosted`. The new design introduces `Inactive` as the auto-transitioned-when-cold state, which is the concept the original `Ghosted` placeholder was likely standing in for. The MVP-M1 enum should resolve to: `Applied / Inactive / Screen / Interview / Offer / Rejected / Withdrew` — adding `Inactive` (system-set), renaming/dropping `Ghosted`, and adding `Withdrew` (genuinely missing terminal status for user-initiated pull-out). Decide and update TDD §1.2a at MVP-M1 planning.
+5. **Status enum reconciliation now also includes Expired**: TDD §1.2a `applied.status` enum should resolve at MVP-M1 to `Applied / Inactive / Expired / Screen / Interview / Offer / Rejected / Withdrew`. (Update of caveat #4.)
+
+**M1 workaround for dead links**: until MVP-M1 lands the Expired status, users encountering a dead link should click Dismiss. Limitation: if the same role is reposted with the same `jk=`, dedup will suppress it; if reposted with a new `jk=`, user will see what looks like a "new" job and may be confused. Acceptable trade-off for M1 — proper Expired handling fully addresses both cases at MVP-M1.
 
 **M1 status**: TASK-M1-007 stands as shipped. No M1 changes required.
 
