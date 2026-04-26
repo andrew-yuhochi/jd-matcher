@@ -23,6 +23,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -198,11 +199,38 @@ def test_post_restore_returns_200(client: TestClient, seeded_db: Path) -> None:
     assert resp.json()["action"] == "restore"
 
 
-def test_post_sync_returns_200_or_500(client: TestClient) -> None:
-    """Sync may fail (no OAuth creds), but the endpoint must return a valid JSON response."""
-    resp = client.post("/sync")
-    assert resp.status_code in (200, 500)
-    assert resp.json() is not None
+def test_post_sync_returns_pipeline_summary(client: TestClient) -> None:
+    """POST /sync with a mocked run_pipeline returns 200 and the documented response shape."""
+    from datetime import timezone
+
+    from jd_matcher.pipeline import PipelineRunSummary, SourceResult
+
+    fake_summary = PipelineRunSummary(
+        run_id="test-run-123",
+        started_at=datetime(2026, 4, 25, 10, 0, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 4, 25, 10, 0, 5, tzinfo=timezone.utc),
+        sources=[
+            SourceResult(
+                source="gmail_linkedin",
+                health_status="healthy",
+                new_postings=3,
+                failure_reason=None,
+            )
+        ],
+        steps=["ingest", "hydrate"],
+        total_new_postings=3,
+    )
+
+    with mock.patch("jd_matcher.pipeline.run_pipeline", return_value=fake_summary):
+        resp = client.post("/sync")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["run_id"] == "test-run-123"
+    assert body["total_new_postings"] == 3
+    assert body["failed_sources"] == []
+    assert "started_at" in body
+    assert "finished_at" in body
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +304,7 @@ def test_main_view_shows_all_hydration_statuses(client: TestClient, seeded_db: P
     conn.close()
 
     for (pid,) in all_ids:
-        assert f"card-{pid}" in html or f"Job Title" in html
+        assert f"card-{pid}" in html, f"card-{pid} not found in Main tab HTML"
 
 
 def test_main_view_includes_failed_hydration_postings(
@@ -314,24 +342,21 @@ def test_main_view_includes_failed_hydration_postings(
 
 
 def test_default_host_is_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The default JD_MATCHER_HOST value is 127.0.0.1.
-
-    We verify this by removing JD_MATCHER_HOST from the environment and checking
-    that os.environ.get("JD_MATCHER_HOST", "127.0.0.1") returns "127.0.0.1".
-    This is simpler and more reliable than inspecting source text.
-    """
+    """Patching uvicorn.run and invoking main() proves the production call uses host='127.0.0.1'."""
     monkeypatch.delenv("JD_MATCHER_HOST", raising=False)
+    monkeypatch.delenv("JD_MATCHER_PORT", raising=False)
 
-    import importlib
-    import inspect
-
-    import jd_matcher.web.__main__ as mod
-
-    source = inspect.getsource(mod.main)
-    # The default literal must appear in the source
-    assert '"127.0.0.1"' in source, "Default host literal '127.0.0.1' must appear in main()"
-    # os.environ.get with no override returns the default
-    assert os.environ.get("JD_MATCHER_HOST", "127.0.0.1") == "127.0.0.1"
+    with mock.patch("uvicorn.run") as mock_run:
+        from jd_matcher.web.__main__ import main
+        main()
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs.get("host") == "127.0.0.1", (
+            f"Expected host='127.0.0.1' but uvicorn.run was called with host={kwargs.get('host')!r}"
+        )
+        assert kwargs.get("port") == 8765, (
+            f"Expected port=8765 but uvicorn.run was called with port={kwargs.get('port')!r}"
+        )
 
 
 def test_zero_zero_host_raises_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -456,6 +481,43 @@ def test_source_health_uses_orchestrator_rows_not_ingester_subrun(
         "B1 guardrail: ingester sub-run row must be excluded."
     )
     assert gl["failure_reason"] == "OAuth token expired"
+
+
+def test_source_health_carry_forward_last_successful_fetch_at(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """When the latest run is failed, last_successful_fetch_at carries the prior healthy row's timestamp."""
+    conn = sqlite3.connect(str(seeded_db))
+    # T1: healthy run
+    _seed_pipeline_run(
+        conn,
+        run_id="healthy-run-001",
+        source="gmail_linkedin",
+        health_status="healthy",
+        started_at="2026-04-20T10:00:00+00:00",
+    )
+    # T2: failed run (most recent)
+    _seed_pipeline_run(
+        conn,
+        run_id="failed-run-002",
+        source="gmail_linkedin",
+        health_status="failed",
+        failure_reason="OAuth token expired",
+        started_at="2026-04-25T10:00:00+00:00",
+    )
+    conn.close()
+
+    resp = client.get("/api/source-health")
+    data = resp.json()
+    gl = next(e for e in data if e["source"] == "gmail_linkedin")
+
+    assert gl["health_status"] == "failed"
+    assert gl["last_successful_fetch_at"] is not None, (
+        "last_successful_fetch_at must carry forward the T1 healthy timestamp, not be null"
+    )
+    assert "2026-04-20" in gl["last_successful_fetch_at"], (
+        f"Expected T1 timestamp (2026-04-20) but got {gl['last_successful_fetch_at']!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

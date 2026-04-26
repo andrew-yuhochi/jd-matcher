@@ -82,3 +82,18 @@ This web backend does NOT write to events (user-visible events like `card_viewed
    guard `if host == "0.0.0.0":` legitimately contains that string. Fixed by
    simplifying the test to inspect the default literal `"127.0.0.1"` directly and
    use `monkeypatch.delenv` to verify env-var default.
+
+---
+
+## Follow-up Fixes (commit TBD)
+
+Four Minor findings identified post-commit and resolved in a follow-up fix commit.
+
+| # | Finding | Fix applied |
+|---|---------|------------|
+| 1 | AC#4 bind test checked source string, not the actual `uvicorn.run()` call | Replaced with `mock.patch("uvicorn.run")` + assert `call_args.kwargs["host"] == "127.0.0.1"` |
+| 2 | `/api/source-health` returned null `last_successful_fetch_at` on failed rows even when a prior healthy row existed | Rewrote query to use a correlated subquery (Option A) selecting `MAX(started_at)` from healthy orchestrator rows per source |
+| 3 | `/sync` test asserted `status_code in (200, 500)` — trivially true, no contract verification | Replaced with `mock.patch("jd_matcher.pipeline.run_pipeline")` returning a synthetic `PipelineRunSummary`; asserts 200 and all documented response fields |
+| 4 | AC#3 assertion used `or "Job Title"` fallback making it trivially true | Dropped fallback; assertion is now `assert f"card-{pid}" in html` |
+
+Test count after fixes: 230 passed, 1 skipped (live test, expected).

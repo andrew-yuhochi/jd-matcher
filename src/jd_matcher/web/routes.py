@@ -166,11 +166,23 @@ def _source_health_query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     for source in _CANONICAL_SOURCES:
         row = conn.execute(
             """
-            SELECT health_status, failure_reason, started_at, last_successful_fetch_at
-            FROM pipeline_runs
-            WHERE source = ?
-              AND run_id NOT LIKE '%_ingest_%'
-            ORDER BY started_at DESC
+            SELECT
+                health_status,
+                failure_reason,
+                started_at,
+                (
+                    SELECT started_at
+                    FROM pipeline_runs p2
+                    WHERE p2.source = pr.source
+                      AND p2.health_status = 'healthy'
+                      AND p2.run_id NOT LIKE '%_ingest_%'
+                    ORDER BY p2.started_at DESC
+                    LIMIT 1
+                ) AS last_successful_fetch_at
+            FROM pipeline_runs pr
+            WHERE pr.source = ?
+              AND pr.run_id NOT LIKE '%_ingest_%'
+            ORDER BY pr.started_at DESC
             LIMIT 1
             """,
             (source,),
