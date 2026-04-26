@@ -49,6 +49,7 @@ def _make_posting(
         location="Vancouver, BC",
         received_at=datetime.now(timezone.utc),
         raw_body=b"raw body bytes",
+        gmail_message_id="test-gmail-id",
     )
 
 

@@ -258,3 +258,157 @@ class TestPipelineIngestLogIntegration:
         # so we just verify the distinct run IDs after the first run.
         distinct = _get_distinct_pipeline_run_ids(test_db)
         assert summary1.run_id in distinct
+
+
+# ---------------------------------------------------------------------------
+# Option A threading proof: duplicate URL across two emails credits correctly
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicateUrlAcrossEmailsOptionA:
+    """Prove that Option A (gmail_message_id carried in ParsedPosting) handles the
+    duplicate-URL edge case correctly.
+
+    Scenario: two LinkedIn alert emails (msg-dup-001, msg-dup-002) both contain
+    the same canonical URL. Under Option B (url→gmail_id dict with last-write-wins),
+    msg-dup-001 would silently lose hydration credit. Under Option A (first-email-wins),
+    msg-dup-001 is credited and msg-dup-002 gets zero hydration credit — deterministic
+    and predictable.
+    """
+
+    DUPLICATE_URL = "https://linkedin.com/jobs/view/9999999"
+    DUPLICATE_JOB_ID = "9999999"
+
+    def _build_minimal_eml(self, subject: str) -> bytes:
+        """Return minimal RFC-822 bytes containing the duplicate LinkedIn URL."""
+        plain_body = f"Check this job: https://www.linkedin.com/comm/jobs/view/{self.DUPLICATE_JOB_ID}/?trackingId=abc"
+        return (
+            f"From: jobalerts-noreply@linkedin.com\r\n"
+            f"To: test@example.com\r\n"
+            f"Subject: {subject}\r\n"
+            f"Date: Mon, 01 Jan 2026 10:00:00 +0000\r\n"
+            f"Content-Type: text/plain; charset=utf-8\r\n"
+            f"\r\n"
+            f"{plain_body}\r\n"
+        ).encode("utf-8")
+
+    def test_duplicate_url_across_emails_credits_first_email_only(
+        self,
+        test_db: Path,
+        logs_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When the same URL appears in two emails, Option A credits the first email
+        for hydration and leaves the second email's hydration counter at 0.
+
+        This proves the Option B edge case is eliminated:
+        - Both emails appear in email_ingest_log
+        - The URL is deduped: only 1 posting created (urls_new_count=1 on msg-dup-001)
+        - Hydration credit goes to msg-dup-001 (first email to surface the URL)
+        - msg-dup-002 has postings_hydrated_count=0 (it saw an already-seen URL)
+        """
+        monkeypatch.setenv("SKIP_LIVE", "1")
+
+        from jd_matcher.ingest.gmail import RawEmail
+        from datetime import datetime, timezone
+
+        eml_001 = self._build_minimal_eml("Alert 1 — duplicate URL test")
+        eml_002 = self._build_minimal_eml("Alert 2 — same URL as above")
+
+        email_001 = RawEmail(
+            id="msg-dup-001",
+            sender="jobalerts-noreply@linkedin.com",
+            subject="Alert 1 — duplicate URL test",
+            received_at=datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            body_bytes=eml_001,
+        )
+        email_002 = RawEmail(
+            id="msg-dup-002",
+            sender="jobalerts-noreply@linkedin.com",
+            subject="Alert 2 — same URL as above",
+            received_at=datetime(2026, 1, 1, 11, 0, 0, tzinfo=timezone.utc),
+            body_bytes=eml_002,
+        )
+
+        import jd_matcher.pipeline as pipeline_mod
+        from jd_matcher.db.email_ingest_log import insert_email_log
+
+        class _DupIngester:
+            """Returns the two duplicate-URL emails for linkedin; nothing for indeed.
+
+            Mirrors the real GmailIngester contract: inserts email_ingest_log rows
+            (C3 writer hook) before returning emails.
+            """
+            def __init__(self, credentials: Any, db_path: Path) -> None:
+                self._db_path = db_path
+
+            def fetch_for_sender(
+                self,
+                sender: str,
+                since_date: Any,
+                run_id: str = "",
+                canonical_run_id: str | None = None,
+            ) -> list:
+                if sender != "linkedin":
+                    return []
+                emails = [email_001, email_002]
+                log_run_id = canonical_run_id or run_id
+                for raw_email in emails:
+                    insert_email_log(
+                        gmail_message_id=raw_email.id,
+                        source="linkedin",
+                        sender=raw_email.sender,
+                        subject=raw_email.subject,
+                        received_at=raw_email.received_at,
+                        pipeline_run_id=log_run_id,
+                        db_path=self._db_path,
+                    )
+                return emails
+
+        def _hydrate_linkedin(url: str, **kwargs: Any) -> HydratedJD:
+            return _make_complete_linkedin_jd(url)
+
+        def _hydrate_indeed(url: str, **kwargs: Any) -> HydratedIndeedJD:
+            return _make_complete_indeed_jd(url)
+
+        with (
+            patch("jd_matcher.pipeline.GmailIngester", _DupIngester),
+            patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_hydrate_linkedin),
+            patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_hydrate_indeed),
+        ):
+            run_pipeline(db_path=test_db)
+
+        rows = _get_ingest_log_rows(test_db)
+
+        # Both emails must appear in the log
+        msg_ids = {r["gmail_message_id"] for r in rows}
+        assert "msg-dup-001" in msg_ids, "First email missing from email_ingest_log"
+        assert "msg-dup-002" in msg_ids, "Second email missing from email_ingest_log"
+
+        row_001 = next(r for r in rows if r["gmail_message_id"] == "msg-dup-001")
+        row_002 = next(r for r in rows if r["gmail_message_id"] == "msg-dup-002")
+
+        # msg-dup-001: extracted 1 URL, it was new, hydration credited here
+        assert row_001["urls_extracted_count"] == 1, (
+            f"msg-dup-001 should have extracted 1 URL, got {row_001['urls_extracted_count']}"
+        )
+        assert row_001["urls_new_count"] == 1, (
+            f"msg-dup-001 should have 1 new URL (first to surface it), got {row_001['urls_new_count']}"
+        )
+        assert row_001["postings_hydrated_count"] == 1, (
+            f"Hydration credit must go to msg-dup-001 (first-email-wins), "
+            f"got {row_001['postings_hydrated_count']}"
+        )
+
+        # msg-dup-002: extracted 1 URL but it was already seen — no new posting, no hydration credit
+        assert row_002["urls_extracted_count"] == 1, (
+            f"msg-dup-002 should have extracted 1 URL, got {row_002['urls_extracted_count']}"
+        )
+        assert row_002["urls_new_count"] == 0, (
+            f"msg-dup-002 URL was already seen — urls_new_count must be 0, "
+            f"got {row_002['urls_new_count']}"
+        )
+        assert row_002["postings_hydrated_count"] == 0, (
+            f"msg-dup-002 must not receive hydration credit (first-email-wins), "
+            f"got {row_002['postings_hydrated_count']}"
+        )

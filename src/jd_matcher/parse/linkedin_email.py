@@ -45,6 +45,7 @@ class ParsedPosting:
     location: Optional[str]
     received_at: datetime
     raw_body: bytes    # full RFC-822 message bytes for replay
+    gmail_message_id: str  # ID of the email this posting was extracted from
 
 
 def parse(raw_email: RawEmail) -> list[ParsedPosting]:
@@ -135,6 +136,7 @@ def _parse(raw_email: RawEmail) -> list[ParsedPosting]:
                 location=meta.get('location'),
                 received_at=raw_email.received_at,
                 raw_body=raw_email.body_bytes,
+                gmail_message_id=raw_email.id,
             )
         )
         logger.debug(

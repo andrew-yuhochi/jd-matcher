@@ -162,6 +162,7 @@ def _parse(raw_email: RawEmail) -> list[ParsedPosting]:
                 location=meta.get('location'),
                 received_at=raw_email.received_at,
                 raw_body=raw_email.body_bytes,
+                gmail_message_id=raw_email.id,
             )
         )
         logger.debug(

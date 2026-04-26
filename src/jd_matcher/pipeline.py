@@ -39,7 +39,7 @@ from jd_matcher.hydrate.indeed import hydrate as indeed_hydrate
 from jd_matcher.hydrate.linkedin import hydrate as linkedin_hydrate
 from jd_matcher.ingest.gmail import GmailIngester
 from jd_matcher.parse.indeed_email import parse as parse_indeed
-from jd_matcher.parse.linkedin_email import parse as parse_linkedin
+from jd_matcher.parse.linkedin_email import ParsedPosting, parse as parse_linkedin
 
 _LOGGER_NAME = "jd_matcher.pipeline"
 logger = logging.getLogger(_LOGGER_NAME)
@@ -72,8 +72,8 @@ class SourceResult:
     failure_reason: Optional[str] = None
     new_postings: int = 0
     hydrated: int = 0
-    # url → gmail_message_id mapping built during Gmail phase; consumed by hydrator phase.
-    url_to_gmail_id: dict[str, str] = field(default_factory=dict)
+    # All postings parsed during the Gmail phase; each carries its own gmail_message_id.
+    postings: list[ParsedPosting] = field(default_factory=list)
 
 
 @dataclass
@@ -158,10 +158,11 @@ def run_pipeline(
             })
         )
 
-    # Build a combined url → gmail_message_id mapping from all Gmail source results.
-    url_to_gmail_id: dict[str, str] = {}
+    # Collect all postings from Gmail phase; first-email-wins for duplicate URLs.
+    # Each ParsedPosting carries its own gmail_message_id — no side-mapping needed.
+    all_postings: list[ParsedPosting] = []
     for gmail_result in source_results:
-        url_to_gmail_id.update(gmail_result.url_to_gmail_id)
+        all_postings.extend(gmail_result.postings)
 
     # Collect canonical URLs for hydration — query DB after dedup so we only
     # hydrate postings that were actually registered (dedup-respected).
@@ -183,7 +184,7 @@ def run_pipeline(
             run_id=run_id,
             resolved_db=resolved_db,
             urls=hydration_urls.get(sender, []),
-            url_to_gmail_id=url_to_gmail_id,
+            all_postings=all_postings,
         )
         source_results.append(result)
 
@@ -263,20 +264,18 @@ def _run_gmail_source(
         )
 
         new_urls: list[str] = []
-        # url → gmail_message_id: threaded to C5 for per-posting hydration accounting.
-        url_to_gmail_id: dict[str, str] = {}
+        parsed_postings: list[ParsedPosting] = []
         parser = parse_linkedin if sender == "linkedin" else parse_indeed
         conn = sqlite3.connect(resolved_db)
         conn.execute("PRAGMA foreign_keys = ON;")
         try:
             for raw_email in emails:
                 postings = parser(raw_email)
+                parsed_postings.extend(postings)
                 urls_extracted = len(postings)
                 urls_new = 0
                 urls_created = 0
                 for posting in postings:
-                    # Track url → gmail_message_id before dedup so C5 can find the row.
-                    url_to_gmail_id[posting.url] = raw_email.id
                     outcome, _ = register_new(posting, conn=conn, db_path=resolved_db)
                     if outcome == "new":
                         new_urls.append(posting.url)
@@ -335,7 +334,7 @@ def _run_gmail_source(
             source=source_name,
             health_status="healthy",
             new_postings=len(new_urls),
-            url_to_gmail_id=url_to_gmail_id,
+            postings=parsed_postings,
         )
 
     except Exception as exc:
@@ -380,13 +379,22 @@ def _run_hydrator_source(
     run_id: str,
     resolved_db: Path,
     urls: list[str],
-    url_to_gmail_id: dict[str, str] | None = None,
+    all_postings: list[ParsedPosting] | None = None,
 ) -> SourceResult:
-    """Hydrate all pending JDs for one sender. ALWAYS writes pipeline_runs row."""
+    """Hydrate all pending JDs for one sender. ALWAYS writes pipeline_runs row.
+
+    gmail_message_id is read directly from each ParsedPosting — no side-mapping dict.
+    First-email-wins: when the same URL appears in multiple emails, only the first
+    ParsedPosting's gmail_message_id is used for hydration credit attribution.
+    """
     started_at = datetime.now(timezone.utc)
     prev_status = _get_previous_status(resolved_db, source_name)
-    if url_to_gmail_id is None:
-        url_to_gmail_id = {}
+
+    # Build url → gmail_message_id from postings (first-email-wins).
+    url_to_gmail_id: dict[str, str] = {}
+    for posting in (all_postings or []):
+        if posting.url not in url_to_gmail_id:
+            url_to_gmail_id[posting.url] = posting.gmail_message_id
 
     try:
         hydrate_fn = linkedin_hydrate if sender == "linkedin" else indeed_hydrate

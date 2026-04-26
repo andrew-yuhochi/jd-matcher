@@ -66,6 +66,63 @@ Total auto-fixes: 3 (all Minor tier, all resolved in first attempt).
 
 ---
 
+---
+
+## Follow-up Refactor — Threading Option B → Option A
+
+**Commit**: see git log for SHA (commit message prefix: "refactor(jd-matcher): TASK-M1-005c")
+**Date**: 2026-04-26
+
+### Motivation
+
+Option B (orchestrator side-mapping) had a known edge case: when the same canonical URL appears in two or more emails (common with 5+ overlapping LinkedIn alerts), the `url_to_gmail_id` dict was overwritten on the second occurrence. The first email's `email_ingest_log` row lost its hydration credit — the second email's ID was used instead. Per-email report counts would then mismatch what the user sees in Gmail, destroying trust in the report.
+
+### Changes Made
+
+| File | Change |
+|------|--------|
+| `src/jd_matcher/parse/linkedin_email.py` | `ParsedPosting` gains required field `gmail_message_id: str`; LinkedIn parser populates it from `raw_email.id` |
+| `src/jd_matcher/parse/indeed_email.py` | Indeed parser populates `gmail_message_id` from `raw_email.id` |
+| `src/jd_matcher/pipeline.py` | `SourceResult.url_to_gmail_id` → `SourceResult.postings: list[ParsedPosting]`; `_run_gmail_source` collects all parsed postings; `run_pipeline` merges them into `all_postings`; `_run_hydrator_source` builds `url→gmail_id` dict from postings using first-email-wins; no external dict parameter |
+| `tests/dedup/test_url_dedup.py` | `_make_posting()` fixture updated to include `gmail_message_id="test-gmail-id"` |
+| `tests/test_pipeline_log_integration.py` | New test class `TestDuplicateUrlAcrossEmailsOptionA` with proof-of-fix test |
+
+### SourceResult.url_to_gmail_id
+
+Removed entirely. Replaced by `SourceResult.postings: list[ParsedPosting]`, which carries all postings parsed during the Gmail phase. Each posting carries its own `gmail_message_id`.
+
+### Merge Logic in run_pipeline
+
+Removed. The old `url_to_gmail_id.update(gmail_result.url_to_gmail_id)` merge loop is gone. Replaced by `all_postings.extend(gmail_result.postings)`.
+
+### Attribution Semantic: First-Email-Wins
+
+When `_run_hydrator_source` builds the internal `url→gmail_id` lookup from `all_postings`, it uses:
+```python
+if posting.url not in url_to_gmail_id:
+    url_to_gmail_id[posting.url] = posting.gmail_message_id
+```
+The first email (by iteration order, which matches email arrival order from Gmail fetch) that surfaces a URL gets hydration credit. Subsequent emails that surface the same URL are correctly recorded in `email_ingest_log` with `urls_new_count=0` and `postings_hydrated_count=0`. This is correct: there is only one actual hydration call per unique URL (dedup-respected), so at most one email can receive hydration credit.
+
+### New Test: test_duplicate_url_across_emails_credits_first_email_only
+
+Located in `tests/test_pipeline_log_integration.py::TestDuplicateUrlAcrossEmailsOptionA`.
+
+Setup: two synthetic LinkedIn emails (`msg-dup-001`, `msg-dup-002`) both containing `https://linkedin.com/jobs/view/9999999`.
+
+Assertions:
+- Both emails appear in `email_ingest_log`
+- `msg-dup-001`: `urls_extracted_count=1`, `urls_new_count=1`, `postings_hydrated_count=1`
+- `msg-dup-002`: `urls_extracted_count=1`, `urls_new_count=0`, `postings_hydrated_count=0`
+
+This is the load-bearing proof that the duplicate-URL edge case is eliminated.
+
+### Test Result After Refactor
+
+292 passed, 2 skipped (was 291 prior + 1 new duplicate-URL test).
+
+---
+
 ## Unexpected Findings
 
 - `RawEmail.id` is set to the Gmail message ID from the API (or the `.eml` filename stem for fixtures). Fixtures use names like `sample-001`, which serves as a stable unique ID for `email_ingest_log.gmail_message_id` in tests. No collision risk since each fixture file has a distinct stem.
