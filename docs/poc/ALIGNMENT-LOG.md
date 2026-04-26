@@ -79,6 +79,33 @@ The following commitments in PRD §3 create future alignment anchors. Any new re
 
 ---
 
+## 2026-04-26 — Indeed pagead resolution + per-email ingest log (TASK-M1-005b + TASK-M1-005c)
+
+**Verdict**: TASK-M1-005b: ALIGNED | TASK-M1-005c: DRIFTING
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN — M1: "Indeed alert parser" and PRD §7 Success Criteria SC-2: "Indeed URL extraction from alert emails: ≥95%"
+- PRD §5 Scope IN — M1: "JD hydration via LinkedIn / Indeed public guest endpoints (rate-limited 1 req / 30s)"
+- TDD §C4 — Output contract: "≥95% URL extraction on ≥30 real Indeed alert emails (PRD SC-2)"; Responsibility (3): "Indeed redirect resolution: perform a single HEAD request through the redirect chain to resolve to the canonical posting URL (gated by the same 1 req/30s rate limit shared with C5)"
+- TDD §C5 — Responsibility (2): "Apply a process-wide 1 request per 30 seconds rate limiter across LinkedIn + Indeed combined"
+- PRD §8 Constraints R3: "LinkedIn / Indeed rate-limit or IP-block at hydration — Medium likelihood — degrade gracefully"
+- ALIGNMENT-LOG 2026-04-24 anchor #4: "LinkedIn guest-endpoint hydration is personal-volume only — any proposal to scale hydration throughput (batch jobs, parallelism) that would move toward commercial-volume request patterns violates the acknowledged commercial wall and LinkedIn ToS posture."
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- PRD §6 Scope OUT (cross-cutting): "Configurable knobs in config file — no hardcoded thresholds"
+
+**Analysis — TASK-M1-005b (ALIGNED)**: The redirect-resolution behavior for Indeed `pagead/clk` URLs is already sketched in the TDD §C4 Responsibility (3), which explicitly mentions "Indeed redirect resolution: perform a single HEAD request through the redirect chain" — this requirement is not a new contract change but a clarification of a gap in how the TDD's Indeed redirect step was implemented (regex-only, missing the `pagead` URL format). Without this fix, PRD SC-2 (≥95% Indeed URL extraction) cannot be met at ~21% coverage, which would block M1 from closing. The volume (~40 calls/day combined with hydration) stays well within the "personal volume" anchor from the 2026-04-24 log entry; the stealth stack with jitter is consistent with the existing rate-limit posture in TDD §1.4 and §C5. This is a legitimate discovered-gap fix, not scope expansion.
+
+**Analysis — TASK-M1-005c (DRIFTING)**: The per-email ingest log adds a new schema table and cross-cutting writer hooks to C3, C4, and C5, plus a new CLI reporting command. None of this is in PRD §5 Scope IN for M1, and the M1 "user-observable deliverable" is the web UI with applied/dismissed state — not a CLI telemetry report. The CLI report is a developer/debugging surface, not a user-facing triage workflow output, which means it doesn't serve PRD §4 Phase Objectives directly. It is useful (and honest) for M1-011 real-data validation cross-check, but it can be added as a lightweight addition if the user accepts the drift explicitly. None of the proposed deferred items (anomaly detection, UI integration) violate any Scope OUT clause — they are simply not in Scope IN. The `email_ingest_log` table and C3/C4/C5 writer hooks do expand the schema and each component's contract, which is substantive enough to flag as DRIFTING rather than trivially aligned.
+
+**Recommendation**:
+- TASK-M1-005b → ALIGNED: add to TASKS as M1-005b (fix to Indeed email parser, within the M1 milestone).
+- TASK-M1-005c → DRIFTING: present the drift, then ask user: "Override and add to TASKS as M1-005c, or park in BACKLOG?"
+
+**User decision**: M1-005b: Approved (ALIGNED). M1-005c: Approved with Override BA — user accepts DRIFTING risk because the ingest report tool directly enables more rigorous M1-011 validation and the Indeed pagead discovery confirms the value of per-email cross-check telemetry. Added to M1 scope.
+**Outcome**: Both tasks added to TASKS.md as M1-005b and M1-005c, inserted between M1-009 (Done) and M1-010 (To Do). TDD.md updated by architect: §1.2a (new email_ingest_log table + indexes), §1.4 (dual rate-limit policy: 3-4.5s pagead resolution + 30s/req hydration), §C3/C4/C5/C11 (writer-hook contracts for the ingest log), §C4 Responsibility (3) (full 8-item stealth-stack contract for Indeed pagead resolution), §C27 (new component spec for the report CLI). Progress Summary updated: 14 total tasks, 9 Done, 5 To Do. M1-005c implementation requires gmail_message_id threading through the orchestrator (architect flagged as non-trivial plumbing). See commit for SHA.
+
+---
+
 ## 2026-04-25 — Inactive state model replacing auto-remove: new status value, dedup bypass, MVP-M1 placement
 
 **Verdict**: ALIGNED

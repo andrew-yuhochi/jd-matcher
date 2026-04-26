@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 9 | In Progress: 0 | To Do: 3 | Blocked: 0
+- Done: 9 | In Progress: 0 | To Do: 5 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -256,6 +256,80 @@
   - [x] Bind address is exclusively `127.0.0.1` — `0.0.0.0` rejected (configurable but defaulted to 127.0.0.1; integration test verifies)
   - [x] State-mutation endpoints (`/apply`, `/dismiss`, `/restore`) are idempotent — calling twice produces same DB state
   - [x] All endpoints have integration tests with seeded fixture DB; 100% pass
+
+---
+
+### TASK-M1-005b — Indeed pagead URL resolution
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C4 (URL parser, Indeed sub-flow) — TDD §C4 responsibility (3) + §1.4 dual-rate-limit note
+- **Description**: Add HTTP redirect resolution for Indeed `pagead/clk/dl` URLs. Email URL extraction in M1-005 only catches `rc/clk?jk=` URLs (~21% of Indeed jobs); the remaining ~79% are `pagead/clk/dl` redirects with no `jk=` param visible. This task adds a stealth-headers redirect-follow step that resolves `pagead` URLs to their canonical `viewjob?jk=` form for hydration. Validated 8/8 in empirical spike.
+- **Dependencies**: TASK-M1-005 (Done), TASK-M1-006 (Done — provides the canonical hydrator path)
+- **Implementation Checklist**:
+  - Schema: N/A — no DB changes (resolution is a pure parsing-time HTTP step)
+  - Wire: new helper module `src/jd_matcher/parse/indeed_pagead.py` exposing `resolve_pagead_urls(urls: list[str]) -> dict[str, str]` (returns `{original_url: canonical_url}` mapping; non-pagead URLs pass through unchanged — idempotent)
+  - Call site: `src/jd_matcher/parse/indeed_email.py` — extend the existing Indeed parser to call `resolve_pagead_urls` for matched `pagead/clk` URLs and substitute resolved canonical URLs into the `ParsedPosting` output. The regex extraction in (2) of TDD §C4 is unchanged; pagead resolution is a post-extraction substitution pass.
+  - Stealth stack (mandatory — all 8 items per TDD §C4 update; partial implementation will silently fail):
+    1. `requests.Session()` reused across all URLs in one email batch (cookies accumulate)
+    2. Browser-style static User-Agent (Chrome on macOS)
+    3. `Referer: https://mail.google.com/`
+    4. Standard browser `Accept` / `Accept-Language` / `Accept-Encoding` headers
+    5. `html.unescape()` applied to URL BEFORE the HTTP request — most-likely silent-failure mode; explicit unit test required
+    6. `time.sleep(3 + random.uniform(0, 1.5))` jitter between consecutive requests (3.0–4.5s range)
+    7. `allow_redirects=True`, `timeout=30`
+    8. Discard tracking params (`tk`, `q`, `l`, `from`, …) — keep only `jk=<hex>`
+  - Config: support `JD_MATCHER_OFFLINE_PARSE=1` env var to skip resolution entirely (offline-testing opt-out — preserves the earlier no-network-at-parse-time assumption for replay)
+  - Imports affected: new module `parse/indeed_pagead.py`; modified `parse/indeed_email.py` (single new import + call)
+  - Runtime files: N/A (no logs of its own — flows through the existing pipeline JSON log via the orchestrator)
+- **Demo Artifact**: `python -m jd_matcher.parse.indeed_pagead --eml tests/fixtures/real/<indeed-email>.eml` outputs original→canonical URL mapping; integration test runs full pipeline against the 6 real Indeed `.eml` fixtures and shows ≥95% extraction rate (vs ~21% baseline).
+- **Quality log**: `docs/poc/quality-logs/TASK-M1-005b.md`
+- **Acceptance Criteria**:
+  - [ ] `resolve_pagead_urls(urls)` returns `{original: canonical}` mapping; URLs without `pagead/clk` substring pass through unchanged (idempotent)
+  - [ ] `html.unescape()` is called on every URL before the HTTP request — verified by unit test using a URL with `&amp;` entities
+  - [ ] Sequential requests separated by 3–4.5s jitter — verified by test asserting wall-clock time ≥ N × 3.0s for N requests
+  - [ ] Browser-mimicking headers applied: `User-Agent` (Chrome-style), `Referer: https://mail.google.com/`, browser-style `Accept` / `Accept-Language` / `Accept-Encoding`
+  - [ ] `requests.Session()` reused across the URL batch — verified by test asserting session cookies accumulate across consecutive resolutions
+  - [ ] Tracking params (`tk=`, `q=`, `l=`, `from=`) stripped from the canonical URL — only `jk=<hex>` preserved
+  - [ ] `JD_MATCHER_OFFLINE_PARSE=1` env var skips all resolution; URLs pass through unmodified (verified by test setting the env var)
+  - [ ] Integration test against the 6 real Indeed `.eml` fixtures (in `tests/fixtures/real/`) shows ≥95% extraction rate (target: 32+ jobs out of 34 claimed in subjects)
+  - [ ] Total wall-clock for resolving 5–12 URLs in one email batch is under 75 seconds (≤15 URLs × 5s avg)
+
+---
+
+### TASK-M1-005c — Per-email ingest log + report
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C3 / C4 / C5 (writer hooks) + new C27 (Ingest Report CLI) — TDD §C3, §C4, §C5, §C27, §1.2a (`email_ingest_log` schema)
+- **Description**: Add per-email ingestion telemetry so the user can manually cross-check Gmail vs the pipeline's ingestion outcome. Schema-level: new `email_ingest_log` table with one row per ingested email. Writer hooks: C3 inserts the row at fetch; C4 updates URL counts; C5 updates hydration counts. Reporting: new CLI `python -m jd_matcher.report ingest` that queries the table and renders a markdown table for manual inspection. Driven by the M1-005b Indeed `pagead` discovery — generalizable telemetry to catch similar parser failures earlier across any source.
+- **Dependencies**: TASK-M1-003 (Done — schema infrastructure), TASK-M1-008 (Done — orchestrator's canonical `pipeline_run_id` source)
+- **Implementation Checklist**:
+  - Schema: add `email_ingest_log` table per TDD §1.2a (new DDL); `init_db()` must remain idempotent (re-run on existing DB does NOT recreate or fail) — additive `CREATE TABLE IF NOT EXISTS` + indexes
+  - Wire — C3 (`src/jd_matcher/ingest/gmail.py`): insert one `email_ingest_log` row per fetched email at fetch time, populating `gmail_message_id`, `source`, `sender`, `subject`, `received_at`, `ingested_at`, `pipeline_run_id`; counters default to 0
+  - Wire — C4 (`src/jd_matcher/parse/`): after parsing each email, locate the row by `gmail_message_id` and increment `urls_extracted_count` (regex + pagead-resolved set) and `urls_new_count` (post URL-dedup, from C6)
+  - Wire — C5 (`src/jd_matcher/hydrate/`): for each hydration outcome, increment `postings_hydrated_count` (success) or `postings_hydration_failed_count` (failure) on the row whose `gmail_message_id` matches the originating email — requires the orchestrator to thread `gmail_message_id` through to the hydrator alongside each URL
+  - Wire — orchestrator (`src/jd_matcher/pipeline.py`): pass canonical `run_id` to C3/C4/C5 so all writers use the same `pipeline_run_id` (NOT a per-source `_ingest_<sender>` sub-run-id — same B1 discriminator pattern as `/api/source-health`)
+  - New module: `src/jd_matcher/report.py` exposing the CLI subcommand `ingest` (`python -m jd_matcher.report ingest [--since YYYY-MM-DD] [--source X] [--format markdown|csv]`)
+  - Call site: `python -m jd_matcher.report` — new entry point; document in README usage section
+  - Imports affected: new module; minor additions to `ingest/gmail.py`, `parse/indeed_email.py` + `parse/linkedin_email.py`, `hydrate/linkedin.py` + `hydrate/indeed.py`, `pipeline.py`
+  - Runtime files: N/A (writes to existing SQLite DB only)
+- **Demo Artifact**: `python -m jd_matcher.report ingest --since 2026-04-25` outputs a markdown table to stdout with one row per email ingested in the date range (Date · Source · Subject · URLs · New · Posts · Hydrated · Failed) plus aggregate totals row. User opens Gmail and visually compares.
+- **Quality log**: `docs/poc/quality-logs/TASK-M1-005c.md`
+- **Acceptance Criteria**:
+  - [ ] `email_ingest_log` table created via idempotent `init_db()` (re-running init_db on existing DB does NOT recreate or fail)
+  - [ ] C3 inserts one row per fetched email with `gmail_message_id`, `source`, `sender`, `subject`, `received_at`, `ingested_at`, `pipeline_run_id` populated; counters default to 0
+  - [ ] C4 updates `urls_extracted_count` and `urls_new_count` for the matching `gmail_message_id` row
+  - [ ] C5 updates `postings_hydrated_count` / `postings_hydration_failed_count` for the matching `gmail_message_id` row (per-posting accumulator across the batch)
+  - [ ] All writers use the canonical orchestrator `pipeline_run_id` (NOT `_ingest_<sender>` sub-run-id) — verified by integration test querying `SELECT DISTINCT pipeline_run_id FROM email_ingest_log` and asserting 1 row per orchestrator invocation
+  - [ ] `python -m jd_matcher.report ingest` (no args) renders a markdown table to stdout with all log rows
+  - [ ] `--since YYYY-MM-DD` filters to rows with `received_at >= date`
+  - [ ] `--source X` filters to rows where `source = X`
+  - [ ] `--format csv` outputs valid CSV (parseable by `csv.DictReader`) instead of markdown
+  - [ ] Bottom of report shows aggregate totals (total emails, total URLs, total new, total posts, total hydrated, total failed) matching column sums
+  - [ ] Integration test: run full pipeline against fixture mailbox of 5 emails, then assert `email_ingest_log` has exactly 5 rows with non-zero counters
 
 ---
 
