@@ -15,6 +15,12 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 
 ---
 
+## Local environment
+
+This project ships with a venv at `.venv/` (Python 3.11). Bare `python` on this machine resolves to pyenv 3.14 which lacks `google.auth`/`googleapiclient` and will produce false test failures. **Always run pytest as `.venv/bin/python -m pytest …`** (or `source .venv/bin/activate` first).
+
+---
+
 ## Documents
 
 ### Discovery
