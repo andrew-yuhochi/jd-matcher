@@ -1,0 +1,204 @@
+# Title-Based Interest Filter (C19) — deny/allow pattern config
+#
+# Evaluation order:
+#   1. allow[] checked FIRST — if any allow pattern matches, the posting PASSES
+#      regardless of deny matches (escape hatch for ML/Data variants).
+#   2. deny[] checked second — if any deny pattern matches (and no allow matched),
+#      the posting is DROPped.
+#   3. If neither list matches, the posting PASSES.
+#
+# Pattern kinds:
+#   regex    — Python re pattern (case-insensitive always; do not include (?i) flags here,
+#              the loader applies re.IGNORECASE automatically)
+#   substring — case-insensitive literal string search (no regex metacharacter parsing)
+#
+# To "rescue" a filtered posting: add an allow pattern whose match covers the title,
+# then re-run the pipeline (the posting is NOT in seen_urls, so it flows normally).
+
+allow:
+  # --- Leadership titles WITH Data/ML/AI context are welcome ---
+  - pattern: "Director.*(Data Science|Machine Learning|Artificial Intelligence|AI|Analytics|Data Engineering|Data Platform|Data)"
+    kind: regex
+    note: "Director of Data Science / Director of ML / etc — very relevant"
+  - pattern: "VP.*(Data|Machine Learning|Artificial Intelligence|AI|Analytics)"
+    kind: regex
+    note: "VP of Data / VP of ML — relevant"
+  - pattern: "Vice President.*(Data|Machine Learning|AI|Analytics)"
+    kind: regex
+    note: "Vice President of Data / ML"
+  - pattern: "Head of\\s*(Data|AI|Machine Learning|Analytics|Data Science|Data Engineering)"
+    kind: regex
+    note: "Head of Data Science / Head of AI — relevant"
+  - pattern: "Chief.*\\b(Data|AI|Machine Learning|Analytics)\\b"
+    kind: regex
+    note: "Chief Data Officer / Chief AI Officer"
+
+  # --- Software / Backend Engineer WITH ML/Data/AI context ---
+  - pattern: "Software (Engineer|Developer).*(ML|Machine Learning|AI|Artificial Intelligence|Data|Research|NLP|Computer Vision)"
+    kind: regex
+    note: "Software Engineer on ML/AI team — relevant"
+  - pattern: "(ML|Machine Learning|AI|Data|Research|NLP).*(Software (Engineer|Developer))"
+    kind: regex
+    note: "ML Software Engineer / AI Software Developer — relevant"
+  - pattern: "Backend Engineer.*(Data Platform|ML|Machine Learning|AI|Data Engineering|Data)"
+    kind: regex
+    note: "Backend Engineer on Data/ML team — relevant"
+  - pattern: "Backend Developer.*(Data Platform|ML|Machine Learning|AI|Data Engineering)"
+    kind: regex
+    note: "Backend Developer on Data/ML team"
+
+  # --- Full-Stack / Frontend WITH ML/Data context ---
+  - pattern: "Full.?Stack.*(ML|Machine Learning|AI|Data|Research)"
+    kind: regex
+    note: "Full-Stack on ML/AI team — edge case but admissible"
+
+  # --- DevOps / MLOps / DataOps WITH ML/Data context ---
+  - pattern: "(MLOps|DataOps|ML Platform|Data Platform).*(Engineer|Developer|Specialist)"
+    kind: regex
+    note: "MLOps / DataOps engineer — directly relevant"
+  - pattern: "DevOps Engineer.*(ML|Machine Learning|AI|Data)"
+    kind: regex
+    note: "DevOps focused on ML infra — admissible"
+  - pattern: "Platform Engineer.*(ML|Machine Learning|AI|Data)"
+    kind: regex
+    note: "ML Platform Engineer"
+
+  # --- QA / Test WITH ML/AI context ---
+  - pattern: "QA Engineer.*(ML|Machine Learning|AI|Data)"
+    kind: regex
+    note: "QA on ML/AI product — edge case"
+
+  # --- Business Intelligence WITH advanced analytics context ---
+  - pattern: "Business Intelligence.*(Senior|Lead|Principal|Advanced|Analytics Engineer)"
+    kind: regex
+    note: "Senior BI / BI Analytics Engineer — border case"
+
+  # --- Dashboard Developer WITH data science context ---
+  - pattern: "Dashboard Developer.*(ML|Data Science|Machine Learning|AI)"
+    kind: regex
+    note: "Dashboard Dev focused on ML outputs — edge case"
+
+deny:
+  # --- Leadership / Exec titles (no ML/Data modifier matched by allow) ---
+  - pattern: "\\bDirector\\b"
+    kind: regex
+    note: "Block Director-level unless allow override matches"
+  - pattern: "\\bVP\\b"
+    kind: regex
+    note: "Block VP unless allow override matches (VP Engineering, VP Product, etc.)"
+  - pattern: "\\bVice President\\b"
+    kind: regex
+    note: "Block Vice President unless allow matches"
+  - pattern: "\\bHead of\\b"
+    kind: regex
+    note: "Block Head of X unless allow matches (Head of Data OK via allow)"
+  - pattern: "\\bChief\\b"
+    kind: regex
+    note: "Block Chief X Officer titles unless allow matches"
+
+  # --- Non-data Software Engineer / Developer variants ---
+  - pattern: "\\bSoftware (Engineer|Developer)\\b"
+    kind: regex
+    note: "Generic SWE/SWD — deny unless allow override places it in ML/Data context"
+  - pattern: "\\bSoftware Engineering\\b"
+    kind: regex
+    note: "Generic Software Engineering role"
+
+  # --- Backend / Frontend / Full-Stack without Data context ---
+  - pattern: "\\bBackend (Engineer|Developer)\\b"
+    kind: regex
+    note: "Backend Eng/Dev — deny unless allow override (Data Platform, ML)"
+  - pattern: "\\bFrontend (Engineer|Developer)\\b"
+    kind: regex
+    note: "Frontend Eng/Dev — not relevant"
+  - pattern: "\\bFull.?Stack (Engineer|Developer)\\b"
+    kind: regex
+    note: "Full-Stack — deny unless allow override shows ML/Data context"
+
+  # --- DevOps / Infrastructure without Data context ---
+  - pattern: "\\bDevOps (Engineer|Developer|Specialist)\\b"
+    kind: regex
+    note: "Generic DevOps — deny unless on ML/Data team (allow override)"
+  - pattern: "\\bSite Reliability Engineer\\b"
+    kind: regex
+    note: "SRE — not relevant"
+  - pattern: "\\bCloud (Engineer|Architect)\\b"
+    kind: regex
+    note: "Generic Cloud Engineer/Architect — not relevant"
+
+  # --- QA / Test roles ---
+  - pattern: "\\bQA (Engineer|Analyst|Tester|Specialist)\\b"
+    kind: regex
+    note: "QA roles — not relevant"
+  - pattern: "\\bQuality Assurance\\b"
+    kind: regex
+    note: "Quality Assurance roles"
+  - pattern: "\\bTest (Engineer|Automation|Developer)\\b"
+    kind: regex
+    note: "Test Engineer / Automation — not relevant"
+  - pattern: "\\bAutomation (Engineer|Developer|Tester)\\b"
+    kind: regex
+    note: "Automation Engineer/Dev — not relevant"
+  - pattern: "\\bSDET\\b"
+    kind: regex
+    note: "Software Development Engineer in Test"
+
+  # --- BI / Dashboard roles without senior/advanced qualifier ---
+  - pattern: "\\bBusiness Intelligence (Analyst|Developer|Specialist|Manager|Engineer)\\b"
+    kind: regex
+    note: "Generic BI roles — not ML/DS focused"
+  - pattern: "\\bDashboard Developer\\b"
+    kind: regex
+    note: "Dashboard dev — deny unless ML/Data context via allow"
+  - pattern: "\\bReporting (Analyst|Developer|Specialist)\\b"
+    kind: regex
+    note: "Reporting roles — not relevant"
+
+  # --- Sales / Marketing / Finance / HR ---
+  - pattern: "\\bSales (Engineer|Manager|Representative|Executive|Specialist)\\b"
+    kind: regex
+    note: "Sales roles"
+  - pattern: "\\bAccount (Executive|Manager|Representative)\\b"
+    kind: regex
+    note: "Account management"
+  - pattern: "\\bMarketing (Manager|Analyst|Specialist|Coordinator)\\b"
+    kind: regex
+    note: "Marketing roles"
+  - pattern: "\\bProduct Manager\\b"
+    kind: regex
+    note: "PM roles — not DS/ML"
+  - pattern: "\\bProject Manager\\b"
+    kind: regex
+    note: "Project management — not relevant"
+  - pattern: "\\bScrum Master\\b"
+    kind: regex
+    note: "Scrum Master"
+  - pattern: "\\bHuman Resources\\b"
+    kind: regex
+    note: "HR roles"
+  - pattern: "\\bRecruiter\\b"
+    kind: regex
+    note: "Recruiting roles"
+  - pattern: "\\bTechnical Recruiter\\b"
+    kind: regex
+    note: "Technical Recruiter"
+  - pattern: "\\bFinancial Analyst\\b"
+    kind: regex
+    note: "Finance — not ML/DS"
+
+  # --- Network / Security / Systems Engineering ---
+  - pattern: "\\bNetwork (Engineer|Administrator|Analyst)\\b"
+    kind: regex
+    note: "Network roles"
+  - pattern: "\\bSystems (Administrator|Engineer)\\b"
+    kind: regex
+    note: "SysAdmin / Systems Eng"
+  - pattern: "\\bCybersecurity\\b"
+    kind: regex
+    note: "Cybersecurity — not relevant"
+  - pattern: "\\bInformation Security\\b"
+    kind: regex
+    note: "InfoSec roles"
+  - pattern: "\\bPenetration Tester\\b"
+    kind: regex
+    note: "PenTester"

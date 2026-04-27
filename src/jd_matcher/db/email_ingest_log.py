@@ -182,6 +182,48 @@ def increment_hydration(
 
 
 # ---------------------------------------------------------------------------
+# C19 writer — mark email row as fully filtered (all postings dropped)
+# ---------------------------------------------------------------------------
+
+
+def mark_filtered(
+    *,
+    gmail_message_id: str,
+    filter_reason: str | None,
+    db_path: Path | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    """Set filter_status='filtered' and filter_reason on an email_ingest_log row.
+
+    Called ONLY when ALL postings extracted from the email were dropped by C19.
+    Partial-filter cases (some postings dropped, some passed) are NOT written here —
+    the per-run counts dict captures those via filtered_by_title.
+    """
+    own = conn is None
+    c = conn if conn is not None else _open(db_path)
+    try:
+        c.execute(
+            """
+            UPDATE email_ingest_log
+            SET filter_status = 'filtered',
+                filter_reason  = ?
+            WHERE gmail_message_id = ?
+            """,
+            (filter_reason, gmail_message_id),
+        )
+        if own:
+            c.commit()
+        logger.debug(
+            "email_ingest_log: marked filtered gmail_message_id=%s reason=%s",
+            gmail_message_id,
+            filter_reason,
+        )
+    finally:
+        if own:
+            c.close()
+
+
+# ---------------------------------------------------------------------------
 # Report query
 # ---------------------------------------------------------------------------
 

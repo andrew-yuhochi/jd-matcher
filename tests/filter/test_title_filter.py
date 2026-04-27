@@ -1,0 +1,250 @@
+"""
+Tests for C19 — Title-Based Interest Filter.
+
+Coverage:
+  - 20 should-drop titles (each matching a deny pattern with no allow override)
+  - 20 should-pass titles (legit DS/ML roles + edge cases)
+  - 10 ambiguous titles (match BOTH deny AND allow — allow wins, must PASS)
+  - Edge cases: empty title, non-English, HTML entities
+
+All 53 cases must PASS at 100%. No live network calls.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from jd_matcher.filter.title_filter import (
+    FilterDecision,
+    TitleFilters,
+    FilterPattern,
+    filter_title,
+    load_filters,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+CONFIG_PATH = Path(__file__).parents[2] / "config" / "title_filters.yaml"
+
+
+def _filters() -> TitleFilters:
+    """Load fresh filters (bypasses lru_cache by passing path explicitly)."""
+    return load_filters(CONFIG_PATH)
+
+
+# ---------------------------------------------------------------------------
+# 20 should-DROP titles (deny pattern matches, no allow override)
+# ---------------------------------------------------------------------------
+
+DENY_CASES: list[tuple[str, str]] = [
+    # (title, substring of expected matched_pattern)
+    ("Director of Engineering", "Director"),
+    ("VP of Engineering", "VP"),
+    ("Vice President of Product", "Vice President"),
+    ("Head of Engineering", "Head of"),
+    ("Chief Technology Officer", "Chief"),
+    ("Software Engineer", "Software (Engineer|Developer)"),
+    ("Senior Software Developer", "Software (Engineer|Developer)"),
+    ("Software Engineering Manager", "Software Engineering"),
+    ("Backend Engineer", "Backend (Engineer|Developer)"),
+    ("Backend Developer", "Backend (Engineer|Developer)"),
+    ("Frontend Engineer", "Frontend (Engineer|Developer)"),
+    ("Frontend Developer", "Frontend (Engineer|Developer)"),
+    ("Full Stack Engineer", "Full.?Stack (Engineer|Developer)"),
+    ("Full-Stack Developer", "Full.?Stack (Engineer|Developer)"),
+    ("DevOps Engineer", "DevOps (Engineer|Developer|Specialist)"),
+    ("QA Engineer", "QA (Engineer|Analyst|Tester|Specialist)"),
+    ("Business Intelligence Analyst", "Business Intelligence"),
+    ("Dashboard Developer", "Dashboard Developer"),
+    ("Site Reliability Engineer", "Site Reliability Engineer"),
+    ("Systems Administrator", "Systems (Administrator|Engineer)"),
+]
+
+
+@pytest.mark.parametrize("title,pattern_substr", DENY_CASES)
+def test_should_drop(title: str, pattern_substr: str) -> None:
+    decision = filter_title(title, filters=_filters())
+    assert decision.action == "drop", (
+        f"Expected DROP for {title!r}, got PASS "
+        f"(matched_pattern={decision.matched_pattern!r})"
+    )
+    assert decision.matched_pattern is not None
+
+
+# ---------------------------------------------------------------------------
+# 20 should-PASS titles (legit DS/ML roles)
+# ---------------------------------------------------------------------------
+
+PASS_CASES: list[str] = [
+    "Senior Data Scientist",
+    "Staff Machine Learning Engineer",
+    "Principal Data Engineer",
+    "Data Analyst",
+    "Machine Learning Researcher",
+    "Applied Scientist",
+    "NLP Engineer",
+    "Computer Vision Engineer",
+    "AI Research Scientist",
+    "Data Platform Engineer",
+    "MLOps Engineer",
+    "Analytics Engineer",
+    "Quantitative Analyst",
+    "Research Scientist",
+    "ML Infrastructure Engineer",
+    "Deep Learning Engineer",
+    "Data Science Manager",
+    "Lead Data Scientist",
+    "Senior Analytics Engineer",
+    "Statistician",
+]
+
+
+@pytest.mark.parametrize("title", PASS_CASES)
+def test_should_pass(title: str) -> None:
+    decision = filter_title(title, filters=_filters())
+    assert decision.action == "pass", (
+        f"Expected PASS for {title!r}, got DROP "
+        f"(matched_pattern={decision.matched_pattern!r}, reason={decision.reason!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10 ambiguous titles — match BOTH a deny pattern AND an allow override.
+# Allow wins → must PASS.
+# ---------------------------------------------------------------------------
+
+AMBIGUOUS_CASES: list[str] = [
+    "Director of Data Science",                   # deny: Director; allow: Director.*Data Science
+    "VP of Machine Learning",                     # deny: VP; allow: VP.*Machine Learning
+    "Head of AI",                                 # deny: Head of; allow: Head of.*AI
+    "Chief Data Officer",                         # deny: Chief; allow: Chief.*Data
+    "Software Engineer (ML)",                     # deny: Software Engineer; allow: Software Engineer.*ML
+    "Software Engineer, Machine Learning",        # deny: Software Engineer; allow: Software Engineer.*Machine Learning
+    "Backend Engineer, Data Platform",            # deny: Backend Engineer; allow: Backend Engineer.*Data Platform
+    "Director of Machine Learning",               # deny: Director; allow: Director.*Machine Learning
+    "Vice President of Analytics",                # deny: Vice President; allow: Vice President.*Analytics
+    "DevOps Engineer (ML Infrastructure)",        # deny: DevOps Engineer; allow: DevOps Engineer.*ML
+]
+
+
+@pytest.mark.parametrize("title", AMBIGUOUS_CASES)
+def test_ambiguous_allow_wins(title: str) -> None:
+    decision = filter_title(title, filters=_filters())
+    assert decision.action == "pass", (
+        f"Expected PASS (allow override) for ambiguous title {title!r}, "
+        f"got DROP (matched_pattern={decision.matched_pattern!r})"
+    )
+    # Allow override always sets matched_pattern
+    assert decision.matched_pattern is not None, (
+        f"Allow-override pass should set matched_pattern for {title!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_empty_title_passes() -> None:
+    decision = filter_title("", filters=_filters())
+    assert decision.action == "pass"
+    assert decision.reason == "empty title"
+
+
+def test_whitespace_only_title_passes() -> None:
+    decision = filter_title("   ", filters=_filters())
+    assert decision.action == "pass"
+    assert decision.reason == "empty title"
+
+
+def test_non_english_title_passes() -> None:
+    # Chinese characters — no deny pattern should match
+    decision = filter_title("数据科学家", filters=_filters())
+    assert decision.action == "pass"
+
+
+def test_html_entity_decoded_before_match() -> None:
+    # "&amp;" decoded to "&" before matching — pattern for "Data & Analytics" style
+    # This title has no deny match regardless, so it must PASS; key invariant is
+    # that decoding happens and doesn't crash.
+    decision = filter_title("Data &amp; Analytics Engineer", filters=_filters())
+    assert decision.action == "pass"
+
+
+def test_html_entity_in_denied_title() -> None:
+    # "Director" with an HTML entity in surrounding text — still DROP
+    decision = filter_title("Director of Engineering &amp; Operations", filters=_filters())
+    assert decision.action == "drop"
+
+
+# ---------------------------------------------------------------------------
+# FilterDecision model shape
+# ---------------------------------------------------------------------------
+
+
+def test_filter_decision_pass_shape() -> None:
+    decision = filter_title("Senior Data Scientist", filters=_filters())
+    assert isinstance(decision, FilterDecision)
+    assert decision.action == "pass"
+
+
+def test_filter_decision_drop_shape() -> None:
+    decision = filter_title("Director of Engineering", filters=_filters())
+    assert isinstance(decision, FilterDecision)
+    assert decision.action == "drop"
+    assert decision.matched_pattern is not None
+    assert decision.reason is not None
+
+
+# ---------------------------------------------------------------------------
+# Allow-first ordering invariant (unit test with synthetic config)
+# ---------------------------------------------------------------------------
+
+
+def test_allow_checked_before_deny() -> None:
+    """If the same pattern appears in both allow and deny lists, allow wins."""
+    cfg = TitleFilters(
+        allow=[FilterPattern(pattern="\\bFoo\\b", kind="regex", note="allow foo")],
+        deny=[FilterPattern(pattern="\\bFoo\\b", kind="regex", note="deny foo")],
+    )
+    decision = filter_title("Foo Engineer", filters=cfg)
+    assert decision.action == "pass", "Allow-first ordering violated"
+
+
+# ---------------------------------------------------------------------------
+# Substring kind matching
+# ---------------------------------------------------------------------------
+
+
+def test_substring_kind_matches_case_insensitively() -> None:
+    cfg = TitleFilters(
+        allow=[],
+        deny=[FilterPattern(pattern="bar baz", kind="substring", note="test")],
+    )
+    assert filter_title("Senior Bar Baz Manager", filters=cfg).action == "drop"
+    assert filter_title("BAR BAZ lead", filters=cfg).action == "drop"
+    assert filter_title("no match here", filters=cfg).action == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Config loading
+# ---------------------------------------------------------------------------
+
+
+def test_load_filters_returns_title_filters() -> None:
+    filters = load_filters(CONFIG_PATH)
+    assert isinstance(filters, TitleFilters)
+    assert len(filters.deny) > 0
+    assert len(filters.allow) > 0
+
+
+def test_filters_have_required_fields() -> None:
+    filters = load_filters(CONFIG_PATH)
+    for p in filters.deny + filters.allow:
+        assert p.kind in ("regex", "substring")
+        assert isinstance(p.pattern, str)
+        assert len(p.pattern) > 0

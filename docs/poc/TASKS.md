@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 2 | 16 |
+| Done | 3 | 17 |
 | In Progress | 0 | 0 |
-| To Do | 11 | 11 |
+| To Do | 10 | 10 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -112,7 +112,7 @@
 
 ##### TASK-M2-003 — Title-Based Interest Filter (C19) + config/title_filters.yaml
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C19 (Title-Based Interest Filter) — TDD §C19
@@ -128,12 +128,12 @@
 - **Demo Artifact**: `python -m jd_matcher.filter.title_filter --title "Director of Engineering"` returns drop decision with matched pattern; `--title "Senior Data Scientist"` returns pass.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-003.md`
 - **Acceptance Criteria**:
-  - [ ] `config/title_filters.yaml` with default `deny_patterns` (Director|VP|Head of|Chief, Software Engineer/Developer without DS/ML adjacent, Dashboard Developer, Business Intelligence, QA/DevOps/Frontend/Backend Engineer without Data context) and `allow_patterns` (escape hatch, e.g., "Director.*Data Science")
-  - [ ] `filter_title(title)` returns `FilterDecision {action: pass|drop, matched_pattern, reason}`
-  - [ ] Filter applied between C4 and C5 in pipeline; filtered postings recorded in `email_ingest_log` with `filter_status='filtered'` and `filter_reason` set
-  - [ ] Filtered postings NEVER reach hydration, LLM extraction, embedding, or dedup
-  - [ ] 100% on synthetic test fixtures (20 deny-matching titles, 20 allow-matching titles, 10 ambiguous)
-  - [ ] No live network calls in test path
+  - [x] `config/title_filters.yaml` with default `deny_patterns` (Director|VP|Head of|Chief, Software Engineer/Developer without DS/ML adjacent, Dashboard Developer, Business Intelligence, QA/DevOps/Frontend/Backend Engineer without Data context) and `allow_patterns` (escape hatch, e.g., "Director.*Data Science")
+  - [x] `filter_title(title)` returns `FilterDecision {action: pass|drop, matched_pattern, reason}`
+  - [x] Filter applied between C4 and C5 in pipeline; filtered postings recorded in `email_ingest_log` with `filter_status='filtered'` and `filter_reason` set
+  - [x] Filtered postings NEVER reach hydration, LLM extraction, embedding, or dedup
+  - [x] 100% on synthetic test fixtures (20 deny-matching titles, 20 allow-matching titles, 10 ambiguous)
+  - [x] No live network calls in test path
 
 ---
 

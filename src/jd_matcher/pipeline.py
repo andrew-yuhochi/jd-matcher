@@ -31,7 +31,8 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from jd_matcher.db.email_ingest_log import increment_hydration, update_url_counts
+from jd_matcher.db.email_ingest_log import increment_hydration, mark_filtered, update_url_counts
+from jd_matcher.filter.title_filter import filter_title
 from jd_matcher.db.init_db import init_db
 from jd_matcher.dedup.url_dedup import register_new
 from jd_matcher.hydrate import compute_source_health
@@ -72,6 +73,7 @@ class SourceResult:
     failure_reason: Optional[str] = None
     new_postings: int = 0
     hydrated: int = 0
+    filtered_count: int = 0
     # All postings parsed during the Gmail phase; each carries its own gmail_message_id.
     postings: list[ParsedPosting] = field(default_factory=list)
 
@@ -265,6 +267,7 @@ def _run_gmail_source(
 
         new_urls: list[str] = []
         parsed_postings: list[ParsedPosting] = []
+        run_filtered_total = 0
         parser = parse_linkedin if sender == "linkedin" else parse_indeed
         conn = sqlite3.connect(resolved_db)
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -275,12 +278,43 @@ def _run_gmail_source(
                 urls_extracted = len(postings)
                 urls_new = 0
                 urls_created = 0
+                urls_filtered = 0
+                drop_reasons: list[str] = []
+
                 for posting in postings:
+                    # C19: title filter — checked BEFORE register_new / seen_urls write.
+                    decision = filter_title(posting.title)
+                    if decision.action == "drop":
+                        urls_filtered += 1
+                        run_filtered_total += 1
+                        if decision.matched_pattern:
+                            drop_reasons.append(decision.matched_pattern)
+                        # Short-circuit: no register_new, no seen_urls write, no hydration.
+                        continue
+
                     outcome, _ = register_new(posting, conn=conn, db_path=resolved_db)
                     if outcome == "new":
                         new_urls.append(posting.url)
                         urls_new += 1
                         urls_created += 1
+
+                # C19 telemetry: only set filter_status='filtered' on the email row
+                # when EVERY posting from this email was dropped (Option C semantics).
+                # Partial-filter emails rely on the run-level filtered_by_title count.
+                if urls_extracted > 0 and urls_filtered == urls_extracted:
+                    try:
+                        mark_filtered(
+                            gmail_message_id=raw_email.id,
+                            filter_reason=", ".join(drop_reasons) if drop_reasons else None,
+                            db_path=resolved_db,
+                            conn=conn,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "C19 mark_filtered failed for gmail_message_id=%s",
+                            raw_email.id,
+                            exc_info=True,
+                        )
 
                 # C4 writer hook — update URL counts for this email's row.
                 try:
@@ -326,6 +360,7 @@ def _run_gmail_source(
                 "source": source_name,
                 "emails_fetched": len(emails),
                 "new_postings": len(new_urls),
+                "filtered_by_title": run_filtered_total,
                 "duration_ms": int((finished_at - started_at).total_seconds() * 1000),
             })
         )
@@ -334,6 +369,7 @@ def _run_gmail_source(
             source=source_name,
             health_status="healthy",
             new_postings=len(new_urls),
+            filtered_count=run_filtered_total,
             postings=parsed_postings,
         )
 
