@@ -134,3 +134,43 @@ Confirmed absent from `_card.html`. The template renders exactly:
 - Expanded body (hidden until `e` pressed)
 
 No tag chips, salary fields, or CV chips rendered. Per TDD §C9 and UX-SPEC §1 explicit absence.
+
+---
+
+## Real-data validation findings — second pass (fix-forward on top of bf501d5) — credentials propagation + error propagation
+
+**Date**: 2026-04-26
+**Commit**: see git log
+
+### Bug 3 (Fix 1) — /sync endpoint not loading OAuth credentials
+
+Root cause: `routes.py /sync` called `run_pipeline()` with no `credentials` argument (defaults to `None`). The orchestrator passed `None` to `GmailIngester`, which deferred credential loading to the Google library's Application Default Credentials — failing silently because Bug 2's fix (bf501d5) had removed the `pipeline_runs failed` write path for orchestrator-driven calls.
+
+Fix: `/sync` now loads credentials via `get_credentials()` (same pattern as the CLI `__main__.py`) before calling `run_pipeline`. Returns 503 if `credentials.json` is missing; 401 if token is invalid.
+
+`SKIP_LIVE=1` check is wired first — test mode skips credential loading entirely, preserving existing test behavior.
+
+### Bug 4 (Fix 2) — GmailIngester swallowing exceptions when called by orchestrator
+
+Root cause: the `except` branch in `fetch_for_sender` always returned `[]` regardless of whether `canonical_run_id` was set. After Bug 2's fix correctly skipped the internal `pipeline_runs` write, this meant: exception raised inside → logged but swallowed → orchestrator sees `emails=[]`, no exception → writes `pipeline_runs healthy`. End result: every web-triggered sync with bad credentials reported "healthy with 0 new postings."
+
+Fix: when `canonical_run_id is not None` (orchestrator-driven call), the `except` branch now re-raises. The orchestrator's existing `try/except` in `_run_gmail_source` catches it and writes the canonical `failed` row.
+
+### Orphan rows decision — INSERT OR REPLACE
+
+The diagnostic test earlier today inserted 54 rows into `email_ingest_log` with `pipeline_run_id="manual-db1051e4-..."`. With `INSERT OR IGNORE`, these would persist forever attributed to that manual run — the report CLI for the next real sync would not show those 54 emails.
+
+Decision: changed `insert_email_log` to `INSERT OR REPLACE`. On the next real sync, the same 54 `gmail_message_id` values will update their rows to the new orchestrator `run_id` and `ingested_at`. The report CLI will correctly attribute them to the latest run.
+
+Trade-off acknowledged: `INSERT OR REPLACE` resets URL/hydration counter columns to 0 on replace (SQLite REPLACE = DELETE + INSERT). Those counters are re-written by the C4 and C5 hooks immediately after, so the final state is correct. Only a very narrow race (crash between INSERT and C4 write) would leave counters at 0, and that's acceptable at PoC scale.
+
+### Test counts
+
+- Before: 397 passed, 19 skipped
+- After: 402 passed, 19 skipped, 0 failed
+- New tests added:
+  - `test_post_sync_skip_live_no_credentials_needed` — /sync with SKIP_LIVE=1 passes credentials=None
+  - `test_post_sync_missing_client_secrets_returns_503` — /sync without credentials.json → 503
+  - `test_fetch_failure_writes_failed_pipeline_runs` — orchestrator exception → failed pipeline_runs rows
+  - `test_fetch_failure_summary_shows_zero_new_postings` — exception → total_new_postings==0, failed_sources non-empty
+  - `test_resync_updates_pipeline_run_id` — INSERT OR REPLACE semantics verified

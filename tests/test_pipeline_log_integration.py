@@ -456,3 +456,139 @@ class TestDuplicateUrlAcrossEmailsOptionA:
             f"msg-dup-002 must not receive hydration credit (first-email-wins), "
             f"got {row_002['postings_hydrated_count']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Credential-failure error propagation tests
+# ---------------------------------------------------------------------------
+
+
+class TestCredentialFailurePropagation:
+    """REGRESSION (credential bug): when GmailIngester raises during orchestrator-driven
+    ingestion, _run_gmail_source must write pipeline_runs 'failed' rows — not silently
+    succeed with 0 new postings.
+
+    We simulate the credential failure by patching _fetch_from_gmail to raise a
+    RuntimeError (avoids depending on SKIP_LIVE state — the fixture path branches
+    before _fetch_from_gmail is called, so patching at that level is the stable
+    injection point).
+    """
+
+    def test_fetch_failure_writes_failed_pipeline_runs(
+        self,
+        test_db: Path,
+        logs_dir: Path,
+    ) -> None:
+        """Simulated Gmail fetch error → pipeline_runs has 'failed' rows for both gmail sources."""
+        with patch(
+            "jd_matcher.ingest.gmail.GmailIngester._fetch_from_gmail",
+            side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
+        ), patch(
+            "jd_matcher.ingest.gmail.GmailIngester._fetch_from_fixtures",
+            side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
+        ):
+            summary = run_pipeline(db_path=test_db, credentials=None)
+
+        # Both gmail sources should be in failed_sources
+        assert "gmail_linkedin" in summary.failed_sources, (
+            f"Expected gmail_linkedin in failed_sources, got {summary.failed_sources}"
+        )
+        assert "gmail_indeed" in summary.failed_sources, (
+            f"Expected gmail_indeed in failed_sources, got {summary.failed_sources}"
+        )
+
+        conn = sqlite3.connect(test_db)
+        try:
+            rows = conn.execute(
+                """
+                SELECT source, health_status, failure_reason
+                FROM pipeline_runs
+                WHERE source IN ('gmail_linkedin', 'gmail_indeed')
+                ORDER BY source
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert len(rows) == 2, f"Expected 2 pipeline_runs rows for gmail sources, got {len(rows)}"
+        for source, health_status, failure_reason in rows:
+            assert health_status == "failed", (
+                f"{source}: expected health_status='failed', got {health_status!r}"
+            )
+            assert failure_reason is not None, (
+                f"{source}: failure_reason must be non-null, got None"
+            )
+            assert "RuntimeError" in failure_reason or "credentials" in failure_reason.lower(), (
+                f"{source}: failure_reason should mention the error, got {failure_reason!r}"
+            )
+
+    def test_fetch_failure_summary_shows_zero_new_postings(
+        self,
+        test_db: Path,
+        logs_dir: Path,
+    ) -> None:
+        """Simulated Gmail fetch error → total_new_postings == 0 AND failed_sources non-empty."""
+        with patch(
+            "jd_matcher.ingest.gmail.GmailIngester._fetch_from_gmail",
+            side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
+        ), patch(
+            "jd_matcher.ingest.gmail.GmailIngester._fetch_from_fixtures",
+            side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
+        ):
+            summary = run_pipeline(db_path=test_db, credentials=None)
+
+        assert summary.total_new_postings == 0
+        assert len(summary.failed_sources) >= 2
+
+
+class TestInsertEmailLogConflict:
+    """Verify INSERT OR REPLACE semantics: re-syncing the same gmail_message_id
+    updates pipeline_run_id to the new run (orphan-row fix).
+    """
+
+    def test_resync_updates_pipeline_run_id(self, test_db: Path) -> None:
+        """Insert a row with run_id='A', then insert again with the same gmail_message_id
+        and run_id='B' → final pipeline_run_id should be 'B'.
+        """
+        from jd_matcher.db.email_ingest_log import insert_email_log
+        from datetime import datetime, timezone
+
+        received = datetime(2026, 4, 25, 10, 0, 0, tzinfo=timezone.utc)
+
+        insert_email_log(
+            gmail_message_id="msg-conflict-001",
+            source="linkedin",
+            sender="jobalerts-noreply@linkedin.com",
+            subject="Test subject",
+            received_at=received,
+            pipeline_run_id="run-A",
+            db_path=test_db,
+        )
+        insert_email_log(
+            gmail_message_id="msg-conflict-001",
+            source="linkedin",
+            sender="jobalerts-noreply@linkedin.com",
+            subject="Test subject",
+            received_at=received,
+            pipeline_run_id="run-B",
+            db_path=test_db,
+        )
+
+        conn = sqlite3.connect(test_db)
+        try:
+            row = conn.execute(
+                "SELECT pipeline_run_id FROM email_ingest_log WHERE gmail_message_id = ?",
+                ("msg-conflict-001",),
+            ).fetchone()
+            count = conn.execute(
+                "SELECT count(*) FROM email_ingest_log WHERE gmail_message_id = ?",
+                ("msg-conflict-001",),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+        assert count == 1, f"Expected 1 row after REPLACE, got {count}"
+        assert row[0] == "run-B", (
+            f"Expected pipeline_run_id='run-B' after re-sync, got {row[0]!r}. "
+            "INSERT OR REPLACE is not working — orphan rows will persist."
+        )

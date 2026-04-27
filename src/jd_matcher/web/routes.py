@@ -344,8 +344,40 @@ async def sync(request: Request) -> JSONResponse:
     from jd_matcher.pipeline import run_pipeline
 
     db_path = _get_db_path()
+
+    credentials = None
+    skip_live = os.environ.get("SKIP_LIVE") == "1"
+    if not skip_live:
+        from jd_matcher.auth.gmail_oauth import OAuthTokenInvalid, get_credentials
+
+        client_path = Path(
+            os.environ.get(
+                "GMAIL_OAUTH_CLIENT_PATH",
+                Path.home() / ".jd-matcher" / "credentials.json",
+            )
+        )
+        token_path = Path.home() / ".jd-matcher" / "tokens.json"
+
+        if not client_path.exists():
+            return JSONResponse(
+                {
+                    "error": (
+                        "OAuth client secrets not found. "
+                        "Run `python -m jd_matcher.auth` first."
+                    )
+                },
+                status_code=503,
+            )
+        try:
+            credentials = get_credentials(client_path, token_path)
+        except OAuthTokenInvalid as exc:
+            return JSONResponse(
+                {"error": f"OAuth token invalid — re-authenticate: {exc}"},
+                status_code=401,
+            )
+
     try:
-        summary = run_pipeline(db_path=db_path)
+        summary = run_pipeline(db_path=db_path, credentials=credentials)
         return JSONResponse(
             {
                 "run_id": summary.run_id,

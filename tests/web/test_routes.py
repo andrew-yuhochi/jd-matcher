@@ -233,6 +233,51 @@ def test_post_sync_returns_pipeline_summary(client: TestClient) -> None:
     assert "finished_at" in body
 
 
+def test_post_sync_skip_live_no_credentials_needed(client: TestClient) -> None:
+    """POST /sync with SKIP_LIVE=1 skips OAuth loading and calls run_pipeline(credentials=None)."""
+    from jd_matcher.pipeline import PipelineRunSummary, SourceResult
+
+    fake_summary = PipelineRunSummary(
+        run_id="skip-live-run",
+        started_at=datetime(2026, 4, 25, 10, 0, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 4, 25, 10, 0, 5, tzinfo=timezone.utc),
+        sources=[],
+        steps=[],
+        total_new_postings=0,
+    )
+
+    with (
+        mock.patch.dict(os.environ, {"SKIP_LIVE": "1"}),
+        mock.patch("jd_matcher.pipeline.run_pipeline", return_value=fake_summary) as mock_run,
+    ):
+        resp = client.post("/sync")
+
+    assert resp.status_code == 200
+    # Confirm run_pipeline was called with credentials=None (no OAuth attempted)
+    mock_run.assert_called_once()
+    _, kwargs = mock_run.call_args
+    assert kwargs.get("credentials") is None
+
+
+def test_post_sync_missing_client_secrets_returns_503(
+    seeded_db: Path, tmp_path: Path
+) -> None:
+    """POST /sync without SKIP_LIVE and without credentials.json → 503."""
+    missing_path = tmp_path / "nonexistent_credentials.json"
+    with (
+        mock.patch.dict(
+            os.environ,
+            {"SKIP_LIVE": "0", "GMAIL_OAUTH_CLIENT_PATH": str(missing_path)},
+        ),
+    ):
+        test_client = TestClient(app, raise_server_exceptions=True)
+        resp = test_client.post("/sync")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert "OAuth client secrets not found" in body["error"]
+
+
 # ---------------------------------------------------------------------------
 # AC #2 — /api/source-health returns 4 entries with correct schema
 # ---------------------------------------------------------------------------

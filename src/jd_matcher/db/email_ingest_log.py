@@ -45,8 +45,11 @@ def insert_email_log(
 ) -> None:
     """Insert one row into email_ingest_log for a newly fetched email.
 
-    Uses INSERT OR IGNORE so re-ingesting the same message in the same run
-    (e.g. fixture replay) is idempotent without raising on the UNIQUE constraint.
+    Uses INSERT OR REPLACE so re-syncing the same Gmail message updates the row's
+    pipeline_run_id and ingested_at to the most-recent orchestrator run.  This
+    prevents orphan rows (from diagnostic or manual fetches) from permanently
+    attributing an email to a stale run_id — the report always shows the latest
+    sync's emails.
     """
     own = conn is None
     c = conn if conn is not None else _open(db_path)
@@ -54,7 +57,7 @@ def insert_email_log(
     try:
         c.execute(
             """
-            INSERT OR IGNORE INTO email_ingest_log
+            INSERT OR REPLACE INTO email_ingest_log
                 (gmail_message_id, source, sender, subject, received_at,
                  ingested_at, pipeline_run_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)

@@ -158,8 +158,8 @@ class GmailIngester:
             )
 
             if canonical_run_id is None:
-                # Carry forward the most recent successful fetch timestamp so the
-                # UI sub-bar can render a stale indicator with a known last-good time.
+                # Stand-alone CLI use case: write our own failed pipeline_runs row
+                # and carry forward the last-good timestamp for the UI stale indicator.
                 last_successful = self._last_successful_fetch_at(source_name)
 
                 self._write_pipeline_run(
@@ -171,7 +171,12 @@ class GmailIngester:
                     finished_at=finished_at,
                     last_successful_fetch_at=last_successful,
                 )
-            return []
+                return []
+            else:
+                # Orchestrator-driven: re-raise so the orchestrator's try/except writes
+                # the canonical failed pipeline_runs row. Returning [] silently would
+                # make the orchestrator believe everything succeeded with 0 emails.
+                raise
 
     # ------------------------------------------------------------------
     # Gmail API path
