@@ -312,7 +312,7 @@ document.addEventListener("keydown", function (e) {
       break;
 
     case "e":
-      if (focusedCard && !isDismissedTab) {
+      if (focusedCard) {
         const expanded = focusedCard.classList.toggle("expanded");
         const pid = parseInt(focusedCard.dataset.postingId, 10);
         emitEvent("card_expanded", pid, { expanded: expanded });
@@ -332,7 +332,7 @@ document.addEventListener("keydown", function (e) {
       break;
 
     case "o":
-      if (focusedCard && !isDismissedTab) {
+      if (focusedCard) {
         const link = focusedCard.querySelector(".card-apply-link");
         if (link) window.open(link.href, "_blank", "noopener,noreferrer");
         // no-op if no URL present

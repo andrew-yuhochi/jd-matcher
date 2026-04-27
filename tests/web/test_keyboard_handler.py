@@ -212,6 +212,47 @@ def test_app_js_no_close_button_added_to_badges() -> None:
             )
 
 
+def test_e_shortcut_not_guarded_by_dismissed_tab() -> None:
+    """e (expand) must work on Dismissed tab — no isDismissedTab guard."""
+    src = _js_source()
+    # Locate the 'e' case block
+    match = re.search(r'case "e":(.*?)break;', src, re.DOTALL)
+    assert match, "app.js missing 'e' case block"
+    assert "isDismissedTab" not in match.group(1), (
+        "e shortcut must NOT contain isDismissedTab guard (should work on Dismissed tab)"
+    )
+
+
+def test_o_shortcut_not_guarded_by_dismissed_tab() -> None:
+    """o (open URL) must work on Dismissed tab — no isDismissedTab guard."""
+    src = _js_source()
+    match = re.search(r'case "o":(.*?)break;', src, re.DOTALL)
+    assert match, "app.js missing 'o' case block"
+    assert "isDismissedTab" not in match.group(1), (
+        "o shortcut must NOT contain isDismissedTab guard (should work on Dismissed tab)"
+    )
+
+
+def test_d_shortcut_still_guarded_by_dismissed_tab() -> None:
+    """d (dismiss) must remain disabled on Dismissed tab."""
+    src = _js_source()
+    match = re.search(r'case "d":(.*?)break;', src, re.DOTALL)
+    assert match, "app.js missing 'd' case block"
+    assert "isDismissedTab" in match.group(1), (
+        "d shortcut MUST contain isDismissedTab guard (already dismissed; no-op on that tab)"
+    )
+
+
+def test_a_shortcut_still_guarded_by_dismissed_tab() -> None:
+    """a (apply) must remain disabled on Dismissed tab — restore-first per state model."""
+    src = _js_source()
+    match = re.search(r'case "a":(.*?)break;', src, re.DOTALL)
+    assert match, "app.js missing 'a' case block"
+    assert "isDismissedTab" in match.group(1), (
+        "a shortcut MUST contain isDismissedTab guard (restore-first per state model)"
+    )
+
+
 def test_app_js_uses_intersection_observer() -> None:
     src = _js_source()
     assert "IntersectionObserver" in src, (
