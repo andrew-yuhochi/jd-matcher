@@ -162,3 +162,98 @@ CREATE TABLE IF NOT EXISTS email_ingest_log (
 
 CREATE INDEX IF NOT EXISTS idx_email_ingest_log_run      ON email_ingest_log (pipeline_run_id);
 CREATE INDEX IF NOT EXISTS idx_email_ingest_log_received ON email_ingest_log (received_at);
+-- NOTE: idx_email_ingest_log_filter is created in init_db.py AFTER the
+-- filter_status column is added via ALTER TABLE (schema.sql runs before the
+-- ALTER, so the index must be deferred to the Python helper).
+
+-- =========================================================================
+-- M2 ADDITIONS — content-aware dedup + repost detection + title pre-filter
+-- =========================================================================
+
+-- -------------------------------------------------------------------------
+-- canonical_postings — one row per merged "canonical job" (M2).
+-- The unit a card represents on Main from M2 forward; posting_canonical_links
+-- many-to-one maps source variants onto a canonical.
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS canonical_postings (
+    canonical_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
+    canonical_title     TEXT NOT NULL,
+    canonical_company   TEXT NOT NULL,
+    canonical_seniority TEXT NOT NULL,
+    canonical_location  TEXT NOT NULL,
+    team_or_department  TEXT NULL,
+    top_skills          JSON NOT NULL,      -- list[str]; LLM-extracted; ordered by salience
+    role_summary        TEXT NOT NULL,      -- ~3-4 sentence neutral summary; the embedding source
+    full_jd             TEXT NOT NULL,      -- longer of merged variants
+    full_jd_provenance  JSON NOT NULL,      -- {"chosen_from_posting_id": <id>, "source": "linkedin|indeed|..."}
+    first_seen          TIMESTAMP NOT NULL, -- earliest first_seen across all linked postings
+    last_seen           TIMESTAMP NOT NULL, -- max last_seen across all linked postings
+    sources_summary     JSON NOT NULL,      -- denormalised list e.g. ["linkedin", "indeed"]
+    created_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- C21 BLOCK key: "same TEAM?"; seniority moved to FUSE
+CREATE INDEX IF NOT EXISTS idx_canonical_user_block      ON canonical_postings (user_id, canonical_company, team_or_department, canonical_location);
+CREATE INDEX IF NOT EXISTS idx_canonical_user_first_seen ON canonical_postings (user_id, first_seen DESC);
+
+-- -------------------------------------------------------------------------
+-- posting_canonical_links — many-to-one mapping postings → canonical_postings.
+-- Append-only; a row is inserted whenever C21 returns merge or creates a new
+-- canonical. UNIQUE(user_id, posting_id) enforces one canonical per posting.
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS posting_canonical_links (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
+    posting_id       TEXT NOT NULL,    -- → postings.id
+    canonical_id     INTEGER NOT NULL, -- → canonical_postings.canonical_id
+    similarity_score REAL NOT NULL,    -- fused score from C21; 1.0 for the seed posting
+    merge_kind       TEXT NOT NULL,    -- 'new_canonical' | 'content_dedup' | 'repost'
+    merged_at        TIMESTAMP NOT NULL,
+    UNIQUE (user_id, posting_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_links_canonical ON posting_canonical_links (canonical_id);
+CREATE INDEX IF NOT EXISTS idx_links_posting   ON posting_canonical_links (posting_id);
+CREATE INDEX IF NOT EXISTS idx_links_repost    ON posting_canonical_links (canonical_id, merge_kind);
+
+-- -------------------------------------------------------------------------
+-- posting_embeddings — embedding vectors keyed per posting (M2).
+-- Replaces the inline postings.embedding BLOB column (never written in M1).
+-- Cached: reused across runs if text_hash matches (skip-on-unchanged).
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS posting_embeddings (
+    posting_id      TEXT PRIMARY KEY,   -- → postings.id
+    user_id         TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
+    text_source     TEXT NOT NULL,      -- 'role_summary' (preferred) | 'full_jd' (fallback)
+    text_hash       TEXT NOT NULL,      -- SHA-256 of source text — cache key
+    embedding       BLOB NOT NULL,      -- packed float32 vector
+    embedding_dim   INTEGER NOT NULL,   -- vector length; cross-validated against model_name on read
+    model_name      TEXT NOT NULL,      -- 'text-embedding-3-small' | 'all-MiniLM-L6-v2' | ...
+    embedded_at     TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_embeddings_user_model ON posting_embeddings (user_id, model_name);
+
+-- -------------------------------------------------------------------------
+-- llm_call_ledger — per-call cost + latency log for cloud LLM/embedding calls.
+-- Load-bearing: the cloud-vs-local benchmark sub-task at M3 reads this table.
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS llm_call_ledger (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
+    provider      TEXT NOT NULL,            -- 'openai' | 'ollama' | 'sentence_transformers'
+    model_name    TEXT NOT NULL,            -- e.g. 'gpt-4o-mini' | 'text-embedding-3-small'
+    call_kind     TEXT NOT NULL,            -- 'extraction' | 'embedding'
+    input_tokens  INTEGER NULL,             -- NULL for local providers without token counts
+    output_tokens INTEGER NULL,
+    cost_usd      REAL NOT NULL DEFAULT 0.0, -- 0.0 for local; computed for cloud
+    latency_ms    INTEGER NOT NULL,
+    posting_id    TEXT NULL,                -- → postings.id; NULL for batch/system calls
+    called_at     TIMESTAMP NOT NULL,
+    status        TEXT NOT NULL            -- 'success' | 'retry' | 'failure'
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_user_called ON llm_call_ledger (user_id, called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ledger_user_kind   ON llm_call_ledger (user_id, call_kind, model_name);

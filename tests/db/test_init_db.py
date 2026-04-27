@@ -22,6 +22,11 @@ ALL_TABLES = {
     "events",
     "pipeline_runs",
     "email_ingest_log",
+    # M2 additions
+    "canonical_postings",
+    "posting_canonical_links",
+    "posting_embeddings",
+    "llm_call_ledger",
 }
 
 
@@ -45,7 +50,7 @@ def test_init_db_creates_database(tmp_path):
     assert db_path.exists()
 
 
-def test_init_db_creates_all_8_tables(tmp_db):
+def test_init_db_creates_all_tables(tmp_db):
     conn = sqlite3.connect(tmp_db)
     try:
         rows = conn.execute(

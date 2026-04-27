@@ -16,6 +16,26 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 
 
+def _ensure_email_ingest_log_filter_columns(conn: sqlite3.Connection) -> None:
+    """Add filter_status / filter_reason columns + their index to email_ingest_log if absent.
+
+    SQLite has no ADD COLUMN IF NOT EXISTS syntax, so we inspect PRAGMA
+    table_info before issuing each ALTER TABLE to keep init_db() idempotent.
+    The index on filter_status is also created here (not in schema.sql) because
+    executescript runs before the ALTER, so the column doesn't exist yet when
+    schema.sql is executed on a fresh DB.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(email_ingest_log);")}
+    if "filter_status" not in existing:
+        conn.execute("ALTER TABLE email_ingest_log ADD COLUMN filter_status TEXT NULL;")
+    if "filter_reason" not in existing:
+        conn.execute("ALTER TABLE email_ingest_log ADD COLUMN filter_reason TEXT NULL;")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_email_ingest_log_filter "
+        "ON email_ingest_log (filter_status);"
+    )
+
+
 def init_db(db_path: Path | None = None) -> None:
     """Create the database and apply schema.sql if it has not been applied yet.
 
@@ -43,6 +63,9 @@ def init_db(db_path: Path | None = None) -> None:
         # every connection so constraints are actually checked at runtime.
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.executescript(schema_sql)
+        # ALTER TABLE statements cannot use IF NOT EXISTS in SQLite; apply them
+        # via a Python helper that checks PRAGMA table_info first.
+        _ensure_email_ingest_log_filter_columns(conn)
         # Seed the single 'default' user row — ignored if it already exists.
         conn.execute(
             "INSERT OR IGNORE INTO users (id) VALUES (?);",

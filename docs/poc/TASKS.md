@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 0 | 14 |
+| Done | 1 | 15 |
 | In Progress | 0 | 0 |
-| To Do | 13 | 13 |
+| To Do | 12 | 12 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -61,7 +61,7 @@
 
 ##### TASK-M2-001 — Schema migration (4 new tables + email_ingest_log delta)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C2 (Data store) — TDD §1.2a schema (4 new tables) + email_ingest_log columns
@@ -76,12 +76,12 @@
 - **Demo Artifact**: `sqlite3 ~/.jd-matcher/jd-matcher.db ".schema canonical_postings posting_canonical_links posting_embeddings llm_call_ledger"` shows all 4 new tables + extended `email_ingest_log`.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-001.md`
 - **Acceptance Criteria**:
-  - [ ] All 4 new tables created via `CREATE TABLE IF NOT EXISTS` (idempotent)
-  - [ ] `email_ingest_log` gains `filter_status TEXT NULL` + `filter_reason TEXT NULL` + `idx_email_ingest_log_filter`
-  - [ ] All canonical-related indexes created (`idx_canonical_user_block` uses `(user_id, canonical_company, team_or_department, canonical_location)`)
-  - [ ] `init_db()` re-run on populated DB preserves all data, no errors
-  - [ ] Test: each new table exists with expected columns + indexes
-  - [ ] Test: re-running `init_db` on a populated DB doesn't drop or error
+  - [x] All 4 new tables created via `CREATE TABLE IF NOT EXISTS` (idempotent)
+  - [x] `email_ingest_log` gains `filter_status TEXT NULL` + `filter_reason TEXT NULL` + `idx_email_ingest_log_filter`
+  - [x] All canonical-related indexes created (`idx_canonical_user_block` uses `(user_id, canonical_company, team_or_department, canonical_location)`)
+  - [x] `init_db()` re-run on populated DB preserves all data, no errors
+  - [x] Test: each new table exists with expected columns + indexes
+  - [x] Test: re-running `init_db` on a populated DB doesn't drop or error
 
 ---
 
