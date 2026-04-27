@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 1 | 15 |
+| Done | 2 | 16 |
 | In Progress | 0 | 0 |
-| To Do | 12 | 12 |
+| To Do | 11 | 11 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -87,7 +87,7 @@
 
 ##### TASK-M2-002 — OpenAI API key setup + .env + SETUP.md
 
-- **Status**: In Progress
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline (+ content-writer for SETUP.md narrative)
 - **Component**: C28 prep (env config foundation) — TDD §C28
@@ -106,7 +106,7 @@
   - [x] `SETUP.md` has section "OpenAI API key setup" describing how to get a key + where to put it
   - [x] `get_openai_key()` helper reads env var or raises `ConfigError` with clear message
   - [x] Test (mocked): missing env var produces `ConfigError` with actionable message
-  - [ ] AC #5: Smoke script `python -m jd_matcher.llm.smoke` works end-to-end against real OpenAI (live test) — pending user manual verification after OPENAI_API_KEY set in .env
+  - [x] Smoke script `python -m jd_matcher.llm.smoke` works end-to-end against real OpenAI (live test) — verified 2026-04-27 (`model=gpt-4o-mini  echo='OK'  latency=2074ms`)
 
 ---
 
