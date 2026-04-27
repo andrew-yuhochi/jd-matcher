@@ -31,19 +31,15 @@
         <div class="card-line3">
           <span class="card-date">Dismissed: {{ posting.dismissed_at[:10] if posting.dismissed_at else "?" }}</span>
         </div>
-        <div class="card-expanded-body">
-          {% if posting.full_jd %}
-            <p class="card-full-jd">{{ posting.full_jd }}</p>
-          {% else %}
-            <p class="card-full-jd-empty">Full job description not available. Open at source for details.</p>
-          {% endif %}
-        </div>
+        <!-- Action buttons: matches Main tab card structure order -->
         <div class="card-actions">
           <button
             class="btn-restore"
             data-posting-id="{{ posting.id }}"
           >Restore to Main</button>
         </div>
+        <!-- Expanded body — hidden until `e` is pressed -->
+        {% include "_card_jd_body.html" %}
       </article>
     {% endfor %}
   {% else %}

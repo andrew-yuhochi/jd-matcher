@@ -29,12 +29,6 @@
     <button class="btn-apply" data-posting-id="{{ posting.id }}" hidden>Mark Applied</button>
     <button class="btn-dismiss" data-posting-id="{{ posting.id }}" hidden>Dismiss</button>
   </div>
-  <!-- Expanded body: hidden until `e` is pressed -->
-  <div class="card-expanded-body">
-    {% if posting.full_jd %}
-      <p class="card-full-jd">{{ posting.full_jd }}</p>
-    {% else %}
-      <p class="card-full-jd-empty">Full job description not available. Open at source for details.</p>
-    {% endif %}
-  </div>
+  <!-- Expanded body — hidden until `e` is pressed -->
+  {% include "_card_jd_body.html" %}
 </article>

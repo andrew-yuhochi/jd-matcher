@@ -787,3 +787,144 @@ def test_main_tab_jd_not_rendered_outside_no_html_in_plain_text(
     # that would come from unstripped HTML (Jinja escapes them to &lt; but we check the
     # source text doesn't have literal angle brackets from un-escaped HTML)
     assert "&lt;p&gt;" not in html, "HTML tags must not appear escaped in rendered output"
+
+
+# ---------------------------------------------------------------------------
+# JD rendering consistency — identical across Main / Applied / Dismissed tabs
+# ---------------------------------------------------------------------------
+
+
+def _setup_cross_tab_jd_posting(seeded_db: Path, full_jd: str) -> tuple[int, int, int]:
+    """Seed one posting per tab (main, applied, dismissed) all with the same full_jd.
+
+    Returns (pid_main, pid_applied, pid_dismissed).
+    """
+    ts = "2026-04-25T10:00:00+00:00"
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    def _ins(title: str) -> int:
+        cur = conn.execute(
+            """
+            INSERT INTO postings
+                (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
+            VALUES ('default', ?, 'complete', ?, ?, ?)
+            """,
+            (title, ts, ts, full_jd),
+        )
+        return cur.lastrowid
+
+    pid_main = _ins("Cross-tab JD Test — Main")
+    pid_applied = _ins("Cross-tab JD Test — Applied")
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid_applied, ts, ts),
+    )
+    pid_dismissed = _ins("Cross-tab JD Test — Dismissed")
+    conn.execute(
+        "INSERT INTO dismissed (posting_id, user_id, dismissed_at) VALUES (?, 'default', ?)",
+        (pid_dismissed, ts),
+    )
+    conn.commit()
+    conn.close()
+    return pid_main, pid_applied, pid_dismissed
+
+
+def _extract_card_expanded_body_html(html: str, pid: int) -> str:
+    """Return the outer HTML of the .card-expanded-body div inside card-{pid}."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    card = soup.find("article", id=f"card-{pid}")
+    assert card is not None, f"card-{pid} not found in HTML"
+    expanded = card.find("div", class_="card-expanded-body")
+    assert expanded is not None, f"card-expanded-body not found inside card-{pid}"
+    return str(expanded)
+
+
+def _extract_card_dom_order(html: str, pid: int) -> list[tuple[str, list[str] | None]]:
+    """Return list of (tag, classes) for direct children of card-{pid}."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    card = soup.find("article", id=f"card-{pid}")
+    assert card is not None, f"card-{pid} not found in HTML"
+    return [
+        (child.name, child.get("class"))
+        for child in card.children
+        if hasattr(child, "get")
+    ]
+
+
+@pytest.mark.parametrize(
+    "full_jd",
+    [
+        "Short JD text.",
+        "Multi-line JD:\nLine 1\nLine 2\nLine 3",
+        "JD with  extra   spaces and\ttabs.",
+    ],
+    ids=["short", "multiline", "whitespace"],
+)
+def test_jd_expanded_body_identical_across_tabs(
+    client: TestClient, seeded_db: Path, full_jd: str
+) -> None:
+    """Regression: .card-expanded-body inner HTML must be byte-identical across
+    Main, Applied, and Dismissed tabs for the same full_jd content.
+
+    Root cause fixed: Applied/Dismissed templates previously inlined the JD block
+    with different indentation levels and card-actions ordering, causing structural
+    inconsistency. Now all three tabs share _card_jd_body.html partial with
+    card-actions always preceding card-expanded-body.
+    """
+    pid_main, pid_applied, pid_dismissed = _setup_cross_tab_jd_posting(seeded_db, full_jd)
+
+    html_main = client.get("/").text
+    html_applied = client.get("/applied").text
+    html_dismissed = client.get("/dismissed").text
+
+    body_main = _extract_card_expanded_body_html(html_main, pid_main)
+    body_applied = _extract_card_expanded_body_html(html_applied, pid_applied)
+    body_dismissed = _extract_card_expanded_body_html(html_dismissed, pid_dismissed)
+
+    assert body_main == body_applied, (
+        f"Main vs Applied card-expanded-body mismatch.\n"
+        f"Main:    {body_main!r}\n"
+        f"Applied: {body_applied!r}"
+    )
+    assert body_main == body_dismissed, (
+        f"Main vs Dismissed card-expanded-body mismatch.\n"
+        f"Main:      {body_main!r}\n"
+        f"Dismissed: {body_dismissed!r}"
+    )
+
+
+def test_card_dom_order_identical_across_tabs(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """The sequence of direct child div classes inside each card must be identical
+    across all three tabs: card-line1, card-line2, card-line3, card-actions,
+    card-expanded-body.
+
+    This guards against structural drift that causes visual inconsistency even when
+    the JD text content is identical (e.g. card-actions appearing after card-expanded-body
+    on Dismissed changes layout due to CSS ordering).
+    """
+    full_jd = "DOM order test JD."
+    pid_main, pid_applied, pid_dismissed = _setup_cross_tab_jd_posting(seeded_db, full_jd)
+
+    html_main = client.get("/").text
+    html_applied = client.get("/applied").text
+    html_dismissed = client.get("/dismissed").text
+
+    order_main = _extract_card_dom_order(html_main, pid_main)
+    order_applied = _extract_card_dom_order(html_applied, pid_applied)
+    order_dismissed = _extract_card_dom_order(html_dismissed, pid_dismissed)
+
+    # card-actions must come before card-expanded-body in all tabs
+    expected_tail = [["card-actions"], ["card-expanded-body"]]
+    for tab_name, order in [("Main", order_main), ("Applied", order_applied), ("Dismissed", order_dismissed)]:
+        div_classes = [c for _, c in order]
+        assert div_classes[-2:] == expected_tail, (
+            f"{tab_name} tab: last two divs must be card-actions then card-expanded-body.\n"
+            f"Got: {div_classes}"
+        )
