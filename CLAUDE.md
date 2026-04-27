@@ -8,10 +8,10 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 | | |
 |-|-|
 | **Phase** | PoC |
-| **Milestone** | M1 — Raw pipe + URL dedup + applied/dismissed state |
-| **Last completed** | TASK-M1-010 — Web UI frontend + events instrumentation (Done 2026-04-26) |
-| **Next task** | TASK-M1-011 — Real-data validation against live email samples [test-validator] |
-| **Next command** | /implement jd-matcher TASK-M1-011 |
+| **Milestone** | _No active milestone — M1 closed 2026-04-27. Plan M2 next._ |
+| **Last completed** | M1 — Raw pipe + URL dedup + applied/dismissed state (closed 2026-04-27) |
+| **Next task** | Plan next milestone (M2 — Content-aware dedup + repost detection per ROADMAP §M2) |
+| **Next command** | /milestone-plan jd-matcher |
 
 ---
 

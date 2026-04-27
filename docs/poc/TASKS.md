@@ -1,26 +1,62 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-26
+> **Last Updated**: 2026-04-27
 
 ---
 
 ## Progress Summary
-- Done: 14 | In Progress: 0 | To Do: 0 | Blocked: 0
-- Current milestone: M1
-- Invalidated tasks: 0
+
+**Active milestone**: none — M1 closed 2026-04-27.
+
+| Metric | Active milestone | Project total |
+|--------|------------------|---------------|
+| Done | 0 | 14 |
+| In Progress | 0 | 0 |
+| To Do | 0 | 0 |
+| Blocked | 0 | 0 |
+| Completed milestones | — | 1 (M1) |
+| Invalidated tasks | — | 0 |
 
 ---
 
-## Milestone 1 — Raw pipe + URL dedup + applied/dismissed state
+## Active Milestone
+
+_No open milestone. M1 closed 2026-04-27. Next: run `/milestone-plan jd-matcher` to plan Milestone 2 (Content-aware dedup + repost detection — see ROADMAP §M2 for the plan)._
+
+---
+
+## Completed Milestones Log
+
+### Milestone 1 — Raw pipe + URL dedup + applied/dismissed state
+
+- **Closed**: 2026-04-27
+- **Outcome**: APPROVED (user approval explicit during /milestone-complete)
+- **Tasks**: 14 Done (TASK-M1-001 through TASK-M1-012, plus M1-005b and M1-005c added during the milestone)
+- **Quality summary**:
+  - Hydration (deterministic, ≥95% bar): LinkedIn 70/70 = 100%, Indeed 21/21 = 100%, Combined 91/91 = 100% — PASS
+  - URL extraction (deterministic, ≥95% bar): LinkedIn 100%, Indeed 97.1% (post-M1-005b pagead-fix) — PASS
+  - URL dedup (100% required): re-run produces 0 new postings — PASS
+  - State persistence (100% required): all 4 transitions (apply/dismiss/restore/unapply) persist across restart — PASS
+  - Unit tests: 443 passed, 19 skipped, 0 failed
+- **Major auto-fixes during milestone**: 17 (see TASK-M1-011 quality log for full bug list — most surfaced during 2026-04-27 real-data validation against user's live Gmail)
+- **Directional decisions**: 3
+  - Inactive state model (supersedes auto-remove) — bundled to MVP-M1
+  - Expired state for dead-link postings — bundled to MVP-M1 with Inactive
+  - Indeed JSON-LD via Sec-Fetch headers (rejected Playwright path) — empirically validated 5/5
+- **Scope additions during M1** (all user-approved during session): un-apply action, new/viewed inbox sort, JSON-LD Indeed extraction, per-email ingest log + report CLI (M1-005c, Override BA accepted), Indeed pagead URL resolution (M1-005b), HTML-to-text strip + click-to-select + paragraph preservation
+- **Alignment verdict**: ALIGNED (BA Mode B, see ALIGNMENT-LOG.md 2026-04-27)
+- **Quality logs**: docs/poc/quality-logs/TASK-M1-001.md through TASK-M1-012.md
+
+#### M1 Task Entries (full audit trail)
 
 **Goal**: Working local pipeline + browser UI showing today's fresh LinkedIn + Indeed jobs with state tracking.
 **Deliverable**: User runs `python -m jd_matcher`, opens `localhost:8765`, triages real postings via keyboard, returns next day to find no reappearance of handled cards.
-**Review checkpoint**: User approves deliverable before M2 begins.
+**Review checkpoint**: User approved deliverable on 2026-04-27.
 
 ---
 
-### TASK-M1-001 — Repo bootstrap + project skeleton
+##### TASK-M1-001 — Repo bootstrap + project skeleton
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -47,7 +83,7 @@
 
 ---
 
-### TASK-M1-002 — SETUP.md + saved-search keyword discussion
+##### TASK-M1-002 — SETUP.md + saved-search keyword discussion
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -71,7 +107,7 @@
 
 ---
 
-### TASK-M1-003 — Data model + idempotent init_db
+##### TASK-M1-003 — Data model + idempotent init_db
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -99,7 +135,7 @@
 
 ---
 
-### TASK-M1-004 — Gmail ingester (OAuth + fetch)
+##### TASK-M1-004 — Gmail ingester (OAuth + fetch)
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -127,7 +163,7 @@
 
 ---
 
-### TASK-M1-005 — Email URL parsers + URL-based dedup
+##### TASK-M1-005 — Email URL parsers + URL-based dedup
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -154,7 +190,7 @@
 
 ---
 
-### TASK-M1-006 — JD hydrator (LinkedIn + Indeed guest endpoints)
+##### TASK-M1-006 — JD hydrator (LinkedIn + Indeed guest endpoints)
 
 - **Status**: Done (2026-04-24)
 - **Blocked reason**:
@@ -181,7 +217,7 @@
 
 ---
 
-### TASK-M1-007 — State manager (applied / dismissed / restore)
+##### TASK-M1-007 — State manager (applied / dismissed / restore)
 
 - **Status**: Done (2026-04-25)
 - **Blocked reason**:
@@ -207,7 +243,7 @@
 
 ---
 
-### TASK-M1-008 — Pipeline orchestrator + non-hideable health logging
+##### TASK-M1-008 — Pipeline orchestrator + non-hideable health logging
 
 - **Status**: Done (2026-04-25)
 - **Blocked reason**:
@@ -233,7 +269,7 @@
 
 ---
 
-### TASK-M1-009 — Web UI backend (FastAPI + 8 endpoints + source-health)
+##### TASK-M1-009 — Web UI backend (FastAPI + 8 endpoints + source-health)
 
 - **Status**: Done (2026-04-25)
 - **Blocked reason**:
@@ -259,7 +295,7 @@
 
 ---
 
-### TASK-M1-005b — Indeed pagead URL resolution
+##### TASK-M1-005b — Indeed pagead URL resolution
 
 - **Status**: Done (2026-04-26)
 - **Blocked reason**:
@@ -298,7 +334,7 @@
 
 ---
 
-### TASK-M1-005c — Per-email ingest log + report
+##### TASK-M1-005c — Per-email ingest log + report
 
 - **Status**: Done (2026-04-26)
 - **Blocked reason**:
@@ -333,7 +369,7 @@
 
 ---
 
-### TASK-M1-010 — Web UI frontend + events instrumentation
+##### TASK-M1-010 — Web UI frontend + events instrumentation
 
 - **Status**: Done (2026-04-26)
 - **Blocked reason**:
@@ -361,7 +397,7 @@
 
 ---
 
-### TASK-M1-011 — Real-data validation against live email samples
+##### TASK-M1-011 — Real-data validation against live email samples
 
 - **Status**: Done (2026-04-27)
 - **Blocked reason**:
@@ -388,7 +424,7 @@
 
 ---
 
-### TASK-M1-012 — M1 demo + user approval
+##### TASK-M1-012 — M1 demo + user approval
 
 - **Status**: Done (2026-04-27)
 - **Blocked reason**:
@@ -412,14 +448,6 @@
   - [x] Source-health badges visible and accurate (all green when sources healthy)
   - [x] User confirms M1 deliverable meets the goal in PHASE-REVIEW.md or written confirmation
   - [x] Quality logs from M1-001 through M1-011 are present and reviewed
-
----
-
-## Completed Milestones Log
-
-| Milestone | Closed | Quality | Alignment | Notes |
-|-----------|--------|---------|-----------|-------|
-| | | | | |
 
 ---
 

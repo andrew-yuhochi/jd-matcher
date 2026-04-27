@@ -148,3 +148,30 @@ One prior ALIGNMENT-LOG anchor to note: the 2026-04-24 entry lists "Any proposal
 
 **User decision**: Approved — bundle Expired with Inactive at MVP-M1 (auto-detect via hydrator HTTP 404 only; manual "Job link is dead" button deferred to MVP-M2 per BA recommendation).
 **Outcome**: BACKLOG.md updated by architect: existing "MVP-M1 — Inactive state lifecycle" entry renamed to "Inactive AND Expired state lifecycle"; scope expanded from 5 items to 6 (added Hydrator auto-detect on HTTP 404 → mark_expired); status enum reconciliation caveat extended to include Expired; M1 workaround documented (users use Dismiss for dead links until MVP-M1 lands proper Expired handling). PRD.md updated: §5 M2 dedup-bypass exception extended to Inactive OR Expired; §6 Scope OUT lifecycle line gained Expired clauses. TDD.md updated: §C7 supersession note now references mark_expired alongside auto_inactivate; §C5 (Hydrator) gained a 2026-04-26 note about HTTP 404 detection. M1 untouched. See commit for SHA.
+
+---
+
+## 2026-04-27 — Milestone 1 closure
+
+**Verdict**: ALIGNED
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN — M1 user-observable deliverable (ROADMAP §M1): "Open `localhost:PORT`, see a stack of new postings from today's LinkedIn + Indeed emails with title/company/location/URL/source. Click a card → expand → click apply URL → goes to LinkedIn/Indeed. Click `[Mark Applied]` → posting moves to Applied tab. Click `[Dismiss]` → posting moves to Dismissed tab and is permanently blacklisted. Re-run pipeline → same URLs ingested today no longer appear in Main, and applied/dismissed postings stay out of Main. No content-aware dedup, no fit score, no tags yet."
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- PRD §3 Commercial Thesis (Agreed): "Personal-first throughout PoC and MVP." + five hedges threaded into milestones.
+- ALIGNMENT-LOG 2026-04-24 anchors (Beta gates untouched; hedge 2 events table; namespace-aware schema; personal-volume hydration; no commercial distribution).
+- BACKLOG.md — MVP-M1 — Inactive AND Expired state lifecycle; MVP-M1 — Sync progress feedback.
+- TASK-M1-011 quality log: 91/91 postings hydrated (100%); all 9 M1 ACs PASS.
+- TASK-M1-012 quality log: user-approved verbatim ("All function work"); 9/9 ACs PASS.
+
+**Analysis**: All 14 M1 tasks are Done and the 9 ROADMAP M1 acceptance criteria are met at or above threshold — URL extraction 100%/100% (LinkedIn/Indeed) vs ≥95% bar; hydration 100% vs ≥95% bar; URL dedup 100%; state persistence 100%; events instrumentation verified; repo public with badge. The user-observable deliverable matches the ROADMAP §M1 verbatim description across every element (three tabs, card expand, apply URL opens, applied/dismissed state, dedup across re-runs). Six scope additions landed during M1: (1) un-apply symmetric to restore — user-approved, symmetric UX completion; (2) new/viewed inbox sort + card greying — UX polish, does not contradict any Scope IN or OUT clause; (3) JSON-LD Indeed extraction path — extends TDD §C5 to handle Cloudflare 403, required to reach the ≥95% hydration bar; (4) per-email ingest log + report CLI (M1-005c) — Override BA, DRIFTING verdict explicitly accepted by user, logged 2026-04-26; (5) Indeed pagead URL resolution (M1-005b) — ALIGNED, required to reach ≥95% Indeed URL extraction; (6) HTML-to-text strip + paragraph preservation + click-to-select — UX fixes surfaced by real-data validation, not commercial additions. None of the six additions touch PRD §6 Scope OUT or any of the five 2026-04-24 alignment anchors. The commercial thesis anchors are all untouched: Beta gates are hard thresholds (not evaluated at PoC), hedge 2 instrumentation (events table) populates but the analytics UI surface is deferred to M4, namespace-aware schema remains `user_id='default'` with no multi-tenant logic, hydration stays at 1 req/30s personal volume, and no commercial distribution packaging was added. Both BACKLOG items (Inactive/Expired lifecycle and sync progress feedback) are correctly scoped to MVP-M1 and do not creep into PoC M2/M3/M4 scope.
+
+**Recommendation**: ALIGNED — approve M1 closure. No revision required.
+
+Caveats for user's awareness at approval:
+1. M1-005c (per-email ingest log + CLI) was logged as a DRIFTING override on 2026-04-26. The component is live and working; the drift was accepted explicitly. No further action required.
+2. TASK-M1-012 quality log notes 5/21 Indeed postings (DOM-fallback path) render as wall-of-text due to HTML structure differences from JSON-LD path. This is not an M1 AC failure (hydration_status is complete; text is present), but it is a UX gap noted for MVP.
+3. Sync progress feedback gap (no visible progress during 30–45 min hydration run) is captured in BACKLOG.md as MVP-M1. Not a blocker.
+
+**User decision**: Approved (explicit "approve" response during /milestone-complete)
+**Outcome**: M1 formally closed 2026-04-27. All 14 tasks Done; all 9 ROADMAP §M1 ACs PASS; user-approved verbatim. TASKS.md updated by architect (M1 moved to Completed Milestones Log). CLAUDE.md state pointers will be updated by main session. PoC phase continues — next: /milestone-plan jd-matcher for Milestone 2 (Content-aware dedup + repost detection per ROADMAP §M2). See commit for SHA.
