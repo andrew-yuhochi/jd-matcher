@@ -122,7 +122,8 @@ def _get_applied_postings(
         """
         SELECT p.id, p.canonical_title, p.canonical_company, p.canonical_location,
                p.hydration_status, p.first_seen, p.last_seen,
-               a.status, a.applied_at, a.status_updated_at, a.notes
+               a.status, a.applied_at, a.status_updated_at, a.notes,
+               p.full_jd
         FROM postings p
         JOIN applied a ON a.posting_id = p.id AND a.user_id = p.user_id
         WHERE p.user_id = ?
@@ -143,6 +144,7 @@ def _get_applied_postings(
             "applied_at": r[8],
             "status_updated_at": r[9],
             "notes": r[10],
+            "full_jd": r[11],
         }
         for r in rows
     ]
@@ -155,7 +157,7 @@ def _get_dismissed_postings(
         """
         SELECT p.id, p.canonical_title, p.canonical_company, p.canonical_location,
                p.hydration_status, p.first_seen, p.last_seen,
-               d.dismissed_at
+               d.dismissed_at, p.full_jd
         FROM postings p
         JOIN dismissed d ON d.posting_id = p.id AND d.user_id = p.user_id
         WHERE p.user_id = ?
@@ -173,6 +175,7 @@ def _get_dismissed_postings(
             "first_seen": r[5],
             "last_seen": r[6],
             "dismissed_at": r[7],
+            "full_jd": r[8],
         }
         for r in rows
     ]
@@ -266,7 +269,7 @@ def _main_view_postings_list(
                 "first_seen": p.first_seen,
                 "last_seen": p.last_seen,
                 "source_url": _source_url_for_posting(conn, p.id),
-                "full_jd": None,  # not loaded in list view — expanded body shows nothing until M3
+                "full_jd": p.full_jd,
             }
         )
     return result

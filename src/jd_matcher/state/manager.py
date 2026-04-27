@@ -54,6 +54,7 @@ class Posting:
     hydration_status: str
     first_seen: str
     last_seen: str
+    full_jd: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +199,8 @@ def main_view_postings(
         rows = c.execute(
             """
             SELECT id, user_id, canonical_company, canonical_title,
-                   canonical_location, hydration_status, first_seen, last_seen
+                   canonical_location, hydration_status, first_seen, last_seen,
+                   full_jd
             FROM postings
             WHERE user_id = ?
               AND id NOT IN (SELECT posting_id FROM applied   WHERE user_id = ?)
@@ -221,6 +223,7 @@ def main_view_postings(
             hydration_status=row[5],
             first_seen=row[6],
             last_seen=row[7],
+            full_jd=row[8],
         )
         for row in rows
     ]

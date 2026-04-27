@@ -26,6 +26,13 @@
         {% if posting.notes %}
           <div class="card-notes">{{ posting.notes }}</div>
         {% endif %}
+        <div class="card-body">
+          {% if posting.full_jd %}
+            <p class="card-full-jd">{{ posting.full_jd }}</p>
+          {% else %}
+            <p class="card-full-jd-empty">Full job description not available. Open at source for details.</p>
+          {% endif %}
+        </div>
       </article>
     {% endfor %}
   {% else %}

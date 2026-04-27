@@ -627,3 +627,77 @@ def test_dismissed_posting_absent_from_main_tab(
 
     resp_after = client.get("/")
     assert f"card-{pid}" not in resp_after.text
+
+
+# ---------------------------------------------------------------------------
+# full_jd pass-through — Main, Applied, Dismissed tabs
+# ---------------------------------------------------------------------------
+
+
+def _insert_posting_with_jd(conn: sqlite3.Connection, title: str, full_jd: str) -> int:
+    ts = "2026-04-25T10:00:00+00:00"
+    cur = conn.execute(
+        """
+        INSERT INTO postings
+            (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
+        VALUES ('default', ?, 'complete', ?, ?, ?)
+        """,
+        (title, ts, ts, full_jd),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def test_main_tab_renders_full_jd_text(client: TestClient, seeded_db: Path) -> None:
+    """GET / with a posting that has full_jd set must render the JD text, not the fallback."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    jd_text = "Unique JD content for main tab test: looking for Python engineers."
+    pid = _insert_posting_with_jd(conn, "Main JD Job", jd_text)
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+    assert jd_text in html, "full_jd text must appear in Main tab HTML"
+    assert f"card-{pid}" in html
+
+
+def test_applied_tab_renders_full_jd_text(client: TestClient, seeded_db: Path) -> None:
+    """GET /applied with an applied posting that has full_jd must render the JD text."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    jd_text = "Unique JD content for applied tab test: senior ML role."
+    pid = _insert_posting_with_jd(conn, "Applied JD Job", jd_text)
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid, ts, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    html = resp.text
+    assert jd_text in html, "full_jd text must appear in Applied tab HTML"
+
+
+def test_dismissed_tab_renders_full_jd_text(client: TestClient, seeded_db: Path) -> None:
+    """GET /dismissed with a dismissed posting that has full_jd must render the JD text."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    jd_text = "Unique JD content for dismissed tab test: data scientist wanted."
+    pid = _insert_posting_with_jd(conn, "Dismissed JD Job", jd_text)
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO dismissed (posting_id, user_id, dismissed_at) VALUES (?, 'default', ?)",
+        (pid, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/dismissed")
+    assert resp.status_code == 200
+    html = resp.text
+    assert jd_text in html, "full_jd text must appear in Dismissed tab HTML"
