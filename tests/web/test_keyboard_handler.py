@@ -356,6 +356,38 @@ def test_source_health_endpoint_callable_from_js_path(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Click-to-select — static analysis (Feature 1)
+# ---------------------------------------------------------------------------
+
+
+def test_app_js_has_click_handler_on_card_containers() -> None:
+    """app.js must wire a click handler to card list containers."""
+    src = _js_source()
+    assert "handleCardContainerClick" in src, (
+        "app.js must define and register handleCardContainerClick"
+    )
+    assert "addEventListener" in src, (
+        "app.js must register click event listener"
+    )
+
+
+def test_app_js_action_buttons_call_stop_propagation() -> None:
+    """Action buttons (apply/dismiss/restore/unapply) must call stopPropagation."""
+    src = _js_source()
+    assert "stopPropagation" in src, (
+        "app.js must call e.stopPropagation() on action button click handlers "
+        "so card click does not also fire"
+    )
+
+
+def test_app_js_has_unapply_handler() -> None:
+    """app.js must have a click handler for .btn-unapply."""
+    src = _js_source()
+    assert "btn-unapply" in src, "app.js missing .btn-unapply handler"
+    assert "/unapply" in src, "app.js must POST to /postings/{id}/unapply"
+
+
 def test_manual_smoke_note_is_documented() -> None:
     """
     DOCUMENTATION TEST: This test exists to assert that the manual smoke test

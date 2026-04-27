@@ -5,6 +5,7 @@ Public API (names canonical per TASKS.md ACs):
   mark_applied(posting_id, ...)  -> StateTransition
   dismiss(posting_id, ...)       -> StateTransition
   restore(posting_id, ...)       -> StateTransition
+  unapply(posting_id, ...)       -> StateTransition
   main_view_postings(...)        -> list[Posting]
   auto_remove_stale_applied(cutoff_date, ...) -> int
 
@@ -55,6 +56,7 @@ class Posting:
     first_seen: str
     last_seen: str
     full_jd: Optional[str] = None
+    is_viewed: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +184,39 @@ def restore(
     )
 
 
+def unapply(
+    posting_id: int,
+    user_id: str = "default",
+    conn: Optional[sqlite3.Connection] = None,
+    db_path: Path | None = None,
+) -> StateTransition:
+    """Delete from applied, returning the posting to main view.
+
+    If posting_id is not in applied, this is a no-op (no error raised).
+    """
+    own_conn = conn is None
+    c = conn if conn is not None else _open_conn(db_path)
+    now = _now_iso()
+    try:
+        c.execute(
+            "DELETE FROM applied WHERE user_id = ? AND posting_id = ?",
+            (user_id, posting_id),
+        )
+        if own_conn:
+            c.commit()
+        logger.debug("unapply: posting_id=%d user_id=%s", posting_id, user_id)
+    finally:
+        if own_conn:
+            c.close()
+
+    return StateTransition(
+        posting_id=posting_id,
+        from_state="applied",
+        to_state="main",
+        ts=datetime.fromisoformat(now),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main-view query
 # ---------------------------------------------------------------------------
@@ -192,7 +227,11 @@ def main_view_postings(
     conn: Optional[sqlite3.Connection] = None,
     db_path: Path | None = None,
 ) -> list[Posting]:
-    """Return postings not in applied or dismissed, ordered by first_seen DESC."""
+    """Return postings not in applied or dismissed.
+
+    Sort order (inbox pattern): unviewed first, then viewed — each group sorted
+    by first_seen DESC.  "Viewed" = posting has at least one card_expanded event.
+    """
     own_conn = conn is None
     c = conn if conn is not None else _open_conn(db_path)
     try:
@@ -200,12 +239,17 @@ def main_view_postings(
             """
             SELECT id, user_id, canonical_company, canonical_title,
                    canonical_location, hydration_status, first_seen, last_seen,
-                   full_jd
-            FROM postings
+                   full_jd,
+                   EXISTS (
+                       SELECT 1 FROM events e
+                       WHERE e.posting_id = p.id
+                         AND e.event_type = 'card_expanded'
+                   ) AS is_viewed
+            FROM postings p
             WHERE user_id = ?
               AND id NOT IN (SELECT posting_id FROM applied   WHERE user_id = ?)
               AND id NOT IN (SELECT posting_id FROM dismissed WHERE user_id = ?)
-            ORDER BY first_seen DESC
+            ORDER BY is_viewed ASC, first_seen DESC
             """,
             (user_id, user_id, user_id),
         ).fetchall()
@@ -224,6 +268,7 @@ def main_view_postings(
             first_seen=row[6],
             last_seen=row[7],
             full_jd=row[8],
+            is_viewed=bool(row[9]),
         )
         for row in rows
     ]

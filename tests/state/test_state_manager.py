@@ -25,6 +25,7 @@ from jd_matcher.state.manager import (
     main_view_postings,
     mark_applied,
     restore,
+    unapply,
 )
 
 
@@ -386,4 +387,116 @@ def test_auto_remove_stale_applied_noop_when_nothing_stale(db):
 
     removed = auto_remove_stale_applied(date(2026, 1, 1), conn=conn)
     assert removed == 0
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# unapply
+# ---------------------------------------------------------------------------
+
+
+def test_unapply_removes_applied_row(db):
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Applied Job to Unapply", "2026-04-25T00:00:00Z")
+
+    mark_applied(pid, conn=conn)
+    row_before = conn.execute(
+        "SELECT 1 FROM applied WHERE posting_id = ?", (pid,)
+    ).fetchone()
+    assert row_before is not None
+
+    transition = unapply(pid, conn=conn)
+
+    assert isinstance(transition, StateTransition)
+    assert transition.posting_id == pid
+    assert transition.from_state == "applied"
+    assert transition.to_state == "main"
+
+    row_after = conn.execute(
+        "SELECT 1 FROM applied WHERE posting_id = ?", (pid,)
+    ).fetchone()
+    assert row_after is None
+    conn.close()
+
+
+def test_unapply_idempotent_when_not_applied(db):
+    """Unapplying a posting not in applied must not raise."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Never Applied", "2026-04-25T00:00:00Z")
+
+    unapply(pid, conn=conn)  # must not raise
+
+    count = conn.execute(
+        "SELECT count(*) FROM applied WHERE posting_id = ?", (pid,)
+    ).fetchone()[0]
+    assert count == 0
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# main_view_postings — viewed/new inbox sort
+# ---------------------------------------------------------------------------
+
+
+def _insert_event(conn: sqlite3.Connection, posting_id: int, event_type: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO events (user_id, event_type, posting_id, timestamp)
+        VALUES ('default', ?, ?, ?)
+        """,
+        (event_type, posting_id, "2026-04-25T12:00:00Z"),
+    )
+    conn.commit()
+
+
+def test_main_view_unviewed_before_viewed(db):
+    """Posting with card_expanded event appears after posting with no events."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    pid_viewed = _insert_posting(conn, "Viewed Job", "2026-04-25T00:00:00Z")
+    pid_unviewed = _insert_posting(conn, "Unviewed Job", "2026-04-24T00:00:00Z")
+
+    _insert_event(conn, pid_viewed, "card_expanded")
+
+    postings = main_view_postings(conn=conn)
+    ids = [p.id for p in postings]
+
+    # Unviewed must come before viewed regardless of first_seen order
+    assert ids.index(pid_unviewed) < ids.index(pid_viewed)
+    conn.close()
+
+
+def test_main_view_is_viewed_field_matches_events(db):
+    """is_viewed field on returned Posting objects reflects actual events state."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    pid_viewed = _insert_posting(conn, "Viewed", "2026-04-25T00:00:00Z")
+    pid_unviewed = _insert_posting(conn, "Unviewed", "2026-04-25T00:00:00Z")
+
+    _insert_event(conn, pid_viewed, "card_expanded")
+
+    postings = main_view_postings(conn=conn)
+    by_id = {p.id: p for p in postings}
+
+    assert by_id[pid_viewed].is_viewed is True
+    assert by_id[pid_unviewed].is_viewed is False
+    conn.close()
+
+
+def test_main_view_card_viewed_event_does_not_mark_as_viewed(db):
+    """card_viewed (IntersectionObserver) must NOT count as a viewed signal — only card_expanded."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    pid = _insert_posting(conn, "Card Viewed Only", "2026-04-25T00:00:00Z")
+    _insert_event(conn, pid, "card_viewed")  # NOT card_expanded
+
+    postings = main_view_postings(conn=conn)
+    by_id = {p.id: p for p in postings}
+
+    assert by_id[pid].is_viewed is False
     conn.close()

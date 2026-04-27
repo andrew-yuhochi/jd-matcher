@@ -898,6 +898,155 @@ def test_jd_expanded_body_identical_across_tabs(
     )
 
 
+# ---------------------------------------------------------------------------
+# Un-apply endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_post_unapply_returns_200(client: TestClient, seeded_db: Path) -> None:
+    """POST /postings/{id}/unapply returns 200 with action='unapply'."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Unapply Test")
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) "
+        "VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid, ts, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.post(f"/postings/{pid}/unapply")
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "unapply"
+
+
+def test_unapply_removes_posting_from_applied(client: TestClient, seeded_db: Path) -> None:
+    """After POST /unapply, the posting no longer appears in Applied tab."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Unapply Removal Test")
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) "
+        "VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid, ts, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    # Verify appears in applied before unapply
+    resp_before = client.get("/applied")
+    assert f"card-{pid}" in resp_before.text
+
+    client.post(f"/postings/{pid}/unapply")
+
+    # Must no longer appear in applied tab
+    resp_after = client.get("/applied")
+    assert f"card-{pid}" not in resp_after.text
+
+
+def test_unapply_with_non_integer_id_returns_422(client: TestClient) -> None:
+    resp = client.post("/postings/not-an-int/unapply")
+    assert resp.status_code == 422
+
+
+def test_applied_template_renders_unapply_button(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """GET /applied with an applied posting must render the Unapply button."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Unapply Button Test")
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) "
+        "VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid, ts, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    assert "btn-unapply" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Viewed / new sort (Feature 3)
+# ---------------------------------------------------------------------------
+
+
+def _insert_event_for_posting(
+    conn: sqlite3.Connection, posting_id: int, event_type: str
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO events (user_id, event_type, posting_id, timestamp)
+        VALUES ('default', ?, ?, ?)
+        """,
+        (event_type, posting_id, "2026-04-25T12:00:00+00:00"),
+    )
+    conn.commit()
+
+
+def test_viewed_posting_renders_with_card_viewed_class(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """A posting with a card_expanded event renders with class='card card-viewed'."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid = _insert_posting(conn, "Viewed Posting")
+    _insert_event_for_posting(conn, pid, "card_expanded")
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+    assert f'id="card-{pid}"' in html
+    # The card element for this posting must contain card-viewed class
+    assert "card-viewed" in html
+
+
+def test_unviewed_posting_renders_without_card_viewed_class_on_its_card(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """A posting with no card_expanded events must NOT have card-viewed on its card."""
+    # Use a fresh DB with only one posting so we can isolate the card
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # Apply all existing postings to clear the main view
+    existing = conn.execute("SELECT id FROM postings").fetchall()
+    ts = "2026-04-25T10:00:00+00:00"
+    for (eid,) in existing:
+        conn.execute(
+            "INSERT OR IGNORE INTO applied (posting_id, user_id, status, applied_at, status_updated_at) "
+            "VALUES (?, 'default', 'Applied', ?, ?)",
+            (eid, ts, ts),
+        )
+    conn.commit()
+
+    pid = _insert_posting(conn, "Unviewed Posting")
+    # No card_expanded event for this posting
+    conn.close()
+
+    resp = client.get("/")
+    html = resp.text
+    assert f'id="card-{pid}"' in html
+    # This specific card must NOT have card-viewed
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    card = soup.find("article", id=f"card-{pid}")
+    assert card is not None
+    assert "card-viewed" not in (card.get("class") or [])
+
+
+# ---------------------------------------------------------------------------
+# (Original test suite continues below)
+# ---------------------------------------------------------------------------
+
+
 def test_card_dom_order_identical_across_tabs(
     client: TestClient, seeded_db: Path
 ) -> None:

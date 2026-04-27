@@ -39,6 +39,7 @@ from jd_matcher.state.manager import (
     main_view_postings,
     mark_applied,
     restore,
+    unapply,
 )
 
 logger = logging.getLogger(__name__)
@@ -270,6 +271,7 @@ def _main_view_postings_list(
                 "last_seen": p.last_seen,
                 "source_url": _source_url_for_posting(conn, p.id),
                 "full_jd": p.full_jd,
+                "is_viewed": p.is_viewed,
             }
         )
     return result
@@ -452,6 +454,25 @@ async def restore_posting(posting_id: int) -> JSONResponse:
     return JSONResponse(
         PostingActionResponse(
             posting_id=posting_id, action="restore", status="ok"
+        ).model_dump(),
+        status_code=200,
+    )
+
+
+@router.post("/postings/{posting_id}/unapply")
+async def unapply_posting(posting_id: int) -> JSONResponse:
+    db_path = _get_db_path()
+    _ensure_db(db_path)
+    conn = _open_conn(db_path)
+    try:
+        unapply(posting_id, conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    return JSONResponse(
+        PostingActionResponse(
+            posting_id=posting_id, action="unapply", status="ok"
         ).model_dump(),
         status_code=200,
     )

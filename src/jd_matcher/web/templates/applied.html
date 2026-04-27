@@ -26,8 +26,13 @@
         {% if posting.notes %}
           <div class="card-notes">{{ posting.notes }}</div>
         {% endif %}
-        <!-- Action buttons placeholder — maintains card structure parity with Main tab -->
-        <div class="card-actions"></div>
+        <!-- Action buttons: Unapply mirrors Dismissed's Restore pattern -->
+        <div class="card-actions">
+          <button
+            class="btn-unapply"
+            data-posting-id="{{ posting.id }}"
+          >Unapply</button>
+        </div>
         <!-- Expanded body — hidden until `e` is pressed -->
         {% include "_card_jd_body.html" %}
       </article>

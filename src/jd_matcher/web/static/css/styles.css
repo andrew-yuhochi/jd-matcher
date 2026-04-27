@@ -90,6 +90,7 @@ main { padding: 1rem; max-width: 780px; margin: 0 auto; }
   background: #fff;
   position: relative;
   transition: border-color 0.1s;
+  cursor: pointer;
 }
 
 /* Visible keyboard-focus ring */
@@ -227,3 +228,18 @@ kbd {
   color: #888;
   text-align: center;
 }
+
+/* ── Viewed / unviewed differentiation (inbox pattern) ───────── */
+.card-viewed { opacity: 0.6; }
+
+/* Unapply button (Applied tab) — mirrors Restore styling */
+.btn-unapply {
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fafafa;
+}
+
+.btn-unapply:hover { background: #fef9c3; border-color: #eab308; }

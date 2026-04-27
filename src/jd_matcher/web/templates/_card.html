@@ -1,7 +1,7 @@
 {# Partial: single posting card for Main tab.
    Variables: posting (dict with id, canonical_title, canonical_company,
               canonical_location, hydration_status, first_seen, source_url?) #}
-<article class="card" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}"
+<article class="card{% if posting.is_viewed %} card-viewed{% endif %}" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}"
          data-url="{{ posting.source_url or '' }}">
   <div class="card-line1">
     <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>

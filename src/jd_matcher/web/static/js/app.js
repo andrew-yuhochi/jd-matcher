@@ -272,7 +272,8 @@ function applyCard(card) {
 // ---------------------------------------------------------------------------
 
 document.querySelectorAll(".btn-restore").forEach(function (btn) {
-  btn.addEventListener("click", function () {
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
     const pid = parseInt(btn.dataset.postingId, 10);
     emitEvent("card_restored", pid, null);
     fetch("/postings/" + pid + "/restore", { method: "POST" })
@@ -281,6 +282,58 @@ document.querySelectorAll(".btn-restore").forEach(function (btn) {
         if (card) card.remove();
       })
       .catch(function () {});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unapply button (Applied tab)
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll(".btn-unapply").forEach(function (btn) {
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    const pid = parseInt(btn.dataset.postingId, 10);
+    emitEvent("card_restored", pid, null);
+    fetch("/postings/" + pid + "/unapply", { method: "POST" })
+      .then(function () {
+        const card = document.getElementById("card-" + pid);
+        if (card) card.remove();
+      })
+      .catch(function () {});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Click-to-select cards (event delegation per list container)
+// ---------------------------------------------------------------------------
+
+// Action button selectors that must NOT trigger card select/expand
+const ACTION_BUTTON_SELECTORS = ".btn-apply, .btn-dismiss, .btn-restore, .btn-unapply, .card-apply-link";
+
+function handleCardContainerClick(e) {
+  const card = e.target.closest(".card[data-posting-id]");
+  if (!card) return;
+
+  // Don't fire when clicking action buttons or links
+  if (e.target.closest(ACTION_BUTTON_SELECTORS)) return;
+
+  setFocused(card);
+
+  // Clicking card body (non-button area) also expands the card
+  const expanded = card.classList.toggle("expanded");
+  const pid = parseInt(card.dataset.postingId, 10);
+  emitEvent("card_expanded", pid, { expanded: expanded });
+}
+
+[".postings-list", ".applied-list", ".dismissed-list"].forEach(function (sel) {
+  const container = document.querySelector(sel);
+  if (container) container.addEventListener("click", handleCardContainerClick);
+});
+
+// Stop propagation on apply/dismiss buttons so parent card click doesn't also fire
+document.querySelectorAll(".btn-apply, .btn-dismiss").forEach(function (btn) {
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
   });
 });
 
