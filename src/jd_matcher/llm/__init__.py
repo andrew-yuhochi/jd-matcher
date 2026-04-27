@@ -10,11 +10,12 @@ def get_openai_key() -> str:
     """Return the OpenAI API key from the environment.
 
     Searches for .env starting at the current working directory so tests can
-    chdir to a tmp_path with a fixture .env.  override=True ensures a fresh
-    read even if load_dotenv was called previously in the same process.
+    chdir to a tmp_path with a fixture .env.  Shell-exported vars take
+    precedence over .env (standard 12-factor convention: .env fills defaults
+    for unset vars only, never overwrites operator-set values).
     Raises ConfigError with an actionable message when the key is absent.
     """
-    load_dotenv(dotenv_path=Path.cwd() / ".env", override=True)
+    load_dotenv(dotenv_path=Path.cwd() / ".env")
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise ConfigError(

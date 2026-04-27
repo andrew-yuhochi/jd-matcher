@@ -41,3 +41,13 @@ def test_get_openai_key_loads_from_dotenv(monkeypatch, tmp_path):
     result = get_openai_key()
 
     assert result == "sk-fromdotenv"
+
+
+def test_shell_env_wins_over_dotenv(monkeypatch, tmp_path):
+    """When OPENAI_API_KEY is set in shell env AND .env, shell value wins
+    (standard 12-factor convention; .env is a default-fill, not an override)."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-shell-wins")
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-dotenv-loses\n")
+    monkeypatch.chdir(tmp_path)
+    from jd_matcher.llm import get_openai_key
+    assert get_openai_key() == "sk-shell-wins"
