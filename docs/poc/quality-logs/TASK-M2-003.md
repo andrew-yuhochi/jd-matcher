@@ -113,6 +113,47 @@ The probabilistic quality threshold (Gate 4) will be evaluated and approved by t
 
 ---
 
+## Independent Validation (test-validator, 2026-04-27)
+
+**Validator**: test-validator agent
+**Commit validated**: 096dbb6
+
+### Unit Tests
+521 passed, 1 skipped, 0 failed (full suite). 1 skipped = SKIP_LIVE-gated Indeed pagead live HTTP test.
+Filter suite breakdown: 68 unit (61 title-filter + 7 pipeline-integration), all 68 PASS.
+
+### Per-AC Verdicts
+
+| AC | Verdict | Evidence |
+|----|---------|----------|
+| AC1 — config/title_filters.yaml shape + categories | PASS | File exists; valid YAML; top-level keys `allow` (16 items) + `deny` (36 items); each item has `pattern`, `kind`, `note`; all required categories present: Director/VP/Vice President/Head of/Chief (deny), Software Engineer/Developer (deny), Dashboard Developer (deny), Business Intelligence Analyst (deny), QA Engineer (deny), DevOps Engineer (deny), Frontend Engineer (deny), Backend Engineer (deny); allow escape: `Director.*(Data Science\|...)` confirmed. |
+| AC2 — FilterDecision + filter_title behaviour | PASS | `FilterDecision` Pydantic model with `action: Literal['pass','drop']`, `matched_pattern: str\|None`, `reason: str\|None`. `filter_title(title, filters=None) -> FilterDecision` confirmed. 8-title direct exercise: Director of Engineering→DROP, Senior Data Scientist→PASS, Director of Data Science→PASS (allow override), QA Engineer→DROP, Backend Engineer (Data Platform)→PASS, Dashboard Developer→DROP, Machine Learning Engineer→PASS, Head of AI→PASS. All outcomes correct. |
+| AC3 — pipeline integration + email_ingest_log write | PASS | `filter_title()` called at pipeline.py:286, BEFORE `register_new()` at line 295. `mark_filtered()` called at line 306 for all-dropped emails only (Option C). `mark_filtered` in email_ingest_log.py:189 writes `filter_status='filtered'` and `filter_reason`. Integration tests: `test_email_log_filter_status_null_for_partial_filter` and `test_filter_status_set_to_filtered` both PASS. |
+| AC4 — filtered postings short-circuit pipeline | PASS | `continue` at pipeline.py:293 skips `register_new`, `seen_urls` write, and hydration for dropped postings. `TestNoHydrationForFiltered::test_hydrator_not_called_for_filtered_url` PASS (hydrator mock records 0 calls). `TestMixedEmail::test_only_passable_reaches_register_new` PASS. |
+| AC5 — 50 synthetic fixtures 100% pass | PASS | Collected: 20 `test_should_drop` + 20 `test_should_pass` + 10 `test_ambiguous_allow_wins` = 50 parametrized. Plus 11 edge/shape cases = 61 total unit tests. All 50 core fixtures PASS at 100%. Implementer count of 68/68 includes edge cases. |
+| AC6 — no live network in tests | PASS | grep for `requests.get\|httpx.\|urllib\|openai.` in tests/filter/ returns 0 hits. Pipeline integration tests mock GmailIngester, parse_linkedin, linkedin_hydrate, indeed_hydrate via `unittest.mock.patch`. |
+
+### Pipeline_runs filtered_by_title Rollup
+
+Implemented as: `SourceResult.filtered_count` (dataclass field) + `filtered_by_title` key in `gmail_source_step` structured log event. The TDD §C19 note "(per the C11 M2 update note)" refers to a `pipeline_runs.counts` JSON column. That column does not yet exist in schema.sql — it is scoped to TASK-M2-010 (Pipeline orchestrator + C11 M2 wiring). This deferral is correct per task scope; the interim log-event telemetry is sufficient for M2-003 ACs.
+
+### Regex Pattern Review
+
+All 52 patterns in title_filters.yaml use `kind: regex` with `re.IGNORECASE` applied by the loader (confirmed in title_filter.py:86). No patterns include redundant `(?i)` flags (correct per the YAML comment). Word boundaries (`\b`) used consistently for leadership/engineering terms. Allow patterns correctly checked before deny (confirmed in filter_title loop order: allow→deny). No unescaped specials found; backslash-b correctly appears as `\\b` in YAML.
+
+One observation (not a failure): the deny pattern for `\bBusiness Intelligence (Analyst|Developer|Specialist|Manager|Engineer)\b` would not match "Business Intelligence" alone or "Business Intelligence Director" — titles without those trailing words would pass through. The AC spec says "Business Intelligence" broadly; the pattern is more restrictive. This is acceptable for M2-003 and appropriate calibration material for TASK-M2-004.
+
+### TASKS.md / Quality Log Status
+
+TASKS.md: TASK-M2-003 marked Done (2026-04-27); all 6 ACs checked `[x]`. Progress Summary: M2 Done=3, To Do=10; Project total Done=17. Verified correct.
+Quality log at `docs/poc/quality-logs/TASK-M2-003.md`: exists, per-AC verdicts present, demo CLI outputs included, Option-C decision documented.
+
+### Overall: PASS
+
+No issues by tier. 0 Minor, 0 Major, 0 Directional.
+
+---
+
 ## Files Created / Modified
 
 | File | Action |

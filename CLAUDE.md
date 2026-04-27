@@ -9,9 +9,9 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 |-|-|
 | **Phase** | PoC |
 | **Milestone** | M2 — Content-aware dedup + repost detection (+ title pre-filter) |
-| **Last completed** | TASK-M2-002 — OpenAI API key setup + .env + SETUP.md (Done 2026-04-27) |
-| **Next task** | TASK-M2-003 — Title-Based Interest Filter (C19) + config/title_filters.yaml [data-pipeline] |
-| **Next command** | /implement jd-matcher TASK-M2-003 |
+| **Last completed** | TASK-M2-003 — Title-Based Interest Filter (C19) + config/title_filters.yaml (Done 2026-04-27) |
+| **Next task** | TASK-M2-004 — Filter correctness validation (user reviews filtered list) [data-pipeline + user] |
+| **Next command** | /implement jd-matcher TASK-M2-004 |
 
 ---
 
