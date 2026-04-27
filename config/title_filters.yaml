@@ -16,6 +16,20 @@
 # then re-run the pipeline (the posting is NOT in seen_urls, so it flows normally).
 
 allow:
+  # --- Calibration overrides (added 2026-04-27, Iteration 2) ---
+  - pattern: "(?i)\\b(AI|ML|Machine Learning|Data|Generative|Deep Learning)\\b.{0,30}\\bEngineer\\b"
+    kind: regex
+    note: "Allow override: AI/ML/Data + Engineer (catches AI Automation Engineer, ML QA Engineer, etc.)"
+  - pattern: "(?i)\\b(Director|VP|Head of)\\b.{0,30}\\b(Modelling|Modeling|Quant|Quantitative|Risk Analytics|Risk Modelling)\\b"
+    kind: regex
+    note: "Allow override: Director-level quant/risk/modelling roles (DS-adjacent)"
+  - pattern: "(?i)\\b(AI|ML|Machine Learning|Data|Deep Learning|NLP|Computer Vision)\\b.{0,30}\\bResearch (Associate|Assistant|Scientist|Engineer)\\b"
+    kind: regex
+    note: "Allow override: AI/ML/Data Research roles"
+  - pattern: "(?i)\\bResearch (Associate|Assistant|Scientist|Engineer)\\b.{0,30}\\b(AI|ML|Machine Learning|Data|NLP|Computer Vision)\\b"
+    kind: regex
+    note: "Allow override: Research roles with AI/ML/Data suffix"
+
   # --- Leadership titles WITH Data/ML/AI context are welcome ---
   - pattern: "Director.*(Data Science|Machine Learning|Artificial Intelligence|AI|Analytics|Data Engineering|Data Platform|Data)"
     kind: regex
@@ -185,6 +199,32 @@ deny:
   - pattern: "\\bFinancial Analyst\\b"
     kind: regex
     note: "Finance — not ML/DS"
+
+  # --- Calibration denials (added 2026-04-27, Iteration 2 false negatives) ---
+  - pattern: "(?i)\\bFlutter (Developer|Engineer)\\b"
+    kind: regex
+    note: "Mobile UI dev, not DS/ML (calibrated 2026-04-27 — false negative #72)"
+  - pattern: "(?i)\\bEnvironmental (Scientist|Engineer|Specialist)\\b"
+    kind: regex
+    note: "Civil/environmental science, not DS/ML (calibrated #73)"
+  - pattern: "(?i)\\bWater Resources\\b"
+    kind: regex
+    note: "Hydrology/civil engineering, not DS/ML (calibrated #74)"
+  - pattern: "(?i)\\bClinical (Research|Trial) (Assistant|Associate|Coordinator|Manager|Operations)\\b"
+    kind: regex
+    note: "Clinical research/trial ops, not DS/ML (calibrated #75)"
+  - pattern: "(?i)\\bTrial Operations\\b"
+    kind: regex
+    note: "Clinical trial operations management, not DS/ML (calibrated #61)"
+  - pattern: "(?i)\\bInternet (Assessor|Rater|Evaluator)\\b"
+    kind: regex
+    note: "Search-rating gig work, not DS/ML (calibrated #91)"
+  - pattern: "(?i)\\bEconomic (Advisor|Advisory|Consultant|Consulting)\\b"
+    kind: regex
+    note: "Econ consulting, not DS/ML (calibrated #59)"
+  - pattern: "(?i)\\bResearch (Associate|Assistant)\\b"
+    kind: regex
+    note: "Generic research role unless AI/ML/Data context (calibrated #6)"
 
   # --- Network / Security / Systems Engineering ---
   - pattern: "\\bNetwork (Engineer|Administrator|Analyst)\\b"

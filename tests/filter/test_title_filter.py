@@ -231,6 +231,40 @@ def test_substring_kind_matches_case_insensitively() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Iteration 2 calibration cases (2026-04-27)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title,expected_action", [
+    # Fixed false positive — #85 AI Automation Engineer (allow override fires before Automation deny)
+    ("AI Automation Engineer", "pass"),
+    ("ML QA Engineer", "pass"),
+    # Fixed borderline drop — #57 Aon (Director.*Modelling allow override)
+    ("Associate Director, Asset Modelling - STG Life Solutions", "pass"),
+    ("Director, Risk Analytics", "pass"),
+    # New deny patterns
+    ("Flutter Developer", "drop"),
+    ("Environmental Scientist", "drop"),
+    ("Water Resources Engineer/Scientist/Modeller", "drop"),
+    ("Clinical Research Assistant", "drop"),
+    ("Senior Manager, Trial Operations", "drop"),
+    ("Personalized Internet Assessor - Persian speakers in Canada", "drop"),
+    ("Senior, Economic Advisory (Vancouver)", "drop"),
+    # Research Associate deny + AI/ML allow overrides
+    ("Research Associate", "drop"),
+    ("AI Research Associate", "pass"),
+    ("Research Engineer, Machine Learning", "pass"),
+])
+def test_iteration_2_calibration(title: str, expected_action: str) -> None:
+    from jd_matcher.filter.title_filter import filter_title
+    decision = filter_title(title)
+    assert decision.action == expected_action, (
+        f"{title!r}: expected {expected_action}, got {decision.action} "
+        f"(matched {decision.matched_pattern!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 
