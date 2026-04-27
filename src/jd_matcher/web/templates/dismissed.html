@@ -31,7 +31,7 @@
         <div class="card-line3">
           <span class="card-date">Dismissed: {{ posting.dismissed_at[:10] if posting.dismissed_at else "?" }}</span>
         </div>
-        <div class="card-body">
+        <div class="card-expanded-body">
           {% if posting.full_jd %}
             <p class="card-full-jd">{{ posting.full_jd }}</p>
           {% else %}

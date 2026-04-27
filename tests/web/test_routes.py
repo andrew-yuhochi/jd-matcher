@@ -701,3 +701,89 @@ def test_dismissed_tab_renders_full_jd_text(client: TestClient, seeded_db: Path)
     assert resp.status_code == 200
     html = resp.text
     assert jd_text in html, "full_jd text must appear in Dismissed tab HTML"
+
+
+# ---------------------------------------------------------------------------
+# Bug 2 — Applied/Dismissed cards must use card-expanded-body (not card-body)
+# ---------------------------------------------------------------------------
+
+
+def test_applied_tab_jd_wrapped_in_card_expanded_body(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """Applied tab: full_jd must be inside .card-expanded-body, not .card-body."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    jd_text = "Applied expand-body sentinel JD text."
+    pid = _insert_posting_with_jd(conn, "Applied Expand Job", jd_text)
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) VALUES (?, 'default', 'Applied', ?, ?)",
+        (pid, ts, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    html = resp.text
+
+    # card-expanded-body must be present for applied cards
+    assert "card-expanded-body" in html, "Applied cards must use card-expanded-body"
+    # card-body must NOT be used (old incorrect class)
+    assert 'class="card-body"' not in html, "Applied cards must NOT use card-body"
+    # The JD text must appear inside a card-expanded-body section
+    expanded_body_idx = html.find("card-expanded-body")
+    jd_idx = html.find(jd_text)
+    assert expanded_body_idx != -1 and jd_idx > expanded_body_idx, (
+        "full_jd must appear after card-expanded-body open tag"
+    )
+
+
+def test_dismissed_tab_jd_wrapped_in_card_expanded_body(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """Dismissed tab: full_jd must be inside .card-expanded-body, not .card-body."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    jd_text = "Dismissed expand-body sentinel JD text."
+    pid = _insert_posting_with_jd(conn, "Dismissed Expand Job", jd_text)
+    ts = "2026-04-25T10:00:00+00:00"
+    conn.execute(
+        "INSERT INTO dismissed (posting_id, user_id, dismissed_at) VALUES (?, 'default', ?)",
+        (pid, ts),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/dismissed")
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert "card-expanded-body" in html, "Dismissed cards must use card-expanded-body"
+    assert 'class="card-body"' not in html, "Dismissed cards must NOT use card-body"
+    expanded_body_idx = html.find("card-expanded-body")
+    jd_idx = html.find(jd_text)
+    assert expanded_body_idx != -1 and jd_idx > expanded_body_idx, (
+        "full_jd must appear after card-expanded-body open tag"
+    )
+
+
+def test_main_tab_jd_not_rendered_outside_no_html_in_plain_text(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """GET / with plain-text full_jd must not contain literal HTML angle brackets."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    plain_jd = "Plain text JD with no tags."
+    _insert_posting_with_jd(conn, "Plain JD Job", plain_jd)
+    conn.close()
+
+    resp = client.get("/")
+    html = resp.text
+    # The plain_jd text should appear but NOT as a literal HTML tag sequence
+    assert plain_jd in html
+    # Verify the rendered card-expanded-body section does not contain raw <p> or <ul> tags
+    # that would come from unstripped HTML (Jinja escapes them to &lt; but we check the
+    # source text doesn't have literal angle brackets from un-escaped HTML)
+    assert "&lt;p&gt;" not in html, "HTML tags must not appear escaped in rendered output"

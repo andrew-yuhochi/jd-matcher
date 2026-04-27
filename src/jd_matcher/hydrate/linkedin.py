@@ -22,6 +22,7 @@ from typing import Literal, Optional
 import requests
 from bs4 import BeautifulSoup
 
+from jd_matcher.hydrate._text import strip_html_to_text
 from jd_matcher.hydrate.rate_limiter import HYDRATOR_RATE_LIMITER
 
 logger = logging.getLogger(__name__)
@@ -280,7 +281,8 @@ def _try_json_ld(
                 if isinstance(address, dict):
                     location = address.get("addressLocality") or None
 
-        description = data.get("description") or None
+        description_raw = data.get("description") or None
+        description = strip_html_to_text(description_raw) if description_raw else None
         seniority_level = data.get("occupationalCategory") or None
         employment_type = data.get("employmentType") or None
         industries = data.get("industry")

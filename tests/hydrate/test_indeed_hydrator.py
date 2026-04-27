@@ -389,3 +389,51 @@ def test_neither_json_ld_nor_dom_returns_failed(monkeypatch: pytest.MonkeyPatch)
     assert result.hydration_status == "failed"
     assert result.title is None
     assert result.description is None
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 — HTML stripping in JSON-LD description
+# ---------------------------------------------------------------------------
+
+_HTML_DESCRIPTION_FIXTURE = b"""<!DOCTYPE html>
+<html>
+<head>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "JobPosting",
+  "title": "Test Role",
+  "description": "<p>First para.</p><ul><li>Bullet one</li><li>Bullet two</li></ul><p>Second para.</p>",
+  "hiringOrganization": {"@type": "Organization", "name": "Test Corp"}
+}
+</script>
+</head>
+<body></body>
+</html>"""
+
+
+def test_json_ld_description_html_is_stripped_to_plain_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """JSON-LD description HTML must be stripped; no angle-bracket tags in result."""
+    import tempfile
+
+    monkeypatch.setenv("SKIP_LIVE", "1")
+    with tempfile.TemporaryDirectory() as td:
+        fixture_path = Path(td) / "htmljob0001.html"
+        fixture_path.write_bytes(_HTML_DESCRIPTION_FIXTURE)
+        result = hydrate(
+            "https://www.indeed.com/viewjob?jk=htmljob0001",
+            fixtures_dir=Path(td),
+        )
+
+    assert result.description is not None
+    assert "<" not in result.description, "HTML tags must be stripped from description"
+    assert ">" not in result.description, "HTML tags must be stripped from description"
+    assert "First para." in result.description
+    assert "Second para." in result.description
+    # Paragraphs must be separated by at least one newline
+    first_idx = result.description.index("First para.")
+    second_idx = result.description.index("Second para.")
+    between = result.description[first_idx + len("First para.") : second_idx]
+    assert "\n" in between, "Paragraph text must be separated by newlines"
