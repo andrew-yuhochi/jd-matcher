@@ -6,7 +6,7 @@
 ---
 
 ## Progress Summary
-- Done: 12 | In Progress: 0 | To Do: 2 | Blocked: 0
+- Done: 14 | In Progress: 0 | To Do: 0 | Blocked: 0
 - Current milestone: M1
 - Invalidated tasks: 0
 
@@ -363,8 +363,8 @@
 
 ### TASK-M1-011 — Real-data validation against live email samples
 
-- **Status**: To Do
-- **Blocked reason**: Awaits user accumulating ≥50 LinkedIn + ≥30 Indeed real alert emails post-TASK-M1-002 setup
+- **Status**: Done (2026-04-27)
+- **Blocked reason**:
 - **Agent**: test-validator (with user collaboration to provide real samples)
 - **Component**: validates C3 (Gmail), C4 (URL parser), C5 (Hydrator) — TDD §C3, §C4, §C5
 - **Description**: Run the parsing and hydration pipeline against real LinkedIn + Indeed alert emails the user has accumulated since SETUP completion. Compute extraction and hydration accuracy. Update PoC quality logs. This is the Gate 4 real-data validation.
@@ -378,19 +378,19 @@
 - **Demo Artifact**: `docs/poc/quality-logs/TASK-M1-011.md` documenting per-source extraction rate (should be ≥95%) + hydration rate (should be ≥95%) + sample-level details + any failure modes encountered.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-011.md`
 - **Acceptance Criteria**:
-  - [ ] Sample size: ≥50 real LinkedIn alert emails + ≥30 real Indeed alert emails
-  - [ ] LinkedIn URL extraction rate ≥95% (per PRD SC-1, ROADMAP M1 AC)
-  - [ ] Indeed URL extraction rate ≥95% (per PRD SC-2)
-  - [ ] JD hydration rate ≥95% on ≥30 real URLs (per PRD SC-3)
-  - [ ] Quality log includes per-failure reason categorization (which samples failed and why)
-  - [ ] Any source falling below 95% triggers Major-tier root-cause analysis per CLAUDE.md Gate 5
-  - [ ] Real samples gitignored — never committed (sensitive content)
+  - [x] Sample size: ≥50 real LinkedIn alert emails + ≥30 real Indeed alert emails
+  - [x] LinkedIn URL extraction rate ≥95% (per PRD SC-1, ROADMAP M1 AC)
+  - [x] Indeed URL extraction rate ≥95% (per PRD SC-2)
+  - [x] JD hydration rate ≥95% on ≥30 real URLs (per PRD SC-3)
+  - [x] Quality log includes per-failure reason categorization (which samples failed and why)
+  - [x] Any source falling below 95% triggers Major-tier root-cause analysis per CLAUDE.md Gate 5
+  - [x] Real samples gitignored — never committed (sensitive content)
 
 ---
 
 ### TASK-M1-012 — M1 demo + user approval
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: manual (user)
 - **Component**: M1 milestone deliverable acceptance — references all C-components
@@ -405,13 +405,13 @@
 - **Demo Artifact**: User has triaged ≥1 real day's postings end-to-end; written sign-off in PHASE-REVIEW.md.
 - **Quality log**: `docs/poc/quality-logs/TASK-M1-012.md`
 - **Acceptance Criteria**:
-  - [ ] User has run the system on ≥1 day of real LinkedIn + Indeed alert emails
-  - [ ] Coverage check: card count matches unique URL count from emails (or close, accounting for URL dedup)
-  - [ ] Spot-check ≥3 cards: title/company match emails; click-through to source URL works; JD on card matches JD on source page
-  - [ ] State persistence check: after restart, applied/dismissed postings do not reappear in Main
-  - [ ] Source-health badges visible and accurate (all green when sources healthy)
-  - [ ] User confirms M1 deliverable meets the goal in PHASE-REVIEW.md or written confirmation
-  - [ ] Quality logs from M1-001 through M1-011 are present and reviewed
+  - [x] User has run the system on ≥1 day of real LinkedIn + Indeed alert emails
+  - [x] Coverage check: card count matches unique URL count from emails (or close, accounting for URL dedup)
+  - [x] Spot-check ≥3 cards: title/company match emails; click-through to source URL works; JD on card matches JD on source page
+  - [x] State persistence check: after restart, applied/dismissed postings do not reappear in Main
+  - [x] Source-health badges visible and accurate (all green when sources healthy)
+  - [x] User confirms M1 deliverable meets the goal in PHASE-REVIEW.md or written confirmation
+  - [x] Quality logs from M1-001 through M1-011 are present and reviewed
 
 ---
 
