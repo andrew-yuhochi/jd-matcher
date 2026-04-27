@@ -373,6 +373,12 @@ class TestFixtureUrlPatterns:
 _REAL_FIXTURES_ROOT = Path(__file__).parent.parent / "fixtures" / "real"
 
 
+def _is_indeed_eml(eml_path: Path) -> bool:
+    body_bytes = eml_path.read_bytes()
+    msg = email.message_from_bytes(body_bytes)
+    return "indeed" in (msg.get("From") or "").lower()
+
+
 def _indeed_sender_filter() -> str:
     """Return the Indeed sender filter string from the module under test."""
     from jd_matcher.ingest.gmail import _SENDER_FILTERS
@@ -426,15 +432,12 @@ class TestIndeedSenderFilterMatchesRealFixtures:
 
     @pytest.mark.parametrize(
         "eml_path",
-        [p for p in sorted(_REAL_FIXTURES_ROOT.glob("*.eml"))],
+        [p for p in sorted(_REAL_FIXTURES_ROOT.glob("*.eml")) if _is_indeed_eml(p)],
         ids=lambda p: p.name,
     )
     def test_indeed_sender_filter_matches_real_indeed_fixtures(
         self, eml_path: Path
     ) -> None:
-        if not self._is_indeed_fixture(eml_path):
-            pytest.skip("Not an Indeed fixture — skipping")
-
         address = self._extract_raw_from_address(eml_path)
         assert address is not None, f"{eml_path.name}: could not extract From address"
 

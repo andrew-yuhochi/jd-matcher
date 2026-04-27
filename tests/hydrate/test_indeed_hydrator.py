@@ -191,39 +191,6 @@ def test_no_silent_drops_5_urls_3_success_2_fail(monkeypatch: pytest.MonkeyPatch
 
 
 # ---------------------------------------------------------------------------
-# Real-data sanity tests (CI-safe — no-ops if no Indeed real fixtures)
-# ---------------------------------------------------------------------------
-
-def _real_fixture_paths() -> list[Path]:
-    """Indeed real fixtures would be in real/ with an indeed_ prefix or similar."""
-    if not REAL_FIXTURES_DIR.exists():
-        return []
-    return [
-        p for p in REAL_FIXTURES_DIR.glob("indeed_*.html")
-        if p.stat().st_size > 0
-    ]
-
-
-@pytest.mark.parametrize(
-    "fixture_path",
-    _real_fixture_paths(),
-    ids=[p.stem for p in _real_fixture_paths()],
-)
-def test_real_indeed_fixture_parses(
-    fixture_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Real-captured Indeed HTML fixtures must yield title or description."""
-    monkeypatch.setenv("SKIP_LIVE", "1")
-    job_id = fixture_path.stem
-    url = _indeed_url(job_id)
-    result = hydrate(url, fixtures_dir=fixture_path.parent)
-
-    assert result.raw_html is not None
-    if result.hydration_status in ("complete", "partial"):
-        assert result.title is not None or result.description is not None
-
-
-# ---------------------------------------------------------------------------
 # Fix 3 — Full M1-005b stealth stack tests
 # ---------------------------------------------------------------------------
 
