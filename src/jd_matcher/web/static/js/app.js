@@ -321,6 +321,7 @@ function handleCardContainerClick(e) {
 
   // Clicking card body (non-button area) also expands the card
   const expanded = card.classList.toggle("expanded");
+  card.classList.add("card-viewed");
   const pid = parseInt(card.dataset.postingId, 10);
   emitEvent("card_expanded", pid, { expanded: expanded });
 }
@@ -367,6 +368,7 @@ document.addEventListener("keydown", function (e) {
     case "e":
       if (focusedCard) {
         const expanded = focusedCard.classList.toggle("expanded");
+        focusedCard.classList.add("card-viewed");
         const pid = parseInt(focusedCard.dataset.postingId, 10);
         emitEvent("card_expanded", pid, { expanded: expanded });
       }

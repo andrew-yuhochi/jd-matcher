@@ -388,6 +388,30 @@ def test_app_js_has_unapply_handler() -> None:
     assert "/unapply" in src, "app.js must POST to /postings/{id}/unapply"
 
 
+def test_e_key_adds_card_viewed_class() -> None:
+    """e keyboard handler must add card-viewed class when expanding a card."""
+    src = _js_source()
+    match = re.search(r'case "e":(.*?)break;', src, re.DOTALL)
+    assert match, "app.js missing 'e' case block"
+    assert "card-viewed" in match.group(1), (
+        "e key handler must add 'card-viewed' class for immediate visual feedback"
+    )
+
+
+def test_click_handler_adds_card_viewed_class() -> None:
+    """handleCardContainerClick must add card-viewed class when expanding a card."""
+    src = _js_source()
+    match = re.search(
+        r"function handleCardContainerClick\b(.*?)^\}",
+        src,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert match, "app.js missing handleCardContainerClick function"
+    assert "card-viewed" in match.group(1), (
+        "handleCardContainerClick must add 'card-viewed' class for immediate visual feedback"
+    )
+
+
 def test_manual_smoke_note_is_documented() -> None:
     """
     DOCUMENTATION TEST: This test exists to assert that the manual smoke test
