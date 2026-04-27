@@ -30,12 +30,32 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 - **CV variant recommender**: 5-CV ranking via cosine similarity between role embeddings and CV embeddings.
 - **Job Bank Canada email alerts** ingester (user has not yet set up alerts; will activate at M4).
-- **Himalayas API** client (free, structured, ≥93 Canadian DS results live-tested).
+- **Himalayas API** client (free, structured, ≥93 Canadian DS results live-tested) — **see "PoC-M4 — Himalayas API source (deferred from M2)" entry below for the deferral rationale**.
 - **Remotive API** client (`category=ai-ml` filter).
 - **Jobicy API** client.
 - **HN "Who is Hiring"** RSS parser.
 - **Analytics view** (FastAPI Jinja2 page at `/analytics`, three HTML tables: session summary, daily breakdown, source contribution) — reads from the events table populated since M1.
 - **CV settings page** activation (5 CV slot UI exists from M1 as stub; activated at M4 when recommender lands).
+
+---
+
+### PoC-M4 — Himalayas API source (deferred from M2)
+
+**Decision date**: 2026-04-27
+**Approved by**: User (during /milestone-plan for M2)
+
+**What**: Add Himalayas API as a fourth posting source (after LinkedIn email, Indeed email, and Indeed pagead resolution). Per RESEARCH-REPORT.md §5, Himalayas exposes ≥90 Canadian DS roles with a clean public API — meaningful additional coverage for a Vancouver DS/ML job-hunter.
+
+**Why deferred from M2**: M2 is the content-aware dedup milestone (LLM extraction + embeddings + two-stage matching). Himalayas adds a new source axis (API client + parser + integration with the dedup pipeline) that's orthogonal to the dedup work. Bundling source-expansion together at M4 keeps M2 focused on the technique milestone and matches M4's existing planned multi-source expansion (Job Bank, Remotive, Jobicy, HN per ROADMAP §M4).
+
+**M4 placement rationale**: ROADMAP §M4 already plans 4 new sources (Job Bank Canada, Remotive, Jobicy, HN). Himalayas joins as the 5th — same shape (parser, hydrator, source-health badge, integration tests), same code area, same effort pattern. ROADMAP wording will need a one-line update at M4 planning time (currently presupposes Himalayas is in pre-M4).
+
+**Caveats at M4 planning time**:
+- Himalayas API rate limits — confirm at M4 planning vs current docs
+- Himalayas content format — does it expose `role_summary` directly or do we still need LLM extraction? (Affects M2 dedup engine integration)
+- Cross-source dedup with Himalayas — will join naturally with M2's content-dedup; no new mechanism needed
+
+**Tests blocked**: M2's "≥3 real cross-source pairs" AC works fine on LinkedIn↔Indeed pairs alone (no Himalayas needed). M2 closure not blocked.
 
 ---
 
@@ -154,6 +174,45 @@ User can monitor sync progress via:
 - `sqlite3 ~/.jd-matcher/jd-matcher.db "SELECT source, health_status, started_at, finished_at FROM pipeline_runs ORDER BY started_at DESC LIMIT 4;"` — current run state
 
 Acceptable trade-off for M1 since the rate limit makes long syncs unavoidable; the MVP scheduler + progress display is the right place for this UX investment.
+
+---
+
+### MVP-M1 — Filtered Postings tab UI
+
+**Decision date**: 2026-04-27
+**Approved by**: User (during /milestone-plan for M2)
+
+**What**: New "Filtered" tab in the web UI alongside Main / Applied / Dismissed. Lists postings that were dropped by C19 (title-based interest filter) with the matched deny pattern shown as a small chip on each card. Each card has a "Rescue" button that adds an exception to `config/title_filters.yaml` so the posting flows through on the next sync.
+
+**Why**: M2 ships with C19 dropping postings invisibly — the audit trail lives only in `email_ingest_log.filter_status='filtered'` and is surfaced by the `python -m jd_matcher.report ingest --filtered` CLI flag. Audit-trail-only UX is fine for M2 development cycle but not user-friendly long-term — the user has to inspect a CLI to know what's been filtered. A UI tab makes false-positive review natural and lets the user iteratively tune the filter without leaving the browser.
+
+**Why deferred from M2**: M2's user-observable deliverable is content-aware dedup (multi-source cards + Reposted badge per ROADMAP §M2). The Filtered tab is observability for a different feature (C19 cost-optimisation filter) and would add UI scope creep that competes for the same M2 implementation window. The audit trail in `email_ingest_log` + `report ingest --filtered` CLI is sufficient for M2 development and calibration. Promote to MVP-M1 once the dedup feature is stable AND the user has had a few weeks of real-data filter operation to confirm the filter design holds.
+
+**Schema impact for M1: NONE.** The `email_ingest_log.filter_status` and `filter_reason` columns ship in M2 (TDD §1.2a M2 schema delta). The optional richer `title_filter_decisions` table was rejected for M2; if the Filtered tab needs richer per-event analytics at MVP-M1 (e.g. timestamp of each filter event independent of email arrival), this is the right time to add it.
+
+**Implementation outline**:
+- New `/filtered` route + Jinja2 template (mirrors the existing `/applied` and `/dismissed` patterns from C8)
+- New backend endpoint `POST /postings/rescue` taking `{gmail_message_id, title}` — modifies `config/title_filters.yaml` to add an allow-pattern entry for the title (or removes the matching deny pattern, depending on UX design at planning time)
+- Card rendering: title (deny pattern chip), source, received-at; same compact density as Dismissed cards
+- New `btn-rescue` button on filtered cards with confirm dialog
+- Same keyboard shortcuts as Dismissed tab (`e` to expand, `o` to open URL on the source platform if hydration was attempted before filtering — N/A for C19 since filter happens pre-hydration; consider showing "(no JD fetched)" instead)
+- Sub-bar count badge: `Filtered (N)` next to `Main / Applied / Dismissed`
+
+**Caveats to action at MVP-M1 planning**:
+1. **Rescue semantics** — the YAML edit is delicate: an allow-pattern that's too broad un-filters all similar titles, not just the one rescued. UX design at MVP-M1 must decide between (a) per-title exact-match allow pattern (precise but bloats YAML), (b) prompt the user to write a regex (powerful but error-prone), or (c) just remove the matched deny pattern (broad — affects the whole filter config).
+2. **Rescue re-triggering** — after a rescue, the original email's URLs need to be re-extracted on the next sync to flow through. C4 currently re-parses every email it sees in Gmail (no email-level dedup), so this works naturally — confirm at MVP-M1 planning.
+3. **Filter config versioning** — `config/title_filters.yaml` edits via the Rescue button should be version-controlled or at least timestamped (a comment header like `# Last edited via Rescue UI: 2026-XX-XX HH:MM, restored "Backend Engineer (Data Platform)"` is the lightweight option) so the user can audit what changed and revert.
+4. **Empty-state UX** — first-time users with no filtered postings need an explainer ("No postings have been filtered yet. C19 silently drops obviously-irrelevant titles to save LLM cost — see config/title_filters.yaml for the active rules.") to avoid a confusing blank tab.
+
+**Out of scope for this item**:
+- Auto-suggest deny/allow patterns from filtered-vs-rescued history (ML on top of the user's rescue decisions) — interesting but a separate MVP-M2 candidate.
+- Daily-emailed digest of filtered postings — covered by the existing M1 report CLI, no UI needed.
+
+**M2 workaround** (until MVP-M1 lands the Filtered tab):
+- `python -m jd_matcher.report ingest --filtered` (the M2 C27 extension) lists every filtered email + matched pattern
+- To rescue: edit `config/title_filters.yaml` directly + re-run sync; the email's URLs are re-parsed by C4, re-tested by C19 (now passing), and flow normally into the M2 pipeline
+
+Acceptable trade-off for M2 — the filter is new, deny patterns will need iteration, and editing a YAML file is a reasonable interim UX for the M2 calibration window.
 
 ---
 

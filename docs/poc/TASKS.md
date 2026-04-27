@@ -7,13 +7,13 @@
 
 ## Progress Summary
 
-**Active milestone**: none — M1 closed 2026-04-27.
+**Active milestone**: M2 — Content-aware dedup + repost detection (+ title pre-filter) — opened 2026-04-27.
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
 | Done | 0 | 14 |
 | In Progress | 0 | 0 |
-| To Do | 0 | 0 |
+| To Do | 13 | 13 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -22,7 +22,409 @@
 
 ## Active Milestone
 
-_No open milestone. M1 closed 2026-04-27. Next: run `/milestone-plan jd-matcher` to plan Milestone 2 (Content-aware dedup + repost detection — see ROADMAP §M2 for the plan)._
+### Milestone 2 — Content-aware dedup + repost detection (+ title pre-filter)
+
+**Goal**: Recognize same job posted twice (cross-source or repost); merge into one card. Cheap title-deny-list pre-filter saves ~30-50% of LLM tokens by dropping obviously-irrelevant postings before LLM extraction.
+
+**User-observable deliverable**:
+- Browser: merged cards with "Sources: [Apply on LinkedIn] [Apply on Indeed]"; dismissing one variant suppresses canonical across all sources; reposted JDs (30+ days) show "Reposted" badge with original first_seen preserved.
+- Backend: title-deny-list filter saves ~30-50% of LLM tokens; filter accuracy validated against ≥95% precision + ≥98% recall.
+
+**Quality bars** (per ROADMAP §M2 + M2 design):
+- ≥90% accuracy on 30 hand-labeled posting pairs (10 dup / 10 non-dup / 10 ambiguous)
+- ZERO false-merges on 10 different-team cases (regression-blocking)
+- Cross-source merge verified on ≥3 real cross-source pairs
+- State inheritance: dismissing one source variant suppresses canonical across all sources
+- Repost detection on ≥3 real cases or synthetic (30-day threshold)
+- Auto-merge threshold 0.90 calibrated against hand-labeled set
+- Title filter: ≥95% precision + ≥98% recall (NOT regression-blocking; user-tunable)
+
+**Components introduced or significantly changed**:
+- C18 LLM Extraction (new) — TDD §C18
+- C19 Title-Based Interest Filter (new) — TDD §C19
+- C20 Embedding Pipeline (new) — TDD §C20
+- C21 Two-Stage Dedup Engine (new) — TDD §C21
+- C22 State Manager extension — TDD §C22
+- C28 LLM Provider Abstraction (new) — TDD §C28
+- C29 Canonical Record Merge Logic (new) — TDD §C29
+- C30 Repost Detector (new) — TDD §C30
+- C2 Data store schema additions — TDD §1.2a (4 new tables + email_ingest_log delta)
+- C5 Hydrator (changed) — TDD §C5
+- C7 State Manager (changed) — TDD §C7
+- C8 Web UI backend (changed) — TDD §C8
+- C9 Web UI frontend (changed) — TDD §C9
+- C11 Pipeline orchestrator (changed) — TDD §C11
+
+**Backlog promotions**: none for M2 from existing BACKLOG.
+
+---
+
+##### TASK-M2-001 — Schema migration (4 new tables + email_ingest_log delta)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C2 (Data store) — TDD §1.2a schema (4 new tables) + email_ingest_log columns
+- **Description**: Add `canonical_postings`, `posting_canonical_links`, `posting_embeddings`, `llm_call_ledger` tables + `filter_status`/`filter_reason` columns on `email_ingest_log`. Foundation for entire M2 work. `init_db` must remain idempotent.
+- **Dependencies**: None
+- **Implementation Checklist**:
+  - Schema: 4 new `CREATE TABLE IF NOT EXISTS` in `schema.sql`; 2 `ALTER TABLE` on `email_ingest_log`; `CREATE INDEX IF NOT EXISTS` for join-heavy queries (`idx_canonical_user_block`, `posting_canonical_links` lookups, etc.)
+  - Wire: extend `init_db()` to create new tables/indexes; existing M1 init code unchanged
+  - Call site: `init_db()` is called by every CLI entry point; no new call sites
+  - Imports affected: `src/jd_matcher/db/init_db.py`
+  - Runtime files: existing `~/.jd-matcher/jd-matcher.db` extends in place
+- **Demo Artifact**: `sqlite3 ~/.jd-matcher/jd-matcher.db ".schema canonical_postings posting_canonical_links posting_embeddings llm_call_ledger"` shows all 4 new tables + extended `email_ingest_log`.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-001.md`
+- **Acceptance Criteria**:
+  - [ ] All 4 new tables created via `CREATE TABLE IF NOT EXISTS` (idempotent)
+  - [ ] `email_ingest_log` gains `filter_status TEXT NULL` + `filter_reason TEXT NULL` + `idx_email_ingest_log_filter`
+  - [ ] All canonical-related indexes created (`idx_canonical_user_block` uses `(user_id, canonical_company, team_or_department, canonical_location)`)
+  - [ ] `init_db()` re-run on populated DB preserves all data, no errors
+  - [ ] Test: each new table exists with expected columns + indexes
+  - [ ] Test: re-running `init_db` on a populated DB doesn't drop or error
+
+---
+
+##### TASK-M2-002 — OpenAI API key setup + .env + SETUP.md
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline (+ content-writer for SETUP.md narrative)
+- **Component**: C28 prep (env config foundation) — TDD §C28
+- **Description**: Document OpenAI API key acquisition + add `OPENAI_API_KEY` to `.env.example` + SETUP.md. Smoke-test helper validates the key works.
+- **Dependencies**: None
+- **Implementation Checklist**:
+  - Schema: N/A
+  - Wire: helper `get_openai_key()` in `src/jd_matcher/llm/__init__.py` reads `OPENAI_API_KEY` env var; raises `ConfigError` with clear message if missing
+  - Call site: smoke script `python -m jd_matcher.llm.smoke` calls a 1-token completion to verify
+  - Imports affected: new module `src/jd_matcher/llm/__init__.py`
+  - Runtime files: `tokens.json` unchanged (this is a separate API)
+- **Demo Artifact**: `.env.example` has `OPENAI_API_KEY=sk-...` placeholder; SETUP.md has section "OpenAI API key setup" with `platform.openai.com` walkthrough; `python -m jd_matcher.llm.smoke` returns success.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-002.md`
+- **Acceptance Criteria**:
+  - [ ] `.env.example` contains `OPENAI_API_KEY` entry with placeholder
+  - [ ] `SETUP.md` has section "OpenAI API key setup" describing how to get a key + where to put it
+  - [ ] `get_openai_key()` helper reads env var or raises `ConfigError` with clear message
+  - [ ] Test (mocked): missing env var produces `ConfigError` with actionable message
+  - [ ] Smoke script `python -m jd_matcher.llm.smoke` works end-to-end against real OpenAI (live test)
+
+---
+
+##### TASK-M2-003 — Title-Based Interest Filter (C19) + config/title_filters.yaml
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C19 (Title-Based Interest Filter) — TDD §C19
+- **Description**: Pre-LLM filter sitting between C4 (URL parser) and C5 (hydrator). Drops obviously-irrelevant titles per deny list. Filter decision logged to `email_ingest_log`; filtered postings never proceed to hydration or LLM. Configurable via `config/title_filters.yaml`.
+- **Dependencies**: TASK-M2-001
+- **Implementation Checklist**:
+  - Schema: writes to `email_ingest_log.filter_status` + `filter_reason`
+  - Wire: new module `src/jd_matcher/filter/title_filter.py` exposing `filter_title(title) -> FilterDecision`
+  - Config: new file `config/title_filters.yaml` with `deny_patterns[]` + `allow_patterns[]` (defaults provided per TDD §C19 examples)
+  - Call site: invoked from `pipeline.py` between C4 and C5; filtered postings short-circuit (no hydration call)
+  - Imports affected: `pipeline.py`
+  - Runtime files: `config/title_filters.yaml` (committed to repo)
+- **Demo Artifact**: `python -m jd_matcher.filter.title_filter --title "Director of Engineering"` returns drop decision with matched pattern; `--title "Senior Data Scientist"` returns pass.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-003.md`
+- **Acceptance Criteria**:
+  - [ ] `config/title_filters.yaml` with default `deny_patterns` (Director|VP|Head of|Chief, Software Engineer/Developer without DS/ML adjacent, Dashboard Developer, Business Intelligence, QA/DevOps/Frontend/Backend Engineer without Data context) and `allow_patterns` (escape hatch, e.g., "Director.*Data Science")
+  - [ ] `filter_title(title)` returns `FilterDecision {action: pass|drop, matched_pattern, reason}`
+  - [ ] Filter applied between C4 and C5 in pipeline; filtered postings recorded in `email_ingest_log` with `filter_status='filtered'` and `filter_reason` set
+  - [ ] Filtered postings NEVER reach hydration, LLM extraction, embedding, or dedup
+  - [ ] 100% on synthetic test fixtures (20 deny-matching titles, 20 allow-matching titles, 10 ambiguous)
+  - [ ] No live network calls in test path
+
+---
+
+##### TASK-M2-004 — Filter correctness validation (user reviews filtered list)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user
+- **Component**: C19 (validation) — TDD §C19
+- **Description**: Run C19 against the existing 91 real postings + any new postings during M2 implementation window. Generate a validation report showing all filtered titles + matched patterns. User reviews the list and adjusts `config/title_filters.yaml` until precision ≥95% (filtered = irrelevant) and recall ≥98% (legit jobs not lost).
+- **Dependencies**: TASK-M2-003
+- **Implementation Checklist**:
+  - Schema: reads `email_ingest_log`
+  - Wire: new module `src/jd_matcher/filter/validate.py` with `python -m jd_matcher.filter.validate` CLI
+  - Call site: standalone CLI; no pipeline integration needed
+  - Imports affected: new module
+  - Runtime files: writes report to `docs/poc/quality-logs/TASK-M2-004-validation-report.md` (or similar)
+- **Demo Artifact**: Validation report at `docs/poc/quality-logs/TASK-M2-004-validation-report.md` showing filtered titles, matched patterns, user-confirmed precision/recall numbers; final tuned `config/title_filters.yaml` committed.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-004.md`
+- **Acceptance Criteria**:
+  - [ ] Validation script outputs filtered postings table (id, title, matched_pattern) for user review
+  - [ ] User reviews ALL filtered titles; flags any false positives (legitimate roles incorrectly filtered)
+  - [ ] User adjusts `config/title_filters.yaml` patterns based on flags
+  - [ ] Re-run validation script; iterate until precision ≥95% on user-confirmed labels
+  - [ ] Re-run validation script; iterate until recall ≥98% (false-negative rate ≤2%)
+  - [ ] Final tuned `config/title_filters.yaml` committed
+  - [ ] Validation report documenting final precision/recall + user judgment basis
+
+---
+
+##### TASK-M2-005 — LLM Provider Abstraction (C28)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C28 (LLM Provider Abstraction) — TDD §C28
+- **Description**: Define `LLMExtractor` + `EmbeddingProvider` interfaces with cloud (OpenAI) implementation. Stub Ollama implementation as placeholder for future swap (per ROADMAP §M2 + user direction). Cost pricing table per model.
+- **Dependencies**: TASK-M2-001, TASK-M2-002
+- **Implementation Checklist**:
+  - Schema: writes to `llm_call_ledger`
+  - Wire: new module `src/jd_matcher/llm/providers/` with:
+    - `base.py`: `LLMExtractor` + `EmbeddingProvider` Protocol/ABC
+    - `openai_extractor.py`: cloud impl using `openai` library
+    - `openai_embedding.py`: cloud impl using `openai` library
+    - `ollama_extractor.py`: stub raising `NotImplementedError` (placeholder)
+    - `factory.py`: `from_config(provider_name)` routing
+  - Config: extend `config.yaml` with `extraction_provider: openai` (default) and `embedding_provider: openai` (default)
+  - Call site: C18 + C20 use the abstraction; never import `openai` directly
+  - Imports affected: new module under `src/jd_matcher/llm/`
+  - Runtime files: writes to `llm_call_ledger`
+- **Demo Artifact**: `python -c "from jd_matcher.llm import LLMExtractor; e = LLMExtractor.from_config(); print(type(e).__name__)"` returns `OpenAIExtractor`.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-005.md`
+- **Acceptance Criteria**:
+  - [ ] `LLMExtractor` + `EmbeddingProvider` Protocols defined with `extract()` and `embed()` methods
+  - [ ] `OpenAIExtractor` implementation using GPT-4o-mini (model name configurable)
+  - [ ] `OpenAIEmbedding` implementation using `text-embedding-3-small`
+  - [ ] Ollama stubs raise `NotImplementedError` with clear message about M3 benchmark sub-task
+  - [ ] Factory pattern: `from_config(provider_name)` returns correct implementation
+  - [ ] Pricing table in `providers/pricing.py` with `model` + `input_cost_per_1k` + `output_cost_per_1k` + `as_of_date`
+  - [ ] `llm_call_ledger` row written per call (provider, model, input_tokens, output_tokens, cost_usd, latency_ms)
+  - [ ] Tests mock at the openai client boundary (no live calls)
+
+---
+
+##### TASK-M2-006 — LLM Extraction (C18) — strict canonical labels
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C18 (LLM Extraction) — TDD §C18
+- **Description**: Per-posting extraction via GPT-4o-mini (through C28 abstraction). Strict canonical labels enforced via Pydantic enums (`canonical_seniority`, `canonical_location`). Caches by `full_jd` hash.
+- **Dependencies**: TASK-M2-001, TASK-M2-005
+- **Implementation Checklist**:
+  - Schema: reads/writes `posting_embeddings` cache index; writes `llm_call_ledger` via C28
+  - Wire: new module `src/jd_matcher/llm/extract.py` exposing `extract_canonical(posting) -> CanonicalExtraction`
+  - Pydantic models: `CanonicalExtraction` with strict enum fields per TDD §C18
+  - Prompt template: defined as constant in `extract.py` per TDD §C18 prompt sketch
+  - Call site: `pipeline.py` (between hydration and embedding)
+  - Cache: by `SHA256(full_jd)` — re-using stored extractions on identical content
+  - Imports affected: new module + small change to `pipeline.py`
+  - Runtime files: extends `~/.jd-matcher/jd-matcher.db` (`canonical_postings`, `posting_canonical_links` via downstream tasks)
+- **Demo Artifact**: `python -m jd_matcher.llm.extract --posting-id 91` outputs `CanonicalExtraction` JSON for that real posting.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-006.md`
+- **Acceptance Criteria**:
+  - [ ] `extract_canonical(posting)` takes `full_jd` + optional priors; returns `CanonicalExtraction` Pydantic model
+  - [ ] `CanonicalExtraction` enforces strict enums for seniority + location (Pydantic validation; out-of-enum = parse failure → retry with stricter prompt)
+  - [ ] `canonical_company` normalized (no Inc/Ltd suffixes — verified by 5 test cases)
+  - [ ] `team_or_department` canonical (2-5 words, org-unit only — not role-level)
+  - [ ] Cache by `SHA256(full_jd)` hit on second `extract_canonical` call (verified by mock count)
+  - [ ] `llm_call_ledger` row written per call with cost
+  - [ ] Retry on transient OpenAI errors (3 attempts with exponential backoff)
+  - [ ] 10 hand-crafted synthetic test JDs all extract within enum constraints (deterministic part)
+  - [ ] Live test (one real posting): all canonical fields populated and valid against enum
+
+---
+
+##### TASK-M2-007 — Embedding Pipeline (C20)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C20 (Embedding Pipeline) — TDD §C20
+- **Description**: Embed `role_summary` via `text-embedding-3-small`. Store as BLOB in `posting_embeddings`. Cache by text hash.
+- **Dependencies**: TASK-M2-001, TASK-M2-005, TASK-M2-006
+- **Implementation Checklist**:
+  - Schema: writes `posting_embeddings`; writes `llm_call_ledger`
+  - Wire: new module `src/jd_matcher/llm/embed.py` exposing `embed_posting(posting_id) -> Embedding`
+  - Cache: by `SHA256(role_summary)`
+  - Storage: 1536-dim float vector packed as `struct.pack` into BLOB (or `numpy.tobytes`)
+  - Call site: `pipeline.py` (after C18 extraction)
+  - Imports affected: new module + small change to `pipeline.py`
+  - Runtime files: `posting_embeddings` table
+- **Demo Artifact**: `python -m jd_matcher.llm.embed --posting-id 91` embeds `role_summary`; `sqlite3 ... "SELECT length(embedding), model_name FROM posting_embeddings WHERE posting_id=91"` shows ~6KB blob (1536 × 4 bytes).
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-007.md`
+- **Acceptance Criteria**:
+  - [ ] `embed_posting(posting_id)` takes posting; calls `EmbeddingProvider.embed(role_summary)`; stores in `posting_embeddings`
+  - [ ] Vector dimension is 1536 (`text-embedding-3-small` spec)
+  - [ ] Cache by `SHA256(text)` hit on second `embed_posting` call (verified)
+  - [ ] `llm_call_ledger` row written per call
+  - [ ] Cosine sanity check: 5 synthetic dup pairs all have cosine ≥0.85 between their embeddings
+  - [ ] Anti-test: 5 different-role pairs have cosine ≤0.7
+  - [ ] Live test (one real posting): vector dim 1536 + non-zero
+  - [ ] Helper `cosine(v1, v2) -> float` exposed for downstream use
+
+---
+
+##### TASK-M2-008 — Two-Stage Dedup Engine (C21) — BLOCK + FUSE
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C21 (Two-Stage Dedup Engine) — TDD §C21
+- **Description**: BLOCK by `(canonical_company, team_or_department, canonical_location)`; FUSE `0.4×emb + 0.3×skills + 0.2×title + 0.1×seniority`; auto-merge at 0.90. Returns `DedupDecision`.
+- **Dependencies**: TASK-M2-001, TASK-M2-006, TASK-M2-007
+- **Implementation Checklist**:
+  - Schema: reads `canonical_postings` (Stage 1 BLOCK), reads `posting_embeddings` (Stage 2 FUSE)
+  - Wire: new module `src/jd_matcher/dedup/engine.py` exposing `decide(posting) -> DedupDecision`
+  - Helpers: `cosine(v1, v2)`, `jaccard(s1, s2)`, `title_cosine(t1, t2)` (use sklearn or simple impl)
+  - Call site: `pipeline.py` (after C20 embedding)
+  - Imports affected: new module
+  - Runtime files: none (read-only at this stage; writes happen in C29)
+- **Demo Artifact**: `python -m jd_matcher.dedup decide --posting-id 91` outputs `DedupDecision` JSON.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-008.md`
+- **Acceptance Criteria**:
+  - [ ] `decide(posting)` returns `DedupDecision {action: 'merge'|'new', target_canonical_id, similarity, merge_kind, telemetry}`
+  - [ ] BLOCK: SQL uses `idx_canonical_user_block` (verified by `EXPLAIN QUERY PLAN` — no full table scan)
+  - [ ] FUSE formula: `0.4×emb_cosine + 0.3×skills_jaccard + 0.2×title_cosine + 0.1×seniority_match` (verified by 5 test cases with known inputs/outputs)
+  - [ ] Auto-merge threshold 0.90 (configurable via `config.yaml`)
+  - [ ] Inactive/Expired bypass: canonicals in those states are excluded from BLOCK candidates (no-op at M2 since neither status exists yet — placeholder for MVP-M1)
+  - [ ] Synthetic test fixtures cover all 4 user scenarios (cross-team / same-team-different-role / cross-source / different-location)
+  - [ ] ZERO false-merges on 10 different-team synthetic pairs (regression-blocking)
+  - [ ] `DedupDecision` serialization works (Pydantic JSON)
+
+---
+
+##### TASK-M2-009 — Canonical Merge + Repost Detector (C29 + C30)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C29 (Canonical Record Merge Logic) + C30 (Repost Detector) — TDD §C29, §C30
+- **Description**: When dedup returns merge action, apply merge semantics (preserve postings; INSERT `canonical_postings` + `posting_canonical_links`). Repost detector retags `merge_kind='repost'` if 30+ days from latest prior link; emits `posting_reposted` event.
+- **Dependencies**: TASK-M2-001, TASK-M2-008
+- **Implementation Checklist**:
+  - Schema: writes `canonical_postings`, `posting_canonical_links`; reads `canonical_postings` on merge; writes `events` table for repost
+  - Wire: new module `src/jd_matcher/dedup/merge.py` exposing `apply_decision(decision, posting) -> MergeResult`; new module `src/jd_matcher/dedup/repost.py` for the retagger
+  - Call site: `pipeline.py` (after C21 `decide`)
+  - Imports affected: new modules
+  - Runtime files: `canonical_postings` + `posting_canonical_links` extends in place
+- **Demo Artifact**: integration test merges 2 synthetic postings; verifies `canonical_postings` has 1 row, `posting_canonical_links` has 2 rows, `postings` still has both originals + `first_seen` MIN preserved.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-009.md`
+- **Acceptance Criteria**:
+  - [ ] On `action="new"`: INSERT `canonical_postings` + INSERT `posting_canonical_links` (`merge_kind='new'`)
+  - [ ] On `action="merge"`: INSERT `posting_canonical_links` (`merge_kind='content_dedup'`); UPDATE `canonical_postings` (MIN `first_seen` preserved, MAX `last_seen`, longer-by-10% `full_jd` swap with provenance)
+  - [ ] `postings` table NEVER modified on merge (verified by test that captures `postings.*` before+after)
+  - [ ] `sources_summary` correctly appends source values (e.g., `["linkedin_email", "indeed_email"]`)
+  - [ ] Transactional — partial failure rolls back (verified by mock of UPDATE failure)
+  - [ ] Repost detection: `candidate.first_seen ≥ MAX(prior link merged_at) + 30 days` → retag `merge_kind='repost'` (verified)
+  - [ ] On repost: emit `posting_reposted` event via C10 (write to `events` table; verified)
+  - [ ] Inactive/Expired bypass: never reaches C30 (already filtered at C21 — verified by mock of canonical with Inactive status)
+  - [ ] 8 invariant tests for merge correctness; 5 invariant tests for repost detection
+
+---
+
+##### TASK-M2-010 — Pipeline orchestrator + State Manager extension (C11 + C22)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C11 (Pipeline orchestrator) + C22 (State Manager extension) — TDD §C11, §C22
+- **Description**: Wire C19→C18→C20→C21→C29→C30 sequence into C11. Add C22 read-side state manager (canonical-id keyed) for state inheritance.
+- **Dependencies**: TASK-M2-009, TASK-M2-003
+- **Implementation Checklist**:
+  - Schema: writes `pipeline_runs` (new sources: `title_filter`, `llm_extraction`, `embedding`); reads `canonical_postings` + `posting_canonical_links`
+  - Wire: extend `pipeline.py` orchestrator; new module `src/jd_matcher/state/canonical_view.py` for C22
+  - Call site: existing `/sync` endpoint; existing CLI entry
+  - Imports affected: `pipeline.py` extends; `state/` adds `canonical_view` module
+  - Runtime files: `pipeline-*.jsonl` logs gain new step events
+- **Demo Artifact**: `python -m jd_matcher.pipeline` runs full sync; `canonical_postings` + `posting_canonical_links` + `posting_embeddings` + `llm_call_ledger` all populated; `pipeline_runs` shows new sources for filter/llm/embedding phases.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-010.md`
+- **Acceptance Criteria**:
+  - [ ] Pipeline order: fetch → parse → C19 filter → URL-dedup → hydrate → LLM-extract → embed → content-dedup → merge → store (verified by integration test)
+  - [ ] Each new step writes its own `pipeline_runs` row (`title_filter`, `llm_extraction`, `embedding`) with `health_status`; mandatory-persistence invariant from M1-008 holds
+  - [ ] C22 `select_main` returns canonical-level cards (not posting-level) — verified by integration test
+  - [ ] Apply-one-suppress-all invariant: dismissing one merged variant suppresses canonical from Main on next render — verified by 2-source synthetic test
+  - [ ] Persistence across restart: state inheritance works after server restart
+  - [ ] Filtered postings (from C19) short-circuit; do NOT appear in any subsequent stage's `pipeline_runs` counts
+
+---
+
+##### TASK-M2-011 — Web UI updates (C8 + C9) — multi-source + Reposted badge
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C8 (Web UI: backend) + C9 (Web UI: frontend) — TDD §C8, §C9
+- **Description**: Backend Main view projects from `canonical_postings`; cards show "Sources: [Apply on LinkedIn] [Apply on Indeed]"; Reposted badge on canonicals with `merge_kind='repost'` in their link history.
+- **Dependencies**: TASK-M2-010
+- **Implementation Checklist**:
+  - Schema: reads `canonical_postings` + `posting_canonical_links`
+  - Wire: extend `routes.py` main view query; extend `_card.html` / templates with multi-source rendering + Reposted badge
+  - CSS: `.badge-reposted` styling
+  - JS: action handlers (apply/dismiss/restore/unapply) target canonical-id (via posting-id-to-canonical-id resolution server-side)
+  - Imports affected: `routes.py` + templates
+  - Runtime files: existing assets
+- **Demo Artifact**: Browser shows merged cards with "Sources: [Apply on LinkedIn] [Apply on Indeed]"; cards with repost link history show "Reposted" badge inline.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-011.md`
+- **Acceptance Criteria**:
+  - [ ] Cards render `Sources: [Apply on LinkedIn] [Apply on Indeed]` when canonical has multi-source link
+  - [ ] Reposted badge renders for canonicals with at least one `merge_kind='repost'` in `posting_canonical_links`
+  - [ ] Apply/dismiss/restore/unapply endpoints work on canonical-level state (verified — dismissing a merged card hides ALL variants on next render)
+  - [ ] Card-viewed (`e` key) and card-greying (opacity 0.6) work correctly with canonical-id (one card per canonical, not per posting)
+  - [ ] DOM tests for new template elements (multi-source list, Reposted badge)
+  - [ ] No regression in M1 UI tests (all 443+ existing UI tests still pass)
+
+---
+
+##### TASK-M2-012 — Real-data validation + threshold calibration
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user
+- **Component**: C21 (calibration) + C29 (validation) — TDD §C21, §C29
+- **Description**: Generate 30 synthetic test pairs (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios. Run M2 pipeline against existing 91+ postings. User labels 10-15 real pairs. Calibration script computes precision/recall at multiple thresholds; final threshold finalized in config.
+- **Dependencies**: TASK-M2-011
+- **Implementation Checklist**:
+  - Schema: reads `posting_canonical_links` + `canonical_postings`
+  - Wire: new module `src/jd_matcher/dedup/calibrate.py` with `python -m jd_matcher.dedup calibrate` CLI
+  - User input: labels at `tests/fixtures/dedup_labels.csv` (or similar) — user-editable file
+  - Imports affected: new module
+  - Runtime files: writes calibration report to `docs/poc/quality-logs/TASK-M2-012-calibration-report.md`
+- **Demo Artifact**: Calibration report shows precision/recall at thresholds (0.85/0.88/0.90/0.92/0.95); final threshold committed in `config.yaml`.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-012.md`
+- **Acceptance Criteria**:
+  - [ ] 30 synthetic test fixtures generated (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios from C21 sample selection
+  - [ ] User labels 10-15 real pairs from existing 91+ postings (CSV or YAML)
+  - [ ] Calibration script computes precision/recall at thresholds `[0.85, 0.88, 0.90, 0.92, 0.95]`
+  - [ ] Precision ≥90% at chosen threshold (regression-checked against synthetic + real labels)
+  - [ ] ZERO false-merges on 10 different-team synthetic cases (regression-blocking — must pass at chosen threshold)
+  - [ ] Final threshold committed in `config.yaml` (could remain 0.90 or adjust)
+  - [ ] Calibration report committed as a quality artifact
+
+---
+
+##### TASK-M2-013 — M2 demo + user approval
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: manual (user)
+- **Component**: M2 milestone deliverable acceptance — references all M2 C-components
+- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
+- **Dependencies**: TASK-M2-012
+- **Implementation Checklist**:
+  - Schema: N/A
+  - Wire: N/A (demo task)
+  - Call site: user runs sync via UI
+  - Imports affected: N/A
+  - Runtime files: N/A
+- **Demo Artifact**: User-approved milestone closure (recorded in TASK-M2-013 quality log).
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-013.md`
+- **Acceptance Criteria**:
+  - [ ] User runs full sync; observes ≥1 cross-source merged card on Main with "Sources: [Apply on LinkedIn] [Apply on Indeed]"
+  - [ ] User dismisses a merged card; refreshes; canonical stays out of Main on next render (state inheritance)
+  - [ ] All 6 ROADMAP §M2 ACs verified by user:
+    - ≥90% accuracy on 30 hand-labeled pairs
+    - ZERO false-merges on different-team cases (per M2-012)
+    - Cross-source merge verified on ≥3 real pairs
+    - State inheritance: dismissing one suppresses canonical
+    - Repost detection: ≥3 real-or-synthetic cases
+    - Auto-merge threshold calibrated and recorded
+  - [ ] User explicit approval logged
 
 ---
 
