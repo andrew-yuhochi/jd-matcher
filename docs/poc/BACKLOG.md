@@ -106,6 +106,57 @@ Replace the original "auto-remove after 90 days of silence" model with an Inacti
 
 ---
 
+### MVP-M1 — Sync progress feedback
+
+**Decision date**: 2026-04-25
+**Approved by**: User (during M1-010 real-data testing — explicit "add to BACKLOG, not TASKS")
+
+**What**:
+Surface real-time progress during pipeline sync runs so the user knows what's happening during the 30+ minute sync window. Currently the UI shows no visible progress between clicking "Run sync now" and the eventual completion — sub-bar source badges only flip color AFTER each source fully completes; there is no per-URL or per-step granularity exposed to the UI.
+
+**Why**:
+Real-data sync against ~50–90 URLs takes 30–40 min due to TDD §1.4 rate limit (1 req / 30s for hydration). Without progress feedback, the user can't distinguish "still working" from "stuck" — leads to repeated clicks (creating concurrent runs and DB lock contention) or premature giving-up. The orchestrator already emits step-progress strings (per UX-SPEC.md §5: "Fetching Gmail (1/4)…", "Hydrating JDs (2/4)…") but these never reach the UI.
+
+**Schema impact for M1: NONE.** This is a deferred MVP-M1 item — no schema or behavioural change at PoC M1.
+
+**Scope tiers** (MVP-M1 picks the appropriate tier based on user value vs implementation cost):
+
+1. **Lightweight (recommended default for MVP-M1)**:
+   - Status text under sub-bar: "Syncing… gmail_linkedin ✓, gmail_indeed running, hydrator queued"
+   - Reuses existing TDD §C11 step-progress strings already emitted by orchestrator
+   - Client polls `/api/source-health` every 2–5s during active sync
+   - Detect "active sync" via the latest `pipeline_run` row's `finished_at IS NULL` state
+   - Stops polling when all 4 sources show `finished_at NOT NULL`
+
+2. **Medium (opt-in)**:
+   - Per-URL progress bar: "Hydrating 23 of 91 URLs… 5 min remaining (12s/URL avg)"
+   - Stream events via Server-Sent Events (SSE) endpoint `/api/sync/events`
+   - New event types in the existing `events` table for sync-step granularity
+   - Client subscribes to SSE feed during active sync, updates progress bar in real-time
+
+3. **Heavy (deferred to MVP-M2 or later)**:
+   - Live-updating card list: cards appear on Main as they finish hydrating (vs all-at-once after sync)
+   - WebSocket connection
+   - Reactive UI updates per posting state change
+
+**Caveats to action at MVP-M1 planning**:
+1. The orchestrator's step-progress strings exist (TDD §C11 Responsibility 5) but currently only appear in JSON logs. The Lightweight tier needs the orchestrator to also write step-progress events to the `events` table OR a new ephemeral table.
+2. Polling at 2–5s during a 30-min sync = ~360–900 polls per sync. Acceptable at personal-use scale but the client must NOT poll continuously when no sync is active. Default state: no polling.
+3. The Medium tier (SSE) is a real architectural addition — new transport, new client subscription logic. Worth scoping carefully at MVP-M1 planning vs deferring to MVP-M2.
+
+**Out of scope for this item**:
+- Mobile or non-browser progress views — covered separately by Beta-scope items.
+- Sync history view ("show me last 7 days of sync runs") — partially covered by `M1-005c` report CLI; a UI surface for it is a separate MVP-M1 item.
+
+**M1 workaround** (until MVP-M1 lands progress display):
+User can monitor sync progress via:
+- `tail -f ~/.jd-matcher/logs/pipeline-<run_id>.jsonl` — live JSON event stream
+- `sqlite3 ~/.jd-matcher/jd-matcher.db "SELECT source, health_status, started_at, finished_at FROM pipeline_runs ORDER BY started_at DESC LIMIT 4;"` — current run state
+
+Acceptable trade-off for M1 since the rate limit makes long syncs unavoidable; the MVP scheduler + progress display is the right place for this UX investment.
+
+---
+
 ## Deferred to Beta (decision gate)
 
 - **Variant A (stay personal)**: durability hardening, runbook, 6-month stable use validation.
