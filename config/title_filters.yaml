@@ -226,6 +226,17 @@ deny:
     kind: regex
     note: "Generic research role unless AI/ML/Data context (calibrated #6)"
 
+  # Iteration 3 calibration (2026-04-27) — non-DS engineering / finance / tax
+  - { pattern: "(?i)\\b(Mechanical|Civil|Chemical|Electrical|Petroleum|Aerospace|Industrial|Structural|Geotechnical|Mining) (Engineer|Engineering)\\b",
+      kind: regex,
+      note: "Non-DS engineering domains; even with ML/AI keyword adjacent, the role is domain engineering not data science (calibrated #M Engineer - Robotics ML)" }
+  - { pattern: "(?i)\\bInvestment Banking\\b",
+      kind: regex,
+      note: "Finance/IB role, not DS/ML (calibrated 2026-04-27)" }
+  - { pattern: "(?i)\\bTax (Advisor|Advisory|Consultant|Consulting|Manager|Specialist|Accountant|Analyst|Associate|Director)\\b",
+      kind: regex,
+      note: "Accounting/tax role, not DS/ML (calibrated 2026-04-27)" }
+
   # --- Network / Security / Systems Engineering ---
   - pattern: "\\bNetwork (Engineer|Administrator|Analyst)\\b"
     kind: regex

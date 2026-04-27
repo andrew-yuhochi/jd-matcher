@@ -265,6 +265,38 @@ def test_iteration_2_calibration(title: str, expected_action: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Iteration 3 calibration cases (2026-04-27)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title,expected_action", [
+    # User-flagged false negatives in iteration 3 — must now drop
+    ("Mechanical Engineer - Robotics ML",         "drop"),
+    ("Mechanical Engineering Manager",            "drop"),
+    ("Civil Engineer",                            "drop"),
+    ("Chemical Engineering Specialist",           "drop"),
+    ("Electrical Engineer",                       "drop"),
+    ("Investment Banking Analyst",                "drop"),
+    ("Senior Investment Banking Associate",       "drop"),
+    ("Tax Advisor",                               "drop"),
+    ("Tax Manager",                               "drop"),
+    ("Tax Consultant - Financial Services",       "drop"),
+    # And confirm the new patterns don't accidentally swallow DS adjacent roles
+    ("Software Engineer (ML)",                    "pass"),  # regression — was passing, still must
+    ("AI Engineer",                               "pass"),  # regression
+    ("Data Scientist - Tax Strategy",             "pass"),  # legit DS role with "Tax" word
+    ("Machine Learning Engineer",                 "pass"),  # regression
+])
+def test_iteration_3_calibration(title: str, expected_action: str) -> None:
+    from jd_matcher.filter.title_filter import filter_title
+    decision = filter_title(title)
+    assert decision.action == expected_action, (
+        f"{title!r}: expected {expected_action}, got {decision.action} "
+        f"(matched {decision.matched_pattern!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 

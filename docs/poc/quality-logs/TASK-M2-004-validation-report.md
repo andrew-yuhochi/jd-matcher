@@ -1,20 +1,20 @@
-# TASK-M2-004 — Filter Validation Report (Iteration 2)
+# TASK-M2-004 — Filter Validation Report (Iteration 3)
 
 Date: 2026-04-27
 Source DB: /Users/andrew.yu/.jd-matcher/jd-matcher.db
 Total postings analyzed: 91  (skipped 0 with empty canonical_title)
-Config snapshot: config/title_filters.yaml @ commit (Iteration 2 — post-calibration)
+Config snapshot: config/title_filters.yaml @ Iteration 3 — post-calibration
 
 ---
 
-## Precision / Recall (Iteration 2)
+## Precision / Recall (Iteration 3)
 
 Ground truth established from user labels on Iteration 1 (91 postings):
 - Truly irrelevant = 15 (7 correctly-dropped in Iter 1 + 7 FN from passes + #6 Research Associate borderline)
 - Truly relevant = 76
 
 ```
-Iteration 2 results (vs user labels from Iteration 1):
+Iteration 3 results (vs user labels from Iteration 1):
   Precision (correct-drops / total-drops):  15 / 15 = 100%
   Recall    ((truly-relevant - FN) / truly-relevant): 76 / 76 = 100%
   Targets:  precision ≥95%, recall ≥98%
@@ -25,15 +25,15 @@ Iteration 2 results (vs user labels from Iteration 1):
 
 ## Calibration history
 
-| Metric | Iteration 1 | Iteration 2 | Delta |
-|--------|-------------|-------------|-------|
-| Total analyzed | 91 | 91 | — |
-| Dropped | 9 (9.9%) | 15 (16.5%) | +6 |
-| Passed | 82 (90.1%) | 76 (83.5%) | -6 |
-| False positives in drops | 2 (#57, #85) | 0 | -2 |
-| False negatives in passes | 7 (#59, #61, #72, #73, #74, #75, #91) | 0 | -7 |
-| Precision | ~78% | 100% | +22pp |
-| Recall | ~91% | 100% | +9pp |
+| Metric | Iteration 1 | Iteration 2 | Iteration 3 | Delta (2→3) |
+|--------|-------------|-------------|-------------|-------------|
+| Total analyzed | 91 | 91 | 91 | — |
+| Dropped | 9 (9.9%) | 15 (16.5%) | 15 (16.5%) | 0 |
+| Passed | 82 (90.1%) | 76 (83.5%) | 76 (83.5%) | 0 |
+| False positives in drops | 2 (#57, #85) | 0 | 0 | 0 |
+| False negatives in passes | 7 (#59, #61, #72, #73, #74, #75, #91) | 0 | 0 | 0 |
+| Precision | ~78% | 100% | 100% | 0pp |
+| Recall | ~91% | 100% | 100% | 0pp |
 
 **Changes applied (Iteration 1 → 2):**
 
@@ -52,9 +52,22 @@ New deny patterns added:
 - `Economic (Advisor|Advisory|Consultant|Consulting)` — caught #59 "Senior, Economic Advisory (Vancouver)"
 - `Research (Associate|Assistant)` — caught #6 "Research Associate" (UBC); AI/ML/Data variants still pass via allow override
 
-Verdict changes:
+Verdict changes (Iter 1 → 2):
 - +8 new drops: #6, #59, #61, #72, #73, #74, #75, #91
 - -2 promoted to pass: #57, #85
+
+**Changes applied (Iteration 2 → 3):**
+
+New deny patterns added (user edge-case probe, 2026-04-27):
+- `(Mechanical|Civil|Chemical|Electrical|Petroleum|Aerospace|Industrial|Structural|Geotechnical|Mining) (Engineer|Engineering)` — non-DS engineering domains; "Mechanical Engineer - Robotics ML" correctly drops (ML keyword adjacent but domain is mech eng, not DS)
+- `Investment Banking` — finance/IB role, not DS/ML
+- `Tax (Advisor|Advisory|Consultant|Consulting|Manager|Specialist|Accountant|Analyst|Associate|Director)` — accounting/tax roles, not DS/ML; "Data Scientist - Tax Strategy" correctly still passes (no Tax suffix token)
+
+No new allow overrides added.
+
+Verdict changes (Iter 2 → 3):
+- 0 changes in the 91 real postings (none contained Mechanical/Civil/Investment Banking/Tax categories)
+- 14 new regression tests added covering all 3 new deny categories + non-regression of DS-adjacent titles
 
 ---
 
@@ -68,9 +81,9 @@ Verdict changes:
 
 ---
 
-## Filtered postings (Iteration 2)
+## Filtered postings (Iteration 3)
 
-All 15 drops are confirmed truly irrelevant.
+All 15 drops are confirmed truly irrelevant. No change from Iteration 2.
 
 | ID | Source | Title | Company | Location | Matched Pattern |
 |----|--------|-------|---------|----------|-----------------|
@@ -92,11 +105,9 @@ All 15 drops are confirmed truly irrelevant.
 
 ---
 
-## Passed postings (Iteration 2)
+## Passed postings (Iteration 3)
 
-All 76 passes are confirmed truly relevant DS/ML roles. Notable rescues vs Iteration 1:
-- #85 "AI Automation Engineer" — previously FP; now correctly passes via allow override
-- #57 "Associate Director, Asset Modelling" — previously FP; now correctly passes via allow override
+All 76 passes are confirmed truly relevant DS/ML roles. No change from Iteration 2.
 
 Sorted by title alphabetically for scanning.
 
