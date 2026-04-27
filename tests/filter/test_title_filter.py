@@ -118,15 +118,11 @@ def test_should_pass(title: str) -> None:
 # ---------------------------------------------------------------------------
 
 AMBIGUOUS_CASES: list[str] = [
-    "Director of Data Science",                   # deny: Director; allow: Director.*Data Science
-    "VP of Machine Learning",                     # deny: VP; allow: VP.*Machine Learning
-    "Head of AI",                                 # deny: Head of; allow: Head of.*AI
-    "Chief Data Officer",                         # deny: Chief; allow: Chief.*Data
+    # Iteration 4: leadership carve-outs removed — Director/VP/Head of/Chief all DROP now.
+    # The remaining cases still match both deny and allow — allow wins → PASS.
     "Software Engineer (ML)",                     # deny: Software Engineer; allow: Software Engineer.*ML
     "Software Engineer, Machine Learning",        # deny: Software Engineer; allow: Software Engineer.*Machine Learning
     "Backend Engineer, Data Platform",            # deny: Backend Engineer; allow: Backend Engineer.*Data Platform
-    "Director of Machine Learning",               # deny: Director; allow: Director.*Machine Learning
-    "Vice President of Analytics",                # deny: Vice President; allow: Vice President.*Analytics
     "DevOps Engineer (ML Infrastructure)",        # deny: DevOps Engineer; allow: DevOps Engineer.*ML
 ]
 
@@ -239,9 +235,9 @@ def test_substring_kind_matches_case_insensitively() -> None:
     # Fixed false positive — #85 AI Automation Engineer (allow override fires before Automation deny)
     ("AI Automation Engineer", "pass"),
     ("ML QA Engineer", "pass"),
-    # Fixed borderline drop — #57 Aon (Director.*Modelling allow override)
-    ("Associate Director, Asset Modelling - STG Life Solutions", "pass"),
-    ("Director, Risk Analytics", "pass"),
+    # Iteration 4: Director carve-outs removed — these now DROP (no allow overrides)
+    ("Associate Director, Asset Modelling - STG Life Solutions", "drop"),
+    ("Director, Risk Analytics", "drop"),
     # New deny patterns
     ("Flutter Developer", "drop"),
     ("Environmental Scientist", "drop"),
@@ -288,6 +284,61 @@ def test_iteration_2_calibration(title: str, expected_action: str) -> None:
     ("Machine Learning Engineer",                 "pass"),  # regression
 ])
 def test_iteration_3_calibration(title: str, expected_action: str) -> None:
+    from jd_matcher.filter.title_filter import filter_title
+    decision = filter_title(title)
+    assert decision.action == expected_action, (
+        f"{title!r}: expected {expected_action}, got {decision.action} "
+        f"(matched {decision.matched_pattern!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Iteration 4 calibration cases (2026-04-27)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title,expected_action", [
+    # All leadership now drops, no carve-outs
+    ("Director of Data Science",                  "drop"),
+    ("Director of Machine Learning",              "drop"),
+    ("Associate Director, Asset Modelling",       "drop"),
+    ("Director, Risk Analytics",                  "drop"),
+    ("Director, Senior AI Engineer - Remote",     "drop"),  # IKS Health #90
+    ("VP of Data",                                "drop"),
+    ("VP of Machine Learning",                    "drop"),
+    ("Vice President of AI",                      "drop"),
+    ("Head of AI",                                "drop"),
+    ("Head of Data Engineering",                  "drop"),
+    ("Chief Data Officer",                        "drop"),
+    ("Chief AI Officer",                          "drop"),
+    # All entry-level drops
+    ("Junior Data Scientist",                     "drop"),
+    ("AI Intern",                                 "drop"),
+    ("AI Summer Intern",                          "drop"),
+    ("Data Co-op Student",                        "drop"),
+    ("Co-op Software Developer (AI Team)",        "drop"),
+    ("Apprentice Data Engineer",                  "drop"),
+    ("ML Trainee",                                "drop"),
+    ("Graduate Data Analyst",                     "drop"),
+    ("New Grad Software Engineer (ML)",           "drop"),
+    ("Fresher Data Analyst",                      "drop"),  # #34 in real DB
+    ("Entry-Level Data Scientist",                "drop"),
+    ("Entry Level ML Engineer",                   "drop"),
+    # Senior IC roles still pass — these are the user's target
+    ("Senior Data Scientist",                     "pass"),
+    ("Staff Machine Learning Engineer",           "pass"),
+    ("Lead Data Scientist",                       "pass"),
+    ("Principal AI Engineer",                     "pass"),
+    ("Manager, Data Science",                     "pass"),  # Manager is NOT Director — allow
+    ("Data Science Manager, Growth",              "pass"),
+    ("Senior Manager, Machine Learning",          "pass"),
+    # 'Associate' alone still passes (NOT entry-level per user)
+    ("Data Associate",                            "pass"),
+    ("Senior Data Scientist Associate",           "pass"),
+    ("Research Associate",                        "drop"),  # Research Associate deny exists separately — sanity check unchanged
+    ("AI Research Associate",                     "pass"),  # allow override on AI/ML + Research — sanity check unchanged
+])
+def test_iteration_4_calibration(title: str, expected_action: str) -> None:
     from jd_matcher.filter.title_filter import filter_title
     decision = filter_title(title)
     assert decision.action == expected_action, (

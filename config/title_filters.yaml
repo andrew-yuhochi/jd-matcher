@@ -1,11 +1,14 @@
 # Title-Based Interest Filter (C19) — deny/allow pattern config
 #
 # Evaluation order:
-#   1. allow[] checked FIRST — if any allow pattern matches, the posting PASSES
+#   1. pre_deny[] checked FIRST — unconditional DROP, no allow rescue possible.
+#      Used for absolute disqualifiers: leadership titles, entry-level / new-grad
+#      variants that must drop even when an ML/Data allow pattern would fire.
+#   2. allow[] checked next — if any allow pattern matches, the posting PASSES
 #      regardless of deny matches (escape hatch for ML/Data variants).
-#   2. deny[] checked second — if any deny pattern matches (and no allow matched),
+#   3. deny[] checked second — if any deny pattern matches (and no allow matched),
 #      the posting is DROPped.
-#   3. If neither list matches, the posting PASSES.
+#   4. If neither list matches, the posting PASSES.
 #
 # Pattern kinds:
 #   regex    — Python re pattern (case-insensitive always; do not include (?i) flags here,
@@ -14,38 +17,55 @@
 #
 # To "rescue" a filtered posting: add an allow pattern whose match covers the title,
 # then re-run the pipeline (the posting is NOT in seen_urls, so it flows normally).
+# NOTE: allow patterns do NOT rescue pre_deny matches — those are unconditional.
+
+pre_deny:
+  # --- Leadership / Exec titles — Iteration 4: unconditional drop, no carve-outs ---
+  # (Moved from deny[] to pre_deny[] so leadership drops even if an ML/Data allow fires)
+  - { pattern: "\\bDirector\\b", kind: regex,
+      note: "Iteration 4: drop all Director-grade titles, no carve-outs" }
+  - { pattern: "\\bVP\\b", kind: regex,
+      note: "Iteration 4: drop all VP titles, no carve-outs" }
+  - { pattern: "\\bVice President\\b", kind: regex,
+      note: "Iteration 4: drop all Vice President titles, no carve-outs" }
+  - { pattern: "\\bHead of\\b", kind: regex,
+      note: "Iteration 4: drop all Head of titles, no carve-outs" }
+  - { pattern: "\\bChief\\b", kind: regex,
+      note: "Iteration 4: drop all Chief titles, no carve-outs" }
+
+  # --- Entry-level / new-grad variants — Iteration 4: unconditional drop ---
+  # (pre_deny so they drop even when a 'Data + Engineer' allow override would fire,
+  #  e.g. 'New Grad Software Engineer (ML)', 'Entry Level ML Engineer')
+  - { pattern: "(?i)\\bJunior\\b", kind: regex,
+      note: "Entry-level — user is senior IC, not entry candidate" }
+  - { pattern: "(?i)\\bIntern\\b", kind: regex,
+      note: "Internship roles" }
+  - { pattern: "(?i)\\bCo[- ]?op\\b", kind: regex,
+      note: "Co-op placements (matches Co-op, Coop, Co op)" }
+  - { pattern: "(?i)\\bApprentice\\b", kind: regex,
+      note: "Apprenticeship / trainee" }
+  - { pattern: "(?i)\\bTrainee\\b", kind: regex,
+      note: "Trainee programs" }
+  - { pattern: "(?i)\\bGraduate\\b", kind: regex,
+      note: "New Grad rotational programs (note: 'Graduate Diploma' in title is unusual; if real false positives surface, narrow)" }
+  - { pattern: "(?i)\\bNew[- ]?Grad\\b", kind: regex,
+      note: "New Grad" }
+  - { pattern: "(?i)\\bFresher\\b", kind: regex,
+      note: "Fresher (common in India/SA job postings; e.g. #34 Fresher Data Analyst)" }
+  - { pattern: "(?i)\\bEntry[- ]?Level\\b", kind: regex,
+      note: "Entry-Level" }
 
 allow:
   # --- Calibration overrides (added 2026-04-27, Iteration 2) ---
   - pattern: "(?i)\\b(AI|ML|Machine Learning|Data|Generative|Deep Learning)\\b.{0,30}\\bEngineer\\b"
     kind: regex
     note: "Allow override: AI/ML/Data + Engineer (catches AI Automation Engineer, ML QA Engineer, etc.)"
-  - pattern: "(?i)\\b(Director|VP|Head of)\\b.{0,30}\\b(Modelling|Modeling|Quant|Quantitative|Risk Analytics|Risk Modelling)\\b"
-    kind: regex
-    note: "Allow override: Director-level quant/risk/modelling roles (DS-adjacent)"
   - pattern: "(?i)\\b(AI|ML|Machine Learning|Data|Deep Learning|NLP|Computer Vision)\\b.{0,30}\\bResearch (Associate|Assistant|Scientist|Engineer)\\b"
     kind: regex
     note: "Allow override: AI/ML/Data Research roles"
   - pattern: "(?i)\\bResearch (Associate|Assistant|Scientist|Engineer)\\b.{0,30}\\b(AI|ML|Machine Learning|Data|NLP|Computer Vision)\\b"
     kind: regex
     note: "Allow override: Research roles with AI/ML/Data suffix"
-
-  # --- Leadership titles WITH Data/ML/AI context are welcome ---
-  - pattern: "Director.*(Data Science|Machine Learning|Artificial Intelligence|AI|Analytics|Data Engineering|Data Platform|Data)"
-    kind: regex
-    note: "Director of Data Science / Director of ML / etc — very relevant"
-  - pattern: "VP.*(Data|Machine Learning|Artificial Intelligence|AI|Analytics)"
-    kind: regex
-    note: "VP of Data / VP of ML — relevant"
-  - pattern: "Vice President.*(Data|Machine Learning|AI|Analytics)"
-    kind: regex
-    note: "Vice President of Data / ML"
-  - pattern: "Head of\\s*(Data|AI|Machine Learning|Analytics|Data Science|Data Engineering)"
-    kind: regex
-    note: "Head of Data Science / Head of AI — relevant"
-  - pattern: "Chief.*\\b(Data|AI|Machine Learning|Analytics)\\b"
-    kind: regex
-    note: "Chief Data Officer / Chief AI Officer"
 
   # --- Software / Backend Engineer WITH ML/Data/AI context ---
   - pattern: "Software (Engineer|Developer).*(ML|Machine Learning|AI|Artificial Intelligence|Data|Research|NLP|Computer Vision)"
@@ -93,23 +113,6 @@ allow:
     note: "Dashboard Dev focused on ML outputs — edge case"
 
 deny:
-  # --- Leadership / Exec titles (no ML/Data modifier matched by allow) ---
-  - pattern: "\\bDirector\\b"
-    kind: regex
-    note: "Block Director-level unless allow override matches"
-  - pattern: "\\bVP\\b"
-    kind: regex
-    note: "Block VP unless allow override matches (VP Engineering, VP Product, etc.)"
-  - pattern: "\\bVice President\\b"
-    kind: regex
-    note: "Block Vice President unless allow matches"
-  - pattern: "\\bHead of\\b"
-    kind: regex
-    note: "Block Head of X unless allow matches (Head of Data OK via allow)"
-  - pattern: "\\bChief\\b"
-    kind: regex
-    note: "Block Chief X Officer titles unless allow matches"
-
   # --- Non-data Software Engineer / Developer variants ---
   - pattern: "\\bSoftware (Engineer|Developer)\\b"
     kind: regex

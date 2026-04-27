@@ -3,9 +3,12 @@ Title-Based Interest Filter (C19) — pre-LLM cheap heuristic filter.
 
 Evaluation logic:
   1. Decode HTML entities in the title (so &amp; → &, &#38; → &, etc.).
-  2. Check allow[] patterns FIRST (case-insensitive). If any match → PASS.
-  3. Check deny[] patterns (case-insensitive). If any match → DROP.
-  4. No match in either list → PASS.
+  2. Check pre_deny[] patterns FIRST (case-insensitive). If any match → DROP
+     unconditionally (no allow override can rescue these — used for entry-level
+     and similar absolute disqualifiers that override even ML/Data context).
+  3. Check allow[] patterns (case-insensitive). If any match → PASS.
+  4. Check deny[] patterns (case-insensitive). If any match → DROP.
+  5. No match in either list → PASS.
 
 Config is loaded once per process from config/title_filters.yaml and
 cached via a module-level sentinel. Callers may pass a custom TitleFilters
@@ -43,6 +46,7 @@ class FilterPattern(BaseModel):
 
 
 class TitleFilters(BaseModel):
+    pre_deny: list[FilterPattern] = []  # checked before allow — no rescue possible
     allow: list[FilterPattern] = []
     deny: list[FilterPattern] = []
 
@@ -68,6 +72,7 @@ def load_filters(config_path: Path | None = None) -> TitleFilters:
     resolved = config_path or _DEFAULT_CONFIG_PATH
     raw = yaml.safe_load(resolved.read_text(encoding="utf-8"))
     return TitleFilters(
+        pre_deny=[FilterPattern(**p) for p in (raw.get("pre_deny") or [])],
         allow=[FilterPattern(**p) for p in (raw.get("allow") or [])],
         deny=[FilterPattern(**p) for p in (raw.get("deny") or [])],
     )
@@ -109,7 +114,23 @@ def filter_title(
 
     cfg = filters if filters is not None else load_filters(_DEFAULT_CONFIG_PATH)
 
-    # 1. Allow list checked first — any match → unconditional pass.
+    # 1. Pre-deny list — checked before allow; no rescue possible.
+    #    Used for absolute disqualifiers (entry-level, etc.) that must drop even
+    #    when an ML/Data allow pattern would otherwise rescue the title.
+    for pd in cfg.pre_deny:
+        if _matches(pd, decoded):
+            logger.info(
+                "title_filter: DROP (pre-deny) title=%r matched_pattern=%r",
+                decoded,
+                pd.pattern,
+            )
+            return FilterDecision(
+                action="drop",
+                matched_pattern=pd.pattern,
+                reason=pd.note or pd.pattern,
+            )
+
+    # 2. Allow list checked next — any match → unconditional pass.
     for ap in cfg.allow:
         if _matches(ap, decoded):
             logger.debug(
@@ -123,7 +144,7 @@ def filter_title(
                 reason=f"allow override: {ap.note}" if ap.note else "allow override",
             )
 
-    # 2. Deny list — first match → drop.
+    # 3. Deny list — first match → drop.
     for dp in cfg.deny:
         if _matches(dp, decoded):
             logger.info(
@@ -137,7 +158,7 @@ def filter_title(
                 reason=dp.note or dp.pattern,
             )
 
-    # 3. Neither list matched → pass.
+    # 4. Neither list matched → pass.
     logger.debug("title_filter: PASS (no deny match) title=%r", decoded)
     return FilterDecision(action="pass", matched_pattern=None, reason=None)
 
