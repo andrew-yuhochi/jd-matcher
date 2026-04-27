@@ -27,11 +27,27 @@ logger = logging.getLogger(__name__)
 
 _VIEWJOB_URL = "https://www.indeed.com/viewjob?jk={jk}"
 _DEFAULT_FIXTURES_DIR = Path(__file__).parents[3] / "tests" / "fixtures" / "hydration" / "indeed"
-_BROWSER_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
+
+# Full M1-005b stealth stack — all 9 items required.
+# Missing any Sec-Fetch-* header produces Cloudflare 403 (confirmed empirically).
+_STEALTH_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://mail.google.com/",
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;"
+        "q=0.9,image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-User": "?1",
+}
+
 _JK_RE = re.compile(r'[?&]jk=([a-zA-Z0-9][a-zA-Z0-9-]*)')
 _INDEED_URL_RE = re.compile(r'indeed\.com/(?:viewjob|rc/clk)[?&][^"\'>\s]*jk=([a-zA-Z0-9][a-zA-Z0-9-]*)')
 
@@ -131,14 +147,21 @@ def _load_from_fixture(url: str, job_id: str, fixtures_dir: Path) -> HydratedInd
 
 
 def _fetch_live(url: str, job_id: str) -> HydratedIndeedJD:
-    """Make a real HTTP request to the Indeed viewjob page."""
+    """Make a real HTTP request to the Indeed viewjob page.
+
+    Uses a Session with the full M1-005b stealth stack (9 headers) so that
+    Cloudflare's browser-check heuristics pass. Bare requests.get() with only
+    a User-Agent header produces 403 on production Indeed URLs.
+    """
     fetch_url = _VIEWJOB_URL.format(jk=job_id)
     HYDRATOR_RATE_LIMITER.wait()
+    session = requests.Session()
+    session.headers.update(_STEALTH_HEADERS)
     try:
-        resp = requests.get(
+        resp = session.get(
             fetch_url,
-            headers={"User-Agent": _BROWSER_UA},
-            timeout=10,
+            allow_redirects=True,
+            timeout=30,
         )
     except requests.RequestException as exc:
         reason = f"request_error:{type(exc).__name__}"
@@ -158,6 +181,8 @@ def _fetch_live(url: str, job_id: str) -> HydratedIndeedJD:
             hydration_status="failed",
             failure_reason=reason,
         )
+    finally:
+        session.close()
 
     raw_html = resp.content
     if resp.status_code != 200:

@@ -592,3 +592,142 @@ class TestInsertEmailLogConflict:
             f"Expected pipeline_run_id='run-B' after re-sync, got {row[0]!r}. "
             "INSERT OR REPLACE is not working — orphan rows will persist."
         )
+
+
+# ---------------------------------------------------------------------------
+# Fix 2a — WAL mode regression test
+# ---------------------------------------------------------------------------
+
+
+def test_init_db_enables_wal_mode(tmp_path: Path) -> None:
+    """init_db must enable WAL journal mode to prevent DB lock under concurrent access.
+
+    WAL allows concurrent readers + 1 writer vs rollback-journal which blocks
+    readers when a writer holds the lock. Without WAL, the hydrator's 30s
+    rate-limiter sleep window lets the web UI open a read transaction that
+    conflicts with the hydrator's next write.
+    """
+    db_path = tmp_path / "wal_test.db"
+    init_db(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute("PRAGMA journal_mode;").fetchone()
+    finally:
+        conn.close()
+    assert row is not None
+    assert row[0] == "wal", (
+        f"Expected journal_mode=wal after init_db(), got {row[0]!r}. "
+        "Without WAL, concurrent web UI reads block hydrator writes → DB lock."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 2b — Per-URL DB lock isolation in _run_hydrator_source
+# ---------------------------------------------------------------------------
+
+
+class TestHydratorPerUrlExceptionIsolation:
+    """DB lock (or any per-URL exception) must not abort the whole batch."""
+
+    def _make_limited_ingester_5(self):
+        class _LimitedIngester:
+            def __init__(self, credentials: Any, db_path: Path) -> None:
+                from jd_matcher.ingest.gmail import GmailIngester as _GI
+                self._inner = _GI(credentials, db_path)
+
+            def fetch_for_sender(
+                self,
+                sender: str,
+                since_date: Any,
+                run_id: str = "",
+                canonical_run_id: str | None = None,
+            ) -> list:
+                return self._inner.fetch_for_sender(
+                    sender,
+                    since_date,
+                    run_id=run_id,
+                    canonical_run_id=canonical_run_id,
+                )[:5]
+
+        return _LimitedIngester
+
+    def test_db_lock_on_one_url_does_not_abort_batch(
+        self,
+        test_db: Path,
+        skip_live: None,
+        logs_dir: Path,
+    ) -> None:
+        """Mock 5 LinkedIn postings; the 3rd URL's hydrate call raises OperationalError.
+
+        The other 4 URLs must still be hydrated (the batch must not abort).
+        """
+        import sqlite3
+        from unittest.mock import MagicMock
+        from jd_matcher.hydrate.linkedin import HydratedJD
+
+        call_count = {"n": 0}
+
+        def side_effect(url: str) -> HydratedJD:
+            call_count["n"] += 1
+            if call_count["n"] == 3:
+                raise sqlite3.OperationalError("database is locked")
+            return _make_complete_linkedin_jd(url)
+
+        LimitedIngester = self._make_limited_ingester_5()
+
+        with (
+            patch("jd_matcher.pipeline.GmailIngester", LimitedIngester),
+            patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=side_effect),
+            patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_make_complete_indeed_jd),
+        ):
+            summary = run_pipeline(db_path=test_db)
+
+        # The hydrator source must not have crashed the whole batch — it should
+        # still be healthy (or degraded at worst), not failed.
+        hydrator_li = next(
+            (s for s in summary.sources if s.source == "hydrator_linkedin"), None
+        )
+        assert hydrator_li is not None
+        # 4 of 5 URLs succeeded; the source should not be marked outright failed.
+        assert hydrator_li.health_status in ("healthy", "degraded"), (
+            f"Expected healthy/degraded after one DB-lock skip, got {hydrator_li.health_status!r}. "
+            "Per-URL isolation means one lock failure must not abort the whole batch."
+        )
+        # At least 4 results in the results list (the one that locked was skipped/continued)
+        assert hydrator_li.hydrated >= 4, (
+            f"Expected at least 4 hydrated URLs, got {hydrator_li.hydrated}. "
+            "The DB lock on URL 3 should have been skipped, not aborted the batch."
+        )
+
+    def test_generic_exception_on_one_url_does_not_abort_batch(
+        self,
+        test_db: Path,
+        skip_live: None,
+        logs_dir: Path,
+    ) -> None:
+        """A generic RuntimeError on one URL must not abort the hydrator batch."""
+        call_count = {"n": 0}
+
+        def side_effect(url: str):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("unexpected parse error")
+            return _make_complete_linkedin_jd(url)
+
+        LimitedIngester = self._make_limited_ingester_5()
+
+        with (
+            patch("jd_matcher.pipeline.GmailIngester", LimitedIngester),
+            patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=side_effect),
+            patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_make_complete_indeed_jd),
+        ):
+            summary = run_pipeline(db_path=test_db)
+
+        hydrator_li = next(
+            (s for s in summary.sources if s.source == "hydrator_linkedin"), None
+        )
+        assert hydrator_li is not None
+        assert hydrator_li.health_status in ("healthy", "degraded"), (
+            f"Expected healthy/degraded after one generic-exception skip, "
+            f"got {hydrator_li.health_status!r}"
+        )

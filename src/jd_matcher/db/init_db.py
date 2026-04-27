@@ -33,6 +33,12 @@ def init_db(db_path: Path | None = None) -> None:
 
     conn = sqlite3.connect(db_path)
     try:
+        # WAL mode allows concurrent readers + 1 writer, eliminating the
+        # lock contention between the hydrator's write transactions and the
+        # web UI's read transactions (the default rollback-journal mode
+        # blocks readers while a writer holds the lock).
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")  # safe with WAL, faster than FULL
         # SQLite disables foreign-key enforcement by default; enable it for
         # every connection so constraints are actually checked at runtime.
         conn.execute("PRAGMA foreign_keys = ON;")

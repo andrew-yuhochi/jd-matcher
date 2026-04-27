@@ -379,3 +379,43 @@ def test_no_form_action_sync_in_main_tab(client: TestClient) -> None:
         "Found form action='/sync' in main tab — this navigates the browser to /sync "
         "and renders raw JSON. Remove the form; use the header btn-sync instead."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 regression — .card-expanded-body must NOT have the `hidden` attribute
+# ---------------------------------------------------------------------------
+
+
+def test_card_expanded_body_has_no_hidden_attribute(client: TestClient) -> None:
+    """REGRESSION (Fix 1): card-expanded-body must not carry the HTML `hidden` attribute.
+
+    The `hidden` attribute is equivalent to display:none !important and overrides
+    the CSS toggle `.card.expanded .card-expanded-body { display: block; }`.
+    Removing `hidden` restores the `e` key expand/collapse behaviour.
+
+    Uses selectolax when available; falls back to raw-HTML string check.
+    """
+    response = client.get("/")
+    html = response.text
+
+    if _PARSER == "selectolax":
+        tree = _parse(html)
+        expanded_bodies = _css(tree, ".card-expanded-body")
+        assert len(expanded_bodies) > 0, (
+            "No .card-expanded-body elements found — seeded cards should produce at least one"
+        )
+        for node in expanded_bodies:
+            assert "hidden" not in node.attributes, (
+                ".card-expanded-body has the `hidden` attribute, which overrides the "
+                ".expanded CSS toggle with display:none !important"
+            )
+    else:
+        # Stdlib fallback: the attribute must not appear on the div line
+        import re as _re
+        bad_pattern = _re.compile(
+            r'class="card-expanded-body"[^>]*\bhidden\b', _re.IGNORECASE
+        )
+        assert not bad_pattern.search(html), (
+            ".card-expanded-body has the `hidden` attribute — remove it so the "
+            ".expanded CSS class can override display:none"
+        )

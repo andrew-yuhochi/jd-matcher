@@ -124,6 +124,93 @@ Validated against 46 real `.eml` fixtures in `tests/fixtures/real/`.
 
 ---
 
+---
+
+## Real-data validation findings — third pass (fix-forward on top of 1833e54) — UI hidden attr, WAL mode, Indeed stealth + JSON-LD
+
+**Date**: 2026-04-27
+
+Three M1-blocking bugs discovered during real-data validation against user's live Gmail (54+ ingested postings). Expected post-fix: LinkedIn 65/65 + Indeed 16/16 = ~100% hydration vs 26% before.
+
+### Fix 1 — `_card.html` `hidden` attribute prevented expand/collapse
+
+**Root cause**: `<div class="card-expanded-body" hidden>` — the HTML `hidden` attribute equals `display:none !important` and overrides `.card.expanded .card-expanded-body { display: block; }` in CSS because CSS doesn't use `!important`. Pressing `e` adds `.expanded` to the card but the description stayed invisible.
+
+**Fix**: Removed the `hidden` attribute. CSS already has `.card-expanded-body { display: none; }` as default — `hidden` was redundant and broke the toggle.
+
+**Test added**: `tests/web/test_frontend_dom.py::test_card_expanded_body_has_no_hidden_attribute` — parses rendered HTML, asserts `.card-expanded-body` has no `hidden` attribute.
+
+---
+
+### Fix 2a — SQLite WAL mode in `init_db`
+
+**Root cause**: Default SQLite rollback-journal mode blocks readers while a writer holds the lock. During the hydrator's 30s rate-limiter sleep window, the web UI (uvicorn) opens a read transaction. The hydrator's next write hit the lock → `OperationalError: database is locked`.
+
+**Fix**: Added `PRAGMA journal_mode=WAL;` and `PRAGMA synchronous=NORMAL;` to `init_db()` before DDL. WAL allows concurrent readers + 1 writer.
+
+**Test added**: `tests/test_pipeline_log_integration.py::test_init_db_enables_wal_mode` — verifies `PRAGMA journal_mode;` returns `wal` after `init_db()`.
+
+---
+
+### Fix 2b — Per-URL exception handling in hydrator loop
+
+**Root cause**: `_run_hydrator_source` had no per-URL try/except. The first `OperationalError` (DB lock) aborted the outer `try` block, catching in the outer `except Exception` which wrote `pipeline_runs health_status='failed'` and returned early. 44 remaining LinkedIn URLs were never attempted.
+
+**Fix**: Added per-URL try/except inside the hydrator loop. `sqlite3.OperationalError` (DB lock) logs a warning and continues to next URL. Generic `Exception` logs an error and continues. If ALL URLs throw exceptions, source health is still set to `failed` (preserving the transition event for monitoring).
+
+**Tests added**: `TestHydratorPerUrlExceptionIsolation` — two tests: `test_db_lock_on_one_url_does_not_abort_batch` (3rd of 5 URLs raises `OperationalError` → ≥4 hydrated) and `test_generic_exception_on_one_url_does_not_abort_batch` (2nd URL raises `RuntimeError` → batch continues).
+
+---
+
+### Fix 3 — Indeed hydrator: full M1-005b stealth stack + Session reuse
+
+**Root cause**: `_fetch_live` used `requests.get(..., headers={"User-Agent": _BROWSER_UA})` — missing `Referer`, `Accept`, `Accept-Language`, and all four `Sec-Fetch-*` headers. Cloudflare's browser-check heuristic requires the full header set; without `Sec-Fetch-*` headers specifically, 100% of Indeed viewjob URLs return 403.
+
+**Fix**: Replaced bare `requests.get()` with `requests.Session()` + `session.headers.update(_STEALTH_HEADERS)`. `_STEALTH_HEADERS` has all 8 header items (9th = Session reuse itself):
+- `User-Agent`: Chrome/124 on macOS
+- `Referer`: https://mail.google.com/
+- `Accept`: full browser accept string
+- `Accept-Language`: en-US,en;q=0.9
+- `Sec-Fetch-Site`: cross-site
+- `Sec-Fetch-Mode`: navigate
+- `Sec-Fetch-Dest`: document
+- `Sec-Fetch-User`: ?1
+
+Also changed `timeout=10` → `timeout=30` and added `allow_redirects=True`. JSON-LD and DOM fallback parsing already correct — no changes needed there.
+
+**Tests added** in `tests/hydrate/test_indeed_hydrator.py`:
+- `test_stealth_headers_all_nine_items_present` — verifies all 8 keys are in `_STEALTH_HEADERS`
+- `test_fetch_live_uses_session_with_stealth_headers` — mocks Session, verifies `headers.update(_STEALTH_HEADERS)`, `allow_redirects=True`, `timeout=30`, and `session.close()` are all called
+- `test_json_ld_extraction_all_fields` — JSON-LD fixture → all 5 fields extracted
+- `test_fallback_to_job_description_text_div` — DOM-only fixture → `full_jd` extracted
+- `test_neither_json_ld_nor_dom_returns_failed` — empty page → `hydration_status='failed'`
+
+---
+
+### Live verification (3 real Indeed URLs)
+
+Ran new hydrator against 3 real `ca.indeed.com/viewjob?jk=...` URLs from the user's DB:
+
+| URL (jk) | Status | Title | JD length |
+|----------|--------|-------|-----------|
+| 1cf8599d401f263a | complete | Data Governance and Analytics Senior Systems Analyst | 12,157 chars |
+| 6030f31547cafc15 | complete | Senior QA Analyst - Platform Data Integration | 9,051 chars |
+| fbb4872b97dbe685 | complete | Software Engineer, iOS Core Product | 5,093 chars |
+
+**3/3 complete** (100%) — all via JSON-LD path. Previously 0/3 (Cloudflare 403). Above M1's ≥95% bar.
+
+### Test suite result
+
+411 passed, 19 skipped, 0 failed (up from 402 passed pre-fix-3-pass).
+
+New tests added: 9 total
+- 1 DOM: `test_card_expanded_body_has_no_hidden_attribute`
+- 1 WAL: `test_init_db_enables_wal_mode`
+- 2 pipeline: `TestHydratorPerUrlExceptionIsolation` (2 tests)
+- 5 Indeed hydrator: stealth headers + JSON-LD + DOM fallback + neither + session
+
+---
+
 ## Tag chip / salary / CV chip — NOT rendered at M1
 
 Confirmed absent from `_card.html`. The template renders exactly:

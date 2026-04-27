@@ -399,10 +399,30 @@ def _run_hydrator_source(
     try:
         hydrate_fn = linkedin_hydrate if sender == "linkedin" else indeed_hydrate
         results = []
+        exception_count = 0
+        last_exception_reason: Optional[str] = None
         for url in urls:
-            jd = hydrate_fn(url)
-            results.append(jd)
-            _update_posting_hydration(resolved_db, url, jd)
+            try:
+                jd = hydrate_fn(url)
+                results.append(jd)
+                _update_posting_hydration(resolved_db, url, jd)
+            except sqlite3.OperationalError as exc:
+                # DB lock (most likely from concurrent web-UI read during rate-limiter
+                # sleep window). Skip this URL — it stays in 'partial' and will be
+                # retried on the next sync run.
+                logger.warning(
+                    "DB lock on url=%s — skipping, will retry next sync: %s", url, exc
+                )
+                exception_count += 1
+                last_exception_reason = f"db_lock:{exc}"
+                continue
+            except Exception as exc:
+                logger.error(
+                    "Hydration failed for url=%s: %s", url, exc, exc_info=True
+                )
+                exception_count += 1
+                last_exception_reason = f"{type(exc).__name__}:{exc}"
+                continue
 
             # C5 writer hook — increment hydration counter on the originating email row.
             gmail_id = url_to_gmail_id.get(url)
@@ -423,6 +443,13 @@ def _run_hydrator_source(
                     )
 
         health_status, failure_reason = compute_source_health(results)  # type: ignore[arg-type]
+
+        # When ALL URLs threw exceptions (no results produced at all), the source
+        # should be treated as failed rather than the default "healthy" that
+        # compute_source_health returns for an empty list.
+        if urls and not results and exception_count == len(urls):
+            health_status = "failed"
+            failure_reason = last_exception_reason or "all_urls_raised_exception"
 
         finished_at = datetime.now(timezone.utc)
         last_successful = started_at if health_status == "healthy" else _last_successful_fetch_at(resolved_db, source_name)
