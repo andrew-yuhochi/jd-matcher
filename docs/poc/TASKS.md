@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 3 | 17 |
+| Done | 4 | 18 |
 | In Progress | 0 | 0 |
-| To Do | 10 | 10 |
+| To Do | 9 | 9 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -139,7 +139,7 @@
 
 ##### TASK-M2-004 — Filter correctness validation (user reviews filtered list)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline + user
 - **Component**: C19 (validation) — TDD §C19
@@ -154,13 +154,13 @@
 - **Demo Artifact**: Validation report at `docs/poc/quality-logs/TASK-M2-004-validation-report.md` showing filtered titles, matched patterns, user-confirmed precision/recall numbers; final tuned `config/title_filters.yaml` committed.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-004.md`
 - **Acceptance Criteria**:
-  - [ ] Validation script outputs filtered postings table (id, title, matched_pattern) for user review
-  - [ ] User reviews ALL filtered titles; flags any false positives (legitimate roles incorrectly filtered)
-  - [ ] User adjusts `config/title_filters.yaml` patterns based on flags
-  - [ ] Re-run validation script; iterate until precision ≥95% on user-confirmed labels
-  - [ ] Re-run validation script; iterate until recall ≥98% (false-negative rate ≤2%)
-  - [ ] Final tuned `config/title_filters.yaml` committed
-  - [ ] Validation report documenting final precision/recall + user judgment basis
+  - [x] Validation script outputs filtered postings table (id, title, matched_pattern) for user review
+  - [x] User reviews ALL filtered titles; flags any false positives (legitimate roles incorrectly filtered)
+  - [x] User adjusts `config/title_filters.yaml` patterns based on flags
+  - [x] Re-run validation script; iterate until precision ≥95% on user-confirmed labels — **achieved 100% (15/15) on Iteration 2**
+  - [x] Re-run validation script; iterate until recall ≥98% (false-negative rate ≤2%) — **achieved 100% (76/76) on Iteration 2**
+  - [x] Final tuned `config/title_filters.yaml` committed (df25544 — 3 new allow overrides + 8 new deny patterns)
+  - [x] Validation report documenting final precision/recall + user judgment basis
 
 ---
 
