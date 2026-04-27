@@ -87,7 +87,7 @@
 
 ##### TASK-M2-002 — OpenAI API key setup + .env + SETUP.md
 
-- **Status**: To Do
+- **Status**: In Progress
 - **Blocked reason**:
 - **Agent**: data-pipeline (+ content-writer for SETUP.md narrative)
 - **Component**: C28 prep (env config foundation) — TDD §C28
@@ -102,11 +102,11 @@
 - **Demo Artifact**: `.env.example` has `OPENAI_API_KEY=sk-...` placeholder; SETUP.md has section "OpenAI API key setup" with `platform.openai.com` walkthrough; `python -m jd_matcher.llm.smoke` returns success.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-002.md`
 - **Acceptance Criteria**:
-  - [ ] `.env.example` contains `OPENAI_API_KEY` entry with placeholder
-  - [ ] `SETUP.md` has section "OpenAI API key setup" describing how to get a key + where to put it
-  - [ ] `get_openai_key()` helper reads env var or raises `ConfigError` with clear message
-  - [ ] Test (mocked): missing env var produces `ConfigError` with actionable message
-  - [ ] Smoke script `python -m jd_matcher.llm.smoke` works end-to-end against real OpenAI (live test)
+  - [x] `.env.example` contains `OPENAI_API_KEY` entry with placeholder
+  - [x] `SETUP.md` has section "OpenAI API key setup" describing how to get a key + where to put it
+  - [x] `get_openai_key()` helper reads env var or raises `ConfigError` with clear message
+  - [x] Test (mocked): missing env var produces `ConfigError` with actionable message
+  - [ ] AC #5: Smoke script `python -m jd_matcher.llm.smoke` works end-to-end against real OpenAI (live test) — pending user manual verification after OPENAI_API_KEY set in .env
 
 ---
 

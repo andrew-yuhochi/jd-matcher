@@ -23,3 +23,5 @@ httpcore==1.0.9
 MarkupSafe==3.0.3
 typing-inspection==0.4.2
 click==8.3.3
+# LLM provider (M2+)
+openai==2.32.0

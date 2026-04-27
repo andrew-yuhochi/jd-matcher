@@ -81,11 +81,27 @@ No billing setup required for the Gmail API at personal-use volume (well under t
   ```bash
   cp .env.example .env
   ```
-- ✅ Set your **OpenAI API key** (used by the LLM extraction pipeline — M2 onwards, but configure now):
+
+#### OpenAI API key setup
+
+**Why**: M2 uses `gpt-4o-mini` for structured field extraction and `text-embedding-3-small` for dedup embeddings (DISCOVERY-NOTES §10, TDD §1.3). Both calls go through the same key. Estimated PoC cost: ~$0.65/month at 20 postings/day ($0.60 extraction + $0.04 embeddings), so a $5 cap gives ~7× headroom.
+
+- ✅ Sign in (or create an account) at [platform.openai.com](https://platform.openai.com).
+- ✅ Navigate to **API Keys**: [platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys).
+- ✅ Click **Create new secret key** → name it `jd-matcher` → leave permissions at the default → click **Create**.
+- ✅ **Copy the key immediately.** OpenAI shows it exactly once — if you close the dialog without copying, you must create a new key.
+- ✅ Paste it into `.env`:
   ```
   OPENAI_API_KEY=sk-...
   ```
-  Get yours at [platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys). Recommended: set a $5/month usage cap in the OpenAI dashboard while the pipeline is in PoC.
+- ✅ Set a monthly budget cap before any production use — go to **Settings → Limits** (or [platform.openai.com/account/limits](https://platform.openai.com/account/limits)) and set a **hard cap of $5–10**. Optionally set a soft email warning at $2.
+- ✅ Verify the key works once `.env` is populated:
+  ```bash
+  .venv/bin/python -m jd_matcher.llm.smoke
+  ```
+  Expected: a one-line success message confirming the model responded (e.g. `[jd-matcher] OpenAI smoke test passed — model: gpt-4o-mini`).
+
+> Never commit `.env` to git — it is already listed in `.gitignore`. Only `.env.example` (which contains a blank placeholder for `OPENAI_API_KEY`) is committed.
 
 - ✅ Set the credentials path:
   ```
@@ -95,8 +111,6 @@ No billing setup required for the Gmail API at personal-use volume (well under t
 - ✅ `GH_TOKEN` was already populated during TASK-M1-001 repo bootstrap — leave as-is.
 
 - ✅ Leave `DB_PATH` at its default (`~/.jd-matcher/jd-matcher.db`) unless you want the database somewhere else.
-
-> Never commit `.env` to git — it is already listed in `.gitignore` (TASK-M1-001). Only `.env.example` is committed.
 
 ---
 
