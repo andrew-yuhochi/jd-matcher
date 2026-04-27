@@ -1,14 +1,21 @@
-# Title-Based Interest Filter (C19) — deny/allow pattern config
+# Title-Based Interest Filter (C19) — pre_deny / allow / deny pattern config
 #
-# Evaluation order:
-#   1. pre_deny[] checked FIRST — unconditional DROP, no allow rescue possible.
+# Matching architecture (3 tiers, evaluated in order):
+#   1. pre_deny[] — checked FIRST, unconditional DROP, no allow rescue possible.
 #      Used for absolute disqualifiers: leadership titles, entry-level / new-grad
 #      variants that must drop even when an ML/Data allow pattern would fire.
-#   2. allow[] checked next — if any allow pattern matches, the posting PASSES
-#      regardless of deny matches (escape hatch for ML/Data variants).
-#   3. deny[] checked second — if any deny pattern matches (and no allow matched),
-#      the posting is DROPped.
-#   4. If neither list matches, the posting PASSES.
+#   2. allow[]    — checked SECOND, escape hatch from `deny[]`. If any allow pattern
+#      matches, the posting PASSES regardless of any `deny` match. Allow does NOT
+#      rescue pre_deny matches — those are unconditional.
+#   3. deny[]     — checked LAST, default-drop list. Title drops if (a) not pre-denied,
+#      (b) not allowed, AND (c) matches any deny pattern.
+#   4. If no tier matches, the posting PASSES.
+#
+# When in doubt: use deny[] for "block by default but rescue specific data-adjacent
+# variants" patterns (e.g., deny generic Software Engineer but allow Software
+# Engineer (ML)); use pre_deny[] only when the policy truly has no carve-outs
+# (e.g., "drop all Director / VP / Intern, no exceptions" — the user's M2-004
+# Iteration 4 direction).
 #
 # Pattern kinds:
 #   regex    — Python re pattern (case-insensitive always; do not include (?i) flags here,
