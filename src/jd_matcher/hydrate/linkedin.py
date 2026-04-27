@@ -331,8 +331,8 @@ def _try_dom_scrape(
     )
     location = _text(soup, ".topcard__flavor--bullet")
     description = (
-        _text(soup, ".show-more-less-html__markup")
-        or _text(soup, ".description__text")
+        _description_text(soup, ".show-more-less-html__markup")
+        or _description_text(soup, ".description__text")
     )
 
     if title is None and company is None and description is None:
@@ -371,4 +371,17 @@ def _text(soup: BeautifulSoup, selector: str) -> Optional[str]:
     if el is None:
         return None
     text = el.get_text(separator=" ", strip=True)
+    return text or None
+
+
+def _description_text(soup: BeautifulSoup, selector: str) -> Optional[str]:
+    """Extract description-level content with paragraph breaks preserved."""
+    el = soup.select_one(selector)
+    if el is None:
+        return None
+    # Pass the element's inner HTML to strip_html_to_text so block elements
+    # (<p>, <li>, <br>) become \n\n / \n separators rather than being
+    # collapsed by BeautifulSoup's default get_text(separator=" ").
+    inner_html = el.decode_contents()
+    text = strip_html_to_text(inner_html)
     return text or None

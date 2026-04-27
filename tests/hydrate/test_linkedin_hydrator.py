@@ -7,8 +7,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from bs4 import BeautifulSoup
 
-from jd_matcher.hydrate.linkedin import HydratedJD, hydrate
+from jd_matcher.hydrate.linkedin import HydratedJD, _description_text, hydrate
 from jd_matcher.hydrate import compute_source_health
 
 FIXTURES_DIR = Path(__file__).parents[1] / "fixtures" / "hydration" / "linkedin"
@@ -151,6 +152,39 @@ def test_skip_live_uses_fixtures_no_http_call(monkeypatch: pytest.MonkeyPatch) -
             fixtures_dir=FIXTURES_DIR,
         )
         mock_requests.get.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _description_text — paragraph preservation (HTML fallback path)
+# ---------------------------------------------------------------------------
+
+def test_description_text_preserves_paragraph_breaks() -> None:
+    """HTML fallback path must preserve \\n\\n between block elements.
+
+    Regression guard: the old _text() path used get_text(separator=" ") which
+    collapsed all block boundaries to a single space.  _description_text() must
+    produce "Para 1.\\n\\nPara 2." — not "Para 1. Para 2.".
+    """
+    html = (
+        '<div class="show-more-less-html__markup">'
+        "<p>Para 1.</p>"
+        "<p>Para 2.</p>"
+        "<ul><li>Bullet A</li><li>Bullet B</li></ul>"
+        "</div>"
+    )
+    soup = BeautifulSoup(html, "html.parser")
+    result = _description_text(soup, ".show-more-less-html__markup")
+
+    assert result is not None
+    assert "Para 1." in result
+    assert "Para 2." in result
+    # The two paragraphs must be separated by \n\n, not a single space.
+    assert "Para 1.\n\nPara 2." in result, (
+        f"Expected double-newline between paragraphs; got: {result!r}"
+    )
+    # Bullets must be present and separated by \n\n from each other.
+    assert "Bullet A" in result
+    assert "Bullet B" in result
 
 
 # ---------------------------------------------------------------------------
