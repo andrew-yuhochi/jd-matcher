@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 4 | 18 |
+| Done | 5 | 19 |
 | In Progress | 0 | 0 |
-| To Do | 9 | 9 |
+| To Do | 8 | 8 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -166,7 +166,7 @@
 
 ##### TASK-M2-005 — LLM Provider Abstraction (C28)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C28 (LLM Provider Abstraction) — TDD §C28
@@ -187,14 +187,14 @@
 - **Demo Artifact**: `python -c "from jd_matcher.llm import LLMExtractor; e = LLMExtractor.from_config(); print(type(e).__name__)"` returns `OpenAIExtractor`.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-005.md`
 - **Acceptance Criteria**:
-  - [ ] `LLMExtractor` + `EmbeddingProvider` Protocols defined with `extract()` and `embed()` methods
-  - [ ] `OpenAIExtractor` implementation using GPT-4o-mini (model name configurable)
-  - [ ] `OpenAIEmbedding` implementation using `text-embedding-3-small`
-  - [ ] Ollama stubs raise `NotImplementedError` with clear message about M3 benchmark sub-task
-  - [ ] Factory pattern: `from_config(provider_name)` returns correct implementation
-  - [ ] Pricing table in `providers/pricing.py` with `model` + `input_cost_per_1k` + `output_cost_per_1k` + `as_of_date`
-  - [ ] `llm_call_ledger` row written per call (provider, model, input_tokens, output_tokens, cost_usd, latency_ms)
-  - [ ] Tests mock at the openai client boundary (no live calls)
+  - [x] `LLMExtractor` + `EmbeddingProvider` Protocols defined with `extract()` and `embed()` methods
+  - [x] `OpenAIExtractor` implementation using GPT-4o-mini (model name configurable)
+  - [x] `OpenAIEmbedding` implementation using `text-embedding-3-small`
+  - [x] Ollama stubs raise `NotImplementedError` with clear message about M3 benchmark sub-task
+  - [x] Factory pattern: `from_config(provider_name)` returns correct implementation
+  - [x] Pricing table in `providers/pricing.py` with `model` + `input_cost_per_1k` + `output_cost_per_1k` + `as_of_date`
+  - [x] `llm_call_ledger` row written per call (provider, model, input_tokens, output_tokens, cost_usd, latency_ms)
+  - [x] Tests mock at the openai client boundary (no live calls)
 
 ---
 

@@ -1,0 +1,21 @@
+# LLM provider configuration for jd-matcher (C28 — M2)
+#
+# This file is optional. If absent, baked-in defaults are used:
+#   extraction: provider=openai, model=gpt-4o-mini
+#   embedding:  provider=openai, model=text-embedding-3-small
+#
+# To switch to local Ollama (available at M3 benchmark sub-task):
+#   extraction:
+#     provider: ollama
+#     model: llama3
+#   embedding:
+#     provider: ollama
+#     model: nomic-embed-text
+
+extraction:
+  provider: openai
+  model: gpt-4o-mini
+
+embedding:
+  provider: openai
+  model: text-embedding-3-small
