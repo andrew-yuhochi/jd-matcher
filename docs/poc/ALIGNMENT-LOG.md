@@ -175,3 +175,46 @@ Caveats for user's awareness at approval:
 
 **User decision**: Approved (explicit "approve" response during /milestone-complete)
 **Outcome**: M1 formally closed 2026-04-27. All 14 tasks Done; all 9 ROADMAP §M1 ACs PASS; user-approved verbatim. TASKS.md updated by architect (M1 moved to Completed Milestones Log). CLAUDE.md state pointers will be updated by main session. PoC phase continues — next: /milestone-plan jd-matcher for Milestone 2 (Content-aware dedup + repost detection per ROADMAP §M2). See commit for SHA.
+
+---
+
+## 2026-04-27 — Indeed extraction deferred to MVP; PoC scope reduced to LinkedIn-only
+
+**Verdict**: DRIFTING
+**Mode**: B
+**Anchors**:
+- PRD §7 Success Criteria SC-2: "Indeed URL extraction from alert emails ≥95% — Validated in M1" — M1 already passed this SC at 100%; the issue is whether Indeed remains an active PoC source in M2+
+- PRD §7 Success Criteria SC-3: "JD hydration (LinkedIn + Indeed guest endpoints) ≥95% — Validated in M1" — same status
+- PRD §7 Success Criteria SC-8: "Cross-source merge — Verified — ≥3 real LinkedIn + Indeed pairs collapse to one card — Validated in M2"
+- PRD §5 Scope IN M2: "M2 cross-source merge ACs validated against LinkedIn↔Indeed pairs only" (Himalayas deferral note)
+- PRD §5 Scope IN M1: "Gmail API ingestion of LinkedIn + Indeed alert emails"; "Indeed alert parser"; "JD hydration via LinkedIn / Indeed public guest endpoints (rate-limited 1 req / 30s)"
+- PRD §4 Phase Objectives (1): "Multi-source ingestion (Gmail email parsing for LinkedIn/Indeed/Job Bank + JD hydration; direct-API polling for Himalayas/Remotive/Jobicy/HN)"
+- MARKET-ANALYSIS.md Beta Gate 2: "the tool surfaces at least 3 genuinely relevant postings per week that would NOT have appeared in a LinkedIn-only search (i.e., came from Himalayas, Job Bank, HN Hiring, or Remotive)" — Indeed is not named as a Gate 2 source; Gate 2 is met by M4 open-API sources
+- PRD §9 Risks R3: "LinkedIn / Indeed rate-limit or IP-block at hydration — Medium likelihood — degrade gracefully"
+
+**Analysis**: DRIFTING rather than VIOLATES because three factors bound the severity. First, M1 already closed with SC-2 and SC-3 both passing at 100% — Indeed parsing and hydration are proven PoC capabilities; this deferral removes Indeed from active M2+ execution, not from the proven record. Second, the commercial thesis (MARKET-ANALYSIS.md Gate 2) explicitly names Himalayas/Job Bank/HN/Remotive as the non-LinkedIn proof sources — Indeed is not the Gate 2 gate-keeper, so the commercial thesis survives LinkedIn-only PoC execution intact. Third, the blocking cause is a realized version of PRD §9 R3 (IP-level Cloudflare block) compounded by a hardware constraint (MDM-disabled remote debugging port on employer machine) that prevents all bypass paths — this is a documented technical constraint, not a preference change. The three concrete impacts that make this DRIFTING rather than ALIGNED: (a) SC-8 cross-source merge ("≥3 real LinkedIn↔Indeed pairs collapse to one card") becomes unevaluable on live data with Indeed inactive — must shift to synthetic pairs or be reframed as "≥3 verified cross-source pairs"; (b) TASK-M2-012 calibration assumed some real cross-source pairs for labeling — with Indeed inactive those pairs are unavailable from the live pipeline; (c) PRD §4 Phase Objective 1 names "LinkedIn/Indeed/Job Bank + JD hydration" as the multi-source ingestion proof — LinkedIn-only narrows the closed-platform proof from two sources to one, which is a visible scope reduction even though the dedup technique milestone is otherwise intact. The browser_fetcher.py infrastructure (patchright Tier 1 + CDP Tier 2) was built and is an asset for MVP Indeed work; it does not need to be deleted.
+
+**Recommendation**: DRIFTING — override and proceed, or park?
+
+Specific items requiring a decision if user overrides:
+1. SC-8 revision: "≥3 real LinkedIn↔Indeed pairs" → "≥3 verified cross-source pairs (synthetic pairs acceptable if live Indeed data unavailable due to IP-block)" — or mark SC-8 deferred to MVP
+2. TASK-M2-012: calibration report documents Indeed-inactive status; real-data labeling uses LinkedIn-only live pairs + synthetic cross-source pairs
+3. BACKLOG additions:
+   - "Indeed via Playwright on personal non-MDM machine" → MVP-M1
+   - "Indeed via commercial proxy (Oxylabs/Bright Data or equivalent)" → MVP-M1 alternative path
+   - "browser_fetcher.py (patchright Tier 1 + CDP Tier 2) built and disabled for PoC" → note as MVP-M1 infrastructure asset ready to activate
+4. PRD §4 Phase Objective 1: add parenthetical "(Indeed deferred to MVP — IP-level Cloudflare block + MDM hardware constraint on employer machine; PoC validates LinkedIn email ingestion + open-API sources)"
+5. PRD §9 Risks R3: add realized-risk note — "Indeed Cloudflare block realized 2026-04-27 at PoC M2; deferred to MVP"
+
+**User decision** (2026-04-28): Approved with Override BA — defer Indeed extraction to MVP-M1; PoC scope reduced to LinkedIn-only. SC-8 resolved per Option A (synthetic cross-source pairs acceptable; the C21 dedup mechanism is proven on synthetic by design per TDD §C21 sample-selection "Hybrid"). browser_fetcher.py infrastructure stays committed as MVP-ready asset.
+
+**Outcome** (2026-04-28): Architect updated PRD/TASKS/BACKLOG/DATA-SOURCES per the BA shopping list. Specifically:
+- PRD §4 Phase Objective 1: parenthetical added deferring Indeed to MVP with §9 R3 reference
+- PRD §7 SC-8: revised to accept synthetic cross-source pairs (Option A), with reasoning anchored to TDD §C21 sample-selection
+- PRD §9 R3: realized-risk note added with full root cause (Cloudflare IP-block + MDM-disabled debug port) and mitigation (defer to MVP-M1 with browser_fetcher.py ready-to-activate)
+- PRD §5 M2: cross-source merge clause revised — real merged cards may be LinkedIn-only; multi-source UI mechanic demonstrated via synthetic C21 fixtures
+- TASKS.md TASK-M2-012: AC added explicitly stating synthetic cross-source pairs acceptable per PRD §9 R3
+- TASKS.md TASK-M2-013: AC revised — sync demo no longer requires live Indeed cross-source merged card; SC-8 verification proceeds via synthetic fixture path
+- BACKLOG.md: 3 new MVP-M1 entries added (Indeed via personal machine / via commercial proxy / browser_fetcher.py asset note)
+- DATA-SOURCES.md: PoC status note appended to Indeed section
+M1 untouched (SC-2 + SC-3 already PASSED at M1; Indeed parsing + hydration are proven). Commercial thesis intact: Beta Gate 2 names Himalayas/Job Bank/HN/Remotive (not Indeed) as the non-LinkedIn proof sources, so LinkedIn-only PoC execution preserves the Beta evaluation surface. browser_fetcher.py committed by main session in a separate follow-up commit. See commit for SHA.

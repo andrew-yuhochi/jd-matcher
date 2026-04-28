@@ -65,7 +65,7 @@ All three pass → Variant B candidate (commercial spike). Any fails → Variant
 ## 4. Phase Objectives
 
 PoC validates the four capabilities that determine whether the rest of the system can be trusted, on a working local web app:
-1. Multi-source ingestion (Gmail email parsing for LinkedIn/Indeed/Job Bank + JD hydration; direct-API polling for Himalayas/Remotive/Jobicy/HN)
+1. Multi-source ingestion (Gmail email parsing for LinkedIn/Indeed*/Job Bank + JD hydration; direct-API polling for Himalayas/Remotive/Jobicy/HN). *Indeed deferred to MVP at 2026-04-28 — see §9 R3 realized risk.
 2. Content-aware deduplication (LLM-extracted fields + embedding similarity, two-stage)
 3. LLM single-call extraction + classification + role-fit scoring
 4. CV-to-posting recommender (cosine on embeddings)
@@ -105,7 +105,7 @@ Four milestones, each with a user-observable deliverable. Mirrors ROADMAP.md §"
 - Canonical record merge logic preserving `first_seen` + `sources[]`. Merge semantics (user-confirmed at M2 planning): canonical_title/company/location use the LLM-canonicalized values as the single source of truth; first_seen = earliest of merged postings; sources[] accumulates all source variants (e.g. `["linkedin", "indeed"]`); apply URL renders both sources as separate links per card; full_jd picks the longer variant and records provenance; applied/dismissed state inherits across the canonical.
 - Cross-state dedup generalised to canonical-id (a new posting matching an applied or dismissed canonical is suppressed from Main). **Exception**: a new posting matching a canonical that is currently in `Inactive` OR `Expired` state is NOT suppressed — both states are treated as non-existent for dedup purposes (URL-based and LLM content-based dedup paths). The new posting surfaces on Main with a fresh posting_id; the old Inactive/Expired entry remains visible (Applied tab Inactive sub-section for Inactive; Dismissed tab Expired sub-section for Expired) as forensic history. (See BACKLOG.md → "Inactive AND Expired state lifecycle" — implemented at MVP-M1.) **The dedup-bypass predicate is wired into the M2 dedup engine (TDD §C21 / §C22) as a no-op at M2** — the `applied.status` enum in M1 has only `'Applied'`, so the `WHERE status NOT IN ('Inactive', 'Expired')` guard matches everything; MVP-M1's status-enum extension flips the predicate to load-bearing without any C21/C22 code change.
 - Repost detection (same JD, new `jobId`, 30+ days later — threshold config-driven, default 30 per ROADMAP §M2)
-- ~~Himalayas API source added~~ — **deferred to M4** (see BACKLOG.md → "PoC-M4 — Himalayas API source (deferred from M2)"). Bundles with M4's planned Job Bank/Remotive/Jobicy/HN multi-source expansion. M2 cross-source merge ACs validated against LinkedIn↔Indeed pairs only.
+- ~~Himalayas API source added~~ — **deferred to M4** (see BACKLOG.md → "PoC-M4 — Himalayas API source (deferred from M2)"). Bundles with M4's planned Job Bank/Remotive/Jobicy/HN multi-source expansion. **M2 cross-source merge ACs (2026-04-28 update — see PRD §9 R3 realized risk)**: merged cards with multi-source attribution where cross-source pairs exist. During PoC, real merged cards may show LinkedIn-only attribution (per §9 R3 realized risk); the multi-source UI mechanic is demonstrated via the synthetic C21 fixtures and Cross-source dedup is verified per revised SC-8.
 
 ### M3 — Smart layer
 - Single LLM extraction prompt (cloud-default OpenAI `gpt-4o-mini`, ~$0.60/mo at 20 postings/day; Ollama `qwen2.5:7b` config-swappable) producing all of: canonical fields + salary + tags + `primary_focus` + `fit_score` + `fit_reasoning` + `requires_pr_or_citizenship`
@@ -181,7 +181,7 @@ Anchored to ROADMAP.md PoC exit criteria + per-milestone acceptance criteria.
 | SC-5 | State persistence (applied/dismissed across server restart) | 100% | End-to-end test, deterministic | M1 |
 | SC-6 | Content-aware dedup overall | ≥90% on 30 hand-labeled pairs | 10 dup / 10 non-dup / 10 ambiguous | M2 |
 | SC-7 | Content-aware dedup — different-team false-merge rate | **0** | 10 different-team cases — regression-blocking | M2 |
-| SC-8 | Cross-source merge | Verified | ≥3 real LinkedIn + Indeed pairs collapse to one card | M2 |
+| SC-8 | Cross-source merge | Verified | ≥3 verified cross-source pairs collapse to one canonical card. Synthetic cross-source pairs are acceptable where live Indeed data is unavailable due to PRD §9 R3 realized risk. The C21 dedup mechanism is the validation target; synthetic pairs (per TDD §C21 sample selection) prove the mechanism identically. — Validated in M2 (revised 2026-04-28 per ALIGNMENT-LOG). | M2 |
 | SC-9 | LLM `primary_focus` agreement | ≥80% | ≥30 hand-labeled postings vs. user labels | M3 |
 | SC-10 | LLM multi-tag Jaccard | ≥70% | Same set as SC-9 | M3 |
 | SC-11 | LLM `fit_score` accept/reject agreement at threshold 50 | ≥90% | Same set as SC-9 | M3 |
@@ -221,7 +221,7 @@ Top 5 from ROADMAP.md §"Risks and Mitigations" — synthesised here for product
 |------|--------|-----------|----------------|-----------|
 | R1 — LinkedIn alert email template change silently breaks parser | Tech (RESEARCH-REPORT.md §3, §8) | Medium-High | URL-only fallback ships in M1; "URL-only fraction" health metric guards against silent regression | URL-regex-first parser; raw email body stored for replay; alert if URL-only fraction >20% |
 | R2 — Gmail OAuth refresh token revoked | Tech (RESEARCH-REPORT.md §8) | Medium | Pipeline halts for Gmail sources; API sources continue (per-source isolation) | Startup health check; clear "Re-run auth flow" error; persistent banner per UX-SPEC.md §8 |
-| R3 — LinkedIn / Indeed rate-limit or IP-block at hydration | Tech (DISCOVERY-NOTES.md §3, ROADMAP.md R3) | Medium | Degrade gracefully — store URL even if hydration fails; fall back to email teaser | 1 req / 30s rate limit; ~40 hydrations/day total |
+| R3 — LinkedIn / Indeed rate-limit or IP-block at hydration | Tech (DISCOVERY-NOTES.md §3, ROADMAP.md R3) | Medium | Degrade gracefully — store URL even if hydration fails; fall back to email teaser | 1 req / 30s rate limit; ~40 hydrations/day total. **Realized 2026-04-28 at PoC M2**: IP-level Cloudflare enforcement on user's employer-managed Mac. All bypass paths failed (requests, curl_cffi, patchright headed). Tier 2 CDP-attach blocked by MDM-disabled debug port. Mitigation: Indeed extraction deferred to MVP-M1 when user can run on personal hardware OR procure commercial proxy. browser_fetcher.py infrastructure committed and ready to activate. See ALIGNMENT-LOG.md 2026-04-28 entry. |
 | R4 — User's LinkedIn saved searches too narrow → coverage gap | Tech / UX (ROADMAP.md R4) | Medium | M4 coverage audit explicitly tracks unique-source contributions; coverage expansion goes to MVP-M2 | M4 audit task; DISCOVERY-NOTES.md §4 lists candidate keyword expansions |
 | R5 — Job Bank Canada email parser fails (gov't IT cycle) | Tech (RESEARCH-REPORT.md §8 Risk 3) | Medium | Built last (M4) so infrastructure is mature; fallback to direct scrape of public search page is feasible at personal volume | Raw email bodies stored; documented fallback to `jobbank.gc.ca/jobsearch/` |
 

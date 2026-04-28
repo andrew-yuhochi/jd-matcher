@@ -89,6 +89,8 @@ All Gmail sources share infrastructure: a single dedicated Gmail account holds i
 | Known limitations | Indeed rewrites links via tracking redirectors — final canonical URL must be resolved (single HEAD request through the redirect chain, gated by the same 1 req / 30s rate limit if it touches `indeed.com` directly). |
 | Fallback | URL-only ingestion if other fields fail. |
 
+**PoC status (2026-04-28)**: Indeed extraction deferred to MVP-M1 due to Cloudflare IP-level enforcement on user's employer-managed Mac (MDM disables `--remote-debugging-port`, blocking the CDP-attach fallback in browser_fetcher.py). The hydration code path (`indeed.py`) and browser_fetcher infrastructure are committed and ready to reactivate when user runs on personal hardware OR procures commercial proxy. See PRD §9 R3 + ALIGNMENT-LOG.md 2026-04-28.
+
 ---
 
 ### Job Bank Canada (via Gmail alerts) — M4

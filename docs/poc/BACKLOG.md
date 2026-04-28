@@ -216,6 +216,62 @@ Acceptable trade-off for M2 — the filter is new, deny patterns will need itera
 
 ---
 
+### MVP-M1 — Indeed extraction via personal non-managed machine
+
+**Decision date**: 2026-04-28
+**Approved by**: User (during M2-006 calibration recovery — Indeed deferral decision)
+**Alignment verdict**: DRIFTING but SOUND-WITH-CAVEATS (see ALIGNMENT-LOG.md 2026-04-28)
+
+**Why deferred**: 2026-04-28 IP-level Cloudflare block on user's employer-managed Mac; CDP-attach Tier 2 blocked by MDM policy disabling `--remote-debugging-port`. All bypass paths failed (requests + Sec-Fetch headers, curl_cffi with Chrome impersonation, browser-cookie3 + cf_clearance injection, patchright headed + persistent profile). The hardware constraint is the blocker, not the code.
+
+**MVP-M1 trigger**: user runs jd-matcher on a personal desktop (no MDM).
+
+**Activation work**:
+1. Enable `gmail_indeed` source in pipeline.py
+2. Verify browser_fetcher Tier 1 (patchright) bypasses Cloudflare on residential IP from personal machine
+3. If Tier 1 still fails, activate Tier 2 (CDP-attach) which is now policy-compatible (no MDM blocking `--remote-debugging-port`)
+
+**Estimated effort**: 1 day (verification + integration smoke test on personal hardware)
+
+**Reference**: browser_fetcher.py + indeed.py escalation logic committed at PoC M2.
+
+---
+
+### MVP-M1 — Indeed extraction via commercial proxy (alternative path)
+
+**Decision date**: 2026-04-28
+**Approved by**: User (during M2-006 calibration recovery — Indeed deferral decision)
+**Alignment verdict**: DRIFTING but SOUND-WITH-CAVEATS (see ALIGNMENT-LOG.md 2026-04-28)
+
+**Why deferred**: same root cause as the Personal-machine entry above, but addresses the case where personal machine is unavailable OR Cloudflare IP-block persists across networks (e.g., residential IP also flagged).
+
+**MVP-M1 trigger**: Personal-machine path fails OR user explicitly opts for the proxy path.
+
+**Activation work**:
+1. Procure rotating residential proxy (Oxylabs / Bright Data / similar at ~$10-50/mo)
+2. Wire into patchright `launch_persistent_context` proxy parameter
+3. Validate Cloudflare bypass on proxied IP
+
+**Estimated effort**: 0.5 day setup + ongoing $10-50/mo recurring cost.
+
+**Reference**: same browser_fetcher.py infrastructure as the Personal-machine entry.
+
+---
+
+### MVP-M1 — browser_fetcher.py asset note (informational, NOT a new task)
+
+**Status**: Committed at PoC M2 (commit SHA TBD after main session commits the infrastructure separately).
+
+**Purpose**: Generic Playwright-based URL fetcher with two-tier escalation (patchright headed → CDP-attach to user's Chrome).
+
+**Currently used by**: indeed.py auto-fallback on Cloudflare 403+Cf-Mitigated (currently always fails due to PRD §9 R3 realized risk on this hardware).
+
+**MVP-M1 reactivation path**: see "Indeed extraction via personal non-managed machine" entry above OR "Indeed extraction via commercial proxy" entry above.
+
+**Future MVP+ candidates**: any source that hits similar bot detection — Job Bank, alternative scraped sources, etc. The two-tier escalation pattern is source-agnostic and ready to wire into other hydrators when needed.
+
+---
+
 ## Deferred to Beta (decision gate)
 
 - **Variant A (stay personal)**: durability hardening, runbook, 6-month stable use validation.

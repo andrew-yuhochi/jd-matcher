@@ -390,6 +390,7 @@
 - **Acceptance Criteria**:
   - [ ] 30 synthetic test fixtures generated (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios from C21 sample selection
   - [ ] User labels 10-15 real pairs from existing 91+ postings (CSV or YAML)
+  - [ ] ≥3 verified cross-source pairs (synthetic acceptable where live Indeed is unavailable per PRD §9 R3 — uses the synthetic C21 cross-source fixtures from TASK-M2-008)
   - [ ] Calibration script computes precision/recall at thresholds `[0.85, 0.88, 0.90, 0.92, 0.95]`
   - [ ] Precision ≥90% at chosen threshold (regression-checked against synthetic + real labels)
   - [ ] ZERO false-merges on 10 different-team synthetic cases (regression-blocking — must pass at chosen threshold)
@@ -415,7 +416,7 @@
 - **Demo Artifact**: User-approved milestone closure (recorded in TASK-M2-013 quality log).
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-013.md`
 - **Acceptance Criteria**:
-  - [ ] User runs full sync; observes ≥1 cross-source merged card on Main with "Sources: [Apply on LinkedIn] [Apply on Indeed]"
+  - [ ] User runs full sync; observes merged card behavior on Main. Cross-source attribution may be LinkedIn-only during PoC (per PRD §9 R3 realized risk); the multi-source mechanic is demonstrated via the synthetic C21 fixture review. SC-8 verification proceeds via the synthetic-fixture path.
   - [ ] User dismisses a merged card; refreshes; canonical stays out of Main on next render (state inheritance)
   - [ ] All 6 ROADMAP §M2 ACs verified by user:
     - ≥90% accuracy on 30 hand-labeled pairs
