@@ -1,10 +1,43 @@
 # TASK-M2-006 — Extraction Validation Report (Iteration 1)
 
+## Round 1 — Targeted Fixes (2026-04-27)
+
+3 prompt fixes applied to `prompts/canonical_extraction_v1.txt`:
+
+1. **Team rule relaxation** — removed hard "2–5 words" constraint; org-unit semantics
+   now matter, not word count. Single-word units ("Engineering", "IT") and multi-word
+   org paths are both valid.
+2. **HR pay band guard for seniority** — "Staff - Non Union", "Pay Band X", etc. are
+   administrative HR classifications, not IC seniority levels. Addresses #1 UBC where
+   "Staff - Non Union" was misread as IC-level Staff.
+3. **Company name consistency for small/regional firms** — Inc/Ltd-stripping applies
+   ONLY to legal suffixes, not descriptive words like "Consulting", "Search", "Group".
+   Addresses #20/#58 Alquemy inconsistency.
+
+5 postings re-extracted (IDs: 1, 20, 54, 58, 80). Results:
+
+| Posting | Field | Before | After | Verdict |
+|---------|-------|--------|-------|---------|
+| #1 UBC Research Engineer | seniority | Staff | Mid | PASS — HR band guard fired correctly |
+| #20 Alquemy Data Scientist | company | Alquemy Search & Consulting | Alquemy Search & Consulting | PASS — no regression |
+| #58 Alquemy Data Scientist | company | Alquemy Search | Alquemy Search & Consulting | PASS — longer form rule applied |
+| #80 Klue Sr SWE AI | team | Engineering | Engineering | PASS — 1-word org-unit accepted |
+| #54 Clio Sr Dev Enterprise AI | team | IT | IT | PASS — 1-word org-unit accepted |
+
+**Side-effect to note:** Posting #1 now returns a verbose pipe-separated team path
+("Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science")
+reflecting UBC's layered org structure. This is semantically correct but verbose. Flag
+for Round 2 if multi-level org paths need normalisation.
+
+Re-extraction cost: $0.030171 (5 fresh API calls + 66 cache hits for the remainder)
+
+---
+
 Date: 2026-04-27
 Source DB: /Users/andrew.yu/.jd-matcher/jd-matcher.db
 C19-passed postings analyzed: 71
-Cost (this run): $0.027824 across 67 live API calls (75 cache hits)
-Total cost on jd-matcher account to date: $0.028162
+Cost (this run): $0.030171 across 72 live API calls (141 cache hits)
+Total cost on jd-matcher account to date: $0.030509
 
 ## Summary
 
@@ -13,8 +46,8 @@ Total cost on jd-matcher account to date: $0.028162
 | Postings analyzed | 71 |
 | Successful extractions | 71 |
 | Parse failures (3-retry exhausted) | 0 |
-| Cache hits (no API call) | 75 |
-| New API calls | 67 |
+| Cache hits (no API call) | 141 |
+| New API calls | 72 |
 
 ## Extractions — full table for user review
 
@@ -28,8 +61,8 @@ Sorted by company alphabetically, then title.
 | 25 | linkedin | Manager, Machine Learning Engineering | Manager, Machine Learning Engineering | Affirm | Manager | Other | Fraud Machine Learning | Machine Learning, Deep Learning, Fraud Detection | "The Manager of Machine Learning Engineering will lead a team focused on developing and improving fra..." |
 | 35 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, LLM | "The Senior Machine Learning Engineer will author high-fidelity reasoning traces that guide AI models..." |
 | 36 | linkedin | Senior Machine Learning Expert | Senior Machine Learning Expert | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, Model Evaluation | "The Senior Machine Learning Expert will author high-fidelity reasoning traces to train large languag..." |
-| 58 | linkedin | Data Scientist | Data Scientist | Alquemy Search | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will leverage advanced machine learning and statistical techniques to solve compl..." |
 | 20 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will build and implement advanced machine learning and statistical models to pred..." |
+| 58 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will leverage advanced machine learning and statistical techniques to solve compl..." |
 | 21 | linkedin | data scientist | Data Scientist | Altea Healthcare | Mid | Vancouver | NULL | Python, Java, JavaScript | "The Data Scientist will assess and troubleshoot applications software and conduct business and techn..." |
 | 2 | linkedin | Applied Scientist, Private Brands Discovery | Applied Scientist | Amazon | Mid | Vancouver | Private Brands Discovery | Python, Machine Learning, Causal Inference | "The Applied Scientist will drive applied science projects in machine learning from ideation to launc..." |
 | 28 | linkedin | Sr. Data Scientist, Alexa Connections | Data Scientist | Amazon | Senior | Vancouver | Alexa Connections | Python, SQL, A/B testing | "The Senior Data Scientist in Alexa Connections will lead the development of machine learning and dat..." |
@@ -39,7 +72,7 @@ Sorted by company alphabetically, then title.
 | 62 | indeed | Data Governance and Analytics Senior Systems Analyst | Data Governance and Analytics Senior Systems Analyst | BCIT | Senior | Vancouver | Information Technology Services | PL/SQL, MSSQL, Data Governance | "The Senior Systems Analyst will participate in ERP modernization initiatives, focusing on data gover..." |
 | 38 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | BDO | Senior | Vancouver | Technology Advisory Services | MLOps, Azure, Databricks | "The Senior Machine Learning Engineer will lead the design and implementation of end-to-end MLOps pip..." |
 | 78 | linkedin | Senior Data Analyst | Senior Data Analyst | Bird Construction | Senior | Vancouver | Business Intelligence & Analytics | Power BI, Data Governance, SQL | "The Senior Data Analyst will design, develop, and deliver analytics solutions using Power BI. This r..." |
-| 54 | linkedin | Senior Developer, Enterprise AI | Senior Developer, Enterprise AI | Clio | Senior | Vancouver | IT | Python, Ruby, SQL | "The Senior Developer, Enterprise AI is responsible for building, operating, and evolving Clio's inte..." |
+| 54 | linkedin | Senior Developer, Enterprise AI | Senior Developer, Enterprise AI | Clio | Senior | Vancouver | IT | Ruby, Python, SQL | "The Senior Developer, Enterprise AI is a hands-on technical leader responsible for building, operati..." |
 | 49 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | Machine Learning | Python, SQL, Machine Learning | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
 | 51 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | Machine Learning | Python, SQL, Machine Learning | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
 | 29 | linkedin | Senior Data Analyst | Senior Data Analyst | Coalition | Senior | Toronto | Analytics | SQL, Data Analysis, Python | "The Senior Data Analyst will lead analytics for the GTM and servicing motions, focusing on building..." |
@@ -68,7 +101,7 @@ Sorted by company alphabetically, then title.
 | 44 | linkedin | Senior Data Scientist - Shopping Experience (Search) | Senior Data Scientist | Instacart | Senior | Remote — Canada | Shopping Experience | SQL, Python, A/B testing | "The Senior Data Scientist will focus on analytics and experimentation strategies for the Shopping Ex..." |
 | 14 | linkedin | Transportation Data Scientist | Transportation Data Scientist | Jacobs | Mid | Vancouver | Data and Metrics Quality | Python, SQL, Machine Learning | "The Transportation Data Scientist will contribute transportation industry expertise to ensure the qu..." |
 | 48 | linkedin | Data Scientist Specialist (Lending) | Data Scientist Specialist | Jobgether | Mid | Remote — Canada | NULL | Python, SQL, Spark | "The Data Scientist Specialist will develop and deploy real-time scoring models to assess credit and..." |
-| 80 | linkedin | Senior Software Engineer, AI (Agents) | Senior Software Engineer, AI (Agents) | Klue | Senior | Vancouver | Engineering | Python, AI, LLM | "The Senior Software Engineer will build and optimize LLM-powered agents at scale. This role involves..." |
+| 80 | linkedin | Senior Software Engineer, AI (Agents) | Senior Software Engineer | Klue | Senior | Vancouver | Engineering | Python, API, Distributed Systems | "The Senior Software Engineer will build and optimize LLM-powered agents at scale, focusing on backen..." |
 | 33 | linkedin | Data Analyst, Risk and Operational Performance | Data Analyst | Kraken | Mid | Remote — Canada | Core Services | SQL, Python, dbt | "The Data Analyst, Risk and Operational Performance will elevate decision-making by uncovering trends..." |
 | 32 | linkedin | Data Analyst, Growth | Data Analyst, Growth | Kraken | Mid | Remote — Canada | Data Team | SQL, Python, dbt | "The Data Analyst, Growth will focus on turning complex growth marketing data into actionable insight..." |
 | 42 | linkedin | Senior Data Scientist, AI Native (Growth) | Senior Data Scientist | Life360 | Senior | Remote — Canada | Data Science | Machine Learning, Statistical Modeling, A/B Testing | "The Senior Data Scientist will focus on scaling Life360's growth and user retention efforts. This ro..." |
@@ -89,7 +122,7 @@ Sorted by company alphabetically, then title.
 | 77 | linkedin | Staff Data Scientist | Staff Data Scientist | TEEMA | Staff | Vancouver | AI Organization | Python, PyTorch, TensorFlow | "The Staff Data Scientist will lead the technical strategy for AI initiatives, focusing on machine tr..." |
 | 55 | linkedin | Senior Developer (AI/ML/Gen AI Solutions) | Senior Developer (AI/ML/Gen AI Solutions) | TELUS | Senior | Vancouver | AI Accelerator | Python, React, Node.js | "The Senior Developer will lead cross-functional teams in designing and implementing AI/ML solutions...." |
 | 47 | linkedin | Data Analyst - FTT | Data Analyst | TransLink | Mid | Hybrid — Vancouver | Data Management Team | Data Analysis, Data Management, Data Modeling | "The Data Analyst will perform data analysis of enterprise data and provide expertise to business sta..." |
-| 1 | linkedin | Research Engineer | Research Engineer | UBC | Staff | Vancouver | Olson Lab | Statistical Analysis, Experimental Design, Material Testing | "The Research Engineer is responsible for designing, developing, and implementing experimental progra..." |
+| 1 | linkedin | Research Engineer | Research Engineer | University of British Columbia | Mid | Vancouver | Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science | Engineering, Statistical Analysis, Material Testing | "The Research Engineer is responsible for designing, developing, and implementing experimental progra..." |
 | 10 | linkedin | Senior Manager / Manager, Data Science | Senior Manager, Data Science | Vancity | Manager | Vancouver | Applied Machine Learning Pod | Machine Learning, MLOps, Azure | "The Senior Manager, Data Science will lead the development and delivery of machine learning and deci..." |
 | 39 | linkedin | Senior/Principal Machine Learning Engineer | Machine Learning Engineer | Workday | Senior | Vancouver | Agent Factory | Machine Learning, Deep Learning, Python | "As a Senior Machine Learning Engineer in Agent Factory, you will design and build core ML systems fo..." |
 | 68 | indeed | Ai Trainer / Ai Data Trainer - Remote | AI Trainer | YO IT CONSULTING | Mid | Remote — Global | NULL | AI training, data annotation, prompt engineering | "The AI Trainer will improve and evaluate AI models by providing high-quality data and feedback. This..." |

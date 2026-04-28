@@ -10,6 +10,16 @@ Examples:
   "Recruiting in Motion" → "Recruiting in Motion"
   "Outlier Ai" → "Outlier AI"
 
+For small/regional companies, prefer the LONGER descriptive form to avoid
+collisions with other companies sharing a common word:
+  "Alquemy Search & Consulting" — keep ALL distinguishing words; do NOT
+  truncate to "Alquemy Search" because that drops "& Consulting" which
+  identifies the specific firm.
+The Inc/Ltd-stripping rule applies ONLY to legal suffixes
+(Inc, Ltd, Corp, Co., Limited, L.L.C., LP). It does NOT apply to descriptive
+parts of the name (Search, Consulting, Group, Holdings, Partners, Advisory,
+Solutions, Technologies — these may BE part of the canonical name).
+
 === CANONICAL SENIORITY ===
 Pick EXACTLY ONE of: Junior | Mid | Senior | Staff | Principal | Lead | Manager | Director
 Never invent a value outside this list.
@@ -26,6 +36,13 @@ Examples:
   "Data Scientist" (no qualifier) → "Mid"
   "Junior Data Analyst" → "Junior"
   "Head of Data" → "Director"
+
+IGNORE HR classifications when extracting seniority:
+  "Staff - Non Union" → administrative HR pay band, NOT IC seniority "Staff"
+  "Pay Band X", "Job Family Y", "Grade Z", "Job Code N" → administrative; ignore
+  "Excluded - Management" / "Excluded - Professional" → administrative; ignore
+Extract seniority from the IC level title (Engineer I, Senior Engineer,
+Principal Scientist, etc.) or, if not stated, default to "Mid".
 
 === CANONICAL LOCATION ===
 Use ONLY these values — never return a province, country, or postal code:
@@ -50,11 +67,20 @@ Remote mapping:
   If the role has no explicit remote/hybrid/in-office signal → use the city name or "Other"
 
 === TEAM OR DEPARTMENT ===
-2–5 words. Organisational unit only — NOT role-level details.
+Organisational unit only — the team or department the role reports into.
+NOT role-level details (no project names, no specializations, no products).
 If the JD does not explicitly name a team or department, return null.
-Examples (good): "Marketing Analytics", "Risk Analytics", "Engineering — Backend", "Data Platform", "Applied Machine Learning"
-Examples (bad — too role-level): "Customer LTV Modelling", "Pricing Algorithm", "Demand Forecasting"
-Do NOT invent a team name. If it is unclear, return null.
+Length is flexible — single-word org units like "Engineering" or "IT" are fine
+when that's literally the department; multi-word org paths like "Advanced
+Technology / Applied AI Research" are fine when that's the actual structure.
+What matters is org-unit semantics, not word count.
+
+Good: "Engineering", "IT", "Marketing Analytics", "RBC Borealis",
+      "Quantitative Equity Team", "Advanced Technology / Applied AI Research"
+Bad (role-level): "Customer LTV Modelling", "Pricing Algorithm", "Demand Forecasting"
+
+If the team name is unclear or the JD only describes the role itself
+(no organisational context), return null. Do NOT invent a team name.
 
 === TOP SKILLS ===
 Up to 10 skills ordered by salience (most prominent first).
@@ -71,7 +97,7 @@ Focus on: what the role does, what skills are central, what the team works on, s
   "canonical_company": "<string>",
   "canonical_seniority": "<Junior|Mid|Senior|Staff|Principal|Lead|Manager|Director>",
   "canonical_location": "<one of the allowed location values above>",
-  "team_or_department": "<2-5 word org unit string or null>",
+  "team_or_department": "<org unit string or null>",
   "top_skills": ["<skill1>", "<skill2>", ...],
   "role_summary": "<3-4 neutral sentences>"
 }

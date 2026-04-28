@@ -136,12 +136,12 @@ class CanonicalExtraction(BaseModel):
         if v is None:
             return None
         words = v.split()
-        if len(words) < 2 or len(words) > 5:
-            logger.warning(
-                "team_or_department word count out of range (%d words): %r",
-                len(words),
-                v,
-            )
+        # Word-count check is advisory only — org-unit semantics matter, not
+        # word count. Single-word units ("Engineering", "IT") and multi-word
+        # org paths are both valid per prompt v1 calibration round 1.
+        if len(words) == 0:
+            logger.warning("team_or_department is empty string; returning None")
+            return None
         return v
 
     @field_validator("top_skills")

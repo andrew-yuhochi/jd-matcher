@@ -23,6 +23,7 @@ from jd_matcher.llm.validate import (
     PostingRecord,
     RunStats,
     _apply_c19_filter,
+    _bust_cache_for_ids,
     _fetch_all_postings,
     generate_report,
     run_validation,
@@ -283,3 +284,101 @@ class TestGenerateReport:
         assert "| Postings analyzed | 3 |" in report
         assert "| Successful extractions | 3 |" in report
         assert "| Parse failures (3-retry exhausted) | 0 |" in report
+
+
+class TestBustCacheForIds:
+    """_bust_cache_for_ids deletes the correct extraction_cache rows."""
+
+    def test_bust_removes_cache_row_for_target_ids(self, five_posting_db: Path) -> None:
+        import hashlib
+        import sqlite3
+
+        full_jd_1 = "Full JD for posting 1: Senior Data Scientist role."
+        text_hash_1 = hashlib.sha256(full_jd_1.encode("utf-8")).hexdigest()
+
+        # Manually insert a fake extraction_cache row for posting 1
+        conn = sqlite3.connect(five_posting_db)
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO extraction_cache "
+                "(text_hash, model_name, canonical_extraction_json, user_id) "
+                "VALUES (?, 'gpt-4o-mini', '{\"canonical_title\":\"x\",\"canonical_company\":\"y\","
+                "\"canonical_seniority\":\"Mid\",\"canonical_location\":\"Vancouver\","
+                "\"team_or_department\":null,\"top_skills\":[],\"role_summary\":\"r\"}', 'default')",
+                (text_hash_1,),
+            )
+            conn.commit()
+            # Confirm it's there
+            row = conn.execute(
+                "SELECT text_hash FROM extraction_cache WHERE text_hash = ?", (text_hash_1,)
+            ).fetchone()
+            assert row is not None, "Cache row should exist before busting"
+        finally:
+            conn.close()
+
+        # Also plant it in the process cache
+        _PROCESS_CACHE[(text_hash_1, "gpt-4o-mini")] = None  # type: ignore[assignment]
+
+        # Run bust for posting ID 1
+        deleted = _bust_cache_for_ids(five_posting_db, [1])
+
+        # DB row should be gone
+        conn2 = sqlite3.connect(five_posting_db)
+        try:
+            remaining = conn2.execute(
+                "SELECT text_hash FROM extraction_cache WHERE text_hash = ?", (text_hash_1,)
+            ).fetchone()
+        finally:
+            conn2.close()
+        assert remaining is None, "Cache row should be deleted after busting"
+
+        # Process cache entry should be evicted
+        assert (text_hash_1, "gpt-4o-mini") not in _PROCESS_CACHE
+
+    def test_bust_does_not_remove_other_ids(self, five_posting_db: Path) -> None:
+        import hashlib
+        import sqlite3
+
+        full_jd_2 = "Full JD for posting 2: Machine Learning Engineer role."
+        text_hash_2 = hashlib.sha256(full_jd_2.encode("utf-8")).hexdigest()
+        full_jd_3 = "Full JD for posting 3: Data Engineer role."
+        text_hash_3 = hashlib.sha256(full_jd_3.encode("utf-8")).hexdigest()
+
+        conn = sqlite3.connect(five_posting_db)
+        fake_json = (
+            '{"canonical_title":"x","canonical_company":"y","canonical_seniority":"Mid",'
+            '"canonical_location":"Vancouver","team_or_department":null,"top_skills":[],'
+            '"role_summary":"r"}'
+        )
+        try:
+            for h in (text_hash_2, text_hash_3):
+                conn.execute(
+                    "INSERT OR REPLACE INTO extraction_cache "
+                    "(text_hash, model_name, canonical_extraction_json, user_id) "
+                    "VALUES (?, 'gpt-4o-mini', ?, 'default')",
+                    (h, fake_json),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Only bust posting 2, not posting 3
+        _bust_cache_for_ids(five_posting_db, [2])
+
+        conn2 = sqlite3.connect(five_posting_db)
+        try:
+            row2 = conn2.execute(
+                "SELECT text_hash FROM extraction_cache WHERE text_hash = ?", (text_hash_2,)
+            ).fetchone()
+            row3 = conn2.execute(
+                "SELECT text_hash FROM extraction_cache WHERE text_hash = ?", (text_hash_3,)
+            ).fetchone()
+        finally:
+            conn2.close()
+
+        assert row2 is None, "Posting 2 cache should be deleted"
+        assert row3 is not None, "Posting 3 cache should be untouched"
+
+    def test_bust_empty_list_is_noop(self, five_posting_db: Path) -> None:
+        deleted = _bust_cache_for_ids(five_posting_db, [])
+        assert deleted == 0

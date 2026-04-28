@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sqlite3
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from jd_matcher.filter.title_filter import filter_title
 from jd_matcher.llm.extract import (
+    _PROCESS_CACHE,
     CanonicalExtraction,
     ExtractionParseError,
     PostingRow,
@@ -78,6 +80,41 @@ class RunStats:
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
+
+
+def _bust_cache_for_ids(db_path: Path, posting_ids: list[int]) -> int:
+    """Delete extraction_cache rows for the given posting IDs so they re-extract fresh.
+
+    Also evicts matching keys from the in-process cache (_PROCESS_CACHE).
+    Returns the number of DB cache rows deleted.
+    """
+    if not posting_ids:
+        return 0
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        placeholders = ",".join("?" for _ in posting_ids)
+        rows = conn.execute(
+            f"SELECT id, full_jd FROM postings WHERE id IN ({placeholders})",
+            posting_ids,
+        ).fetchall()
+        deleted = 0
+        for row in rows:
+            text_hash = hashlib.sha256(row["full_jd"].encode("utf-8")).hexdigest()
+            conn.execute("DELETE FROM extraction_cache WHERE text_hash = ?", (text_hash,))
+            deleted += conn.total_changes
+            # Evict all process-cache entries for this hash regardless of model_name
+            stale_keys = [k for k in _PROCESS_CACHE if k[0] == text_hash]
+            for k in stale_keys:
+                del _PROCESS_CACHE[k]
+        conn.commit()
+        print(
+            f"[refresh] deleted {deleted} extraction_cache rows "
+            f"for {len(posting_ids)} postings"
+        )
+        return deleted
+    finally:
+        conn.close()
 
 
 def _fetch_all_postings(db_path: Path) -> list[PostingRecord]:
@@ -181,12 +218,19 @@ def run_validation(
     db_path: Path,
     limit: int | None = None,
     dry_run: bool = False,
+    refresh_ids: list[int] | None = None,
 ) -> tuple[list[ExtractionResult], RunStats]:
     """Run extract_canonical for all C19-passed postings.
 
     Returns (results, stats).  In dry_run mode results is empty and stats
     contains only the counts of what WOULD be extracted.
+
+    refresh_ids: if set, bust the extraction_cache for these posting IDs before
+    extraction so they are re-extracted fresh (bypassing both process + DB cache).
     """
+    if refresh_ids:
+        _bust_cache_for_ids(db_path, refresh_ids)
+
     all_postings = _fetch_all_postings(db_path)
     passing = _apply_c19_filter(all_postings)
 
@@ -502,6 +546,23 @@ def _main() -> None:
         dest="dry_run",
         help="Print which postings WOULD be extracted without spending tokens",
     )
+    parser.add_argument(
+        "--refresh-ids",
+        type=str,
+        default=None,
+        dest="refresh_ids",
+        help=(
+            "Comma-separated posting IDs to re-extract by busting their "
+            "extraction_cache rows. Other postings still hit the cache. "
+            "Example: --refresh-ids 1,20,58"
+        ),
+    )
+    parser.add_argument(
+        "--print-summary",
+        action="store_true",
+        dest="print_summary",
+        help="Print a per-posting summary table to stdout after extraction",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -511,7 +572,20 @@ def _main() -> None:
         print(f"ERROR: DB not found at {db_path}")
         raise SystemExit(1)
 
-    results, stats = run_validation(db_path, limit=args.limit, dry_run=args.dry_run)
+    refresh_ids: list[int] | None = None
+    if args.refresh_ids:
+        try:
+            refresh_ids = [int(x.strip()) for x in args.refresh_ids.split(",") if x.strip()]
+        except ValueError as exc:
+            print(f"ERROR: --refresh-ids must be comma-separated integers: {exc}")
+            raise SystemExit(1)
+
+    results, stats = run_validation(
+        db_path,
+        limit=args.limit,
+        dry_run=args.dry_run,
+        refresh_ids=refresh_ids,
+    )
 
     if args.dry_run:
         return
@@ -536,6 +610,29 @@ def _main() -> None:
         print("\nFAILURES:")
         for pid, reason in stats.failures:
             print(f"  Posting ID {pid}: {reason[:120]}")
+
+    if args.print_summary:
+        print("\n--- Per-posting summary (refreshed IDs) ---")
+        print(
+            f"{'ID':>4}  {'Company':<35}  {'Seniority':<10}  {'Team':<30}  Title"
+        )
+        print("-" * 110)
+        refreshed_set = set(refresh_ids) if refresh_ids else set()
+        for r in sorted(results, key=lambda x: x.posting.id):
+            if refresh_ids and r.posting.id not in refreshed_set:
+                continue
+            if r.failed or r.extraction is None:
+                print(f"  {r.posting.id:>4}  FAILED — {r.failure_reason}")
+                continue
+            e = r.extraction
+            marker = "*" if r.posting.id in refreshed_set else " "
+            print(
+                f"{marker} {r.posting.id:>4}  "
+                f"{(e.canonical_company or ''):<35}  "
+                f"{e.canonical_seniority:<10}  "
+                f"{(e.team_or_department or 'NULL'):<30}  "
+                f"{e.canonical_title}"
+            )
 
 
 if __name__ == "__main__":
