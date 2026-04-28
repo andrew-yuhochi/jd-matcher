@@ -9,9 +9,9 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 |-|-|
 | **Phase** | PoC |
 | **Milestone** | M2 — Content-aware dedup + repost detection (+ title pre-filter) |
-| **Last completed** | TASK-M2-005 — LLM Provider Abstraction (C28) (Done 2026-04-27) |
-| **Next task** | TASK-M2-006 — LLM Extraction (C18) — strict canonical labels [data-pipeline] |
-| **Next command** | /implement jd-matcher TASK-M2-006 |
+| **Last completed** | TASK-M2-006 — LLM Extraction (C18) — strict canonical labels (Done 2026-04-27) |
+| **Next task** | TASK-M2-007 — Embedding Pipeline (C20) [data-pipeline] |
+| **Next command** | /implement jd-matcher TASK-M2-007 |
 
 ---
 

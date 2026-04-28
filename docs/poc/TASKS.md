@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 5 | 19 |
+| Done | 6 | 20 |
 | In Progress | 0 | 0 |
-| To Do | 8 | 8 |
+| To Do | 7 | 7 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -200,7 +200,7 @@
 
 ##### TASK-M2-006 — LLM Extraction (C18) — strict canonical labels
 
-- **Status**: To Do
+- **Status**: Done (2026-04-27)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C18 (LLM Extraction) — TDD §C18
@@ -218,15 +218,15 @@
 - **Demo Artifact**: `python -m jd_matcher.llm.extract --posting-id 91` outputs `CanonicalExtraction` JSON for that real posting.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-006.md`
 - **Acceptance Criteria**:
-  - [ ] `extract_canonical(posting)` takes `full_jd` + optional priors; returns `CanonicalExtraction` Pydantic model
-  - [ ] `CanonicalExtraction` enforces strict enums for seniority + location (Pydantic validation; out-of-enum = parse failure → retry with stricter prompt)
-  - [ ] `canonical_company` normalized (no Inc/Ltd suffixes — verified by 5 test cases)
-  - [ ] `team_or_department` canonical (2-5 words, org-unit only — not role-level)
-  - [ ] Cache by `SHA256(full_jd)` hit on second `extract_canonical` call (verified by mock count)
-  - [ ] `llm_call_ledger` row written per call with cost
-  - [ ] Retry on transient OpenAI errors (3 attempts with exponential backoff)
-  - [ ] 10 hand-crafted synthetic test JDs all extract within enum constraints (deterministic part)
-  - [ ] Live test (one real posting): all canonical fields populated and valid against enum
+  - [x] `extract_canonical(posting)` takes `full_jd` + optional priors; returns `CanonicalExtraction` Pydantic model
+  - [x] `CanonicalExtraction` enforces strict enums for seniority + location (Pydantic validation; out-of-enum = parse failure → retry with stricter prompt)
+  - [x] `canonical_company` normalized (no Inc/Ltd suffixes — verified by 5 test cases)
+  - [x] `team_or_department` canonical (2-5 words, org-unit only — not role-level)
+  - [x] Cache by `SHA256(full_jd)` hit on second `extract_canonical` call (verified by mock count)
+  - [x] `llm_call_ledger` row written per call with cost
+  - [x] Retry on transient OpenAI errors (3 attempts with exponential backoff)
+  - [x] 10 hand-crafted synthetic test JDs all extract within enum constraints (deterministic part)
+  - [x] Live test (one real posting): all canonical fields populated and valid against enum
 
 ---
 

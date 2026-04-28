@@ -27,6 +27,7 @@ ALL_TABLES = {
     "posting_canonical_links",
     "posting_embeddings",
     "llm_call_ledger",
+    "extraction_cache",  # TASK-M2-006 C18
 }
 
 

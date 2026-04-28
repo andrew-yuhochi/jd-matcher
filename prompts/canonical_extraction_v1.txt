@@ -1,0 +1,77 @@
+You are extracting canonical fields from a job description for deduplication. Return STRICT JSON matching the schema below. Do not include markdown fences or any text outside the JSON object.
+
+=== CANONICAL COMPANY ===
+Official short name only — NO legal suffixes (Inc, Ltd, Corp, Co., Canada Ltd, Inc., Limited, L.L.C., LP).
+Examples:
+  "Toronto-Dominion Bank Canada Ltd." → "TD Bank"
+  "Shopify Inc." → "Shopify"
+  "Royal Bank of Canada" → "RBC"
+  "Lululemon Athletica Canada Inc." → "Lululemon"
+  "Recruiting in Motion" → "Recruiting in Motion"
+  "Outlier Ai" → "Outlier AI"
+
+=== CANONICAL SENIORITY ===
+Pick EXACTLY ONE of: Junior | Mid | Senior | Staff | Principal | Lead | Manager | Director
+Never invent a value outside this list.
+Examples:
+  "Sr. Software Engineer" → "Senior"
+  "Software Engineer II" → "Mid"
+  "Software Engineer I" → "Junior"
+  "Tech Lead" → "Lead"
+  "Engineering Manager" → "Manager"
+  "Architect" → "Principal"
+  "Staff Engineer" → "Staff"
+  "VP of Engineering" → "Director"
+  "Principal Data Scientist" → "Principal"
+  "Data Scientist" (no qualifier) → "Mid"
+  "Junior Data Analyst" → "Junior"
+  "Head of Data" → "Director"
+
+=== CANONICAL LOCATION ===
+Use ONLY these values — never return a province, country, or postal code:
+  Vancouver | Toronto | Montreal | Calgary | Edmonton | Ottawa | Halifax
+  Hybrid — Vancouver | Hybrid — Toronto | Hybrid — Montreal | Hybrid — Calgary | Hybrid — Edmonton | Hybrid — Ottawa | Hybrid — Halifax
+  Remote — Canada | Remote — North America | Remote — Global
+  Other
+
+Metro-area aliasing (map suburbs → canonical city):
+  Burnaby, Richmond, Surrey, Coquitlam, New Westminster, Delta, Langley, Abbotsford, Kelowna → "Vancouver"
+  Mississauga, Brampton, North York, Etobicoke, Markham, Scarborough, GTA, Waterloo, Kitchener, Hamilton → "Toronto"
+  Laval, Longueuil, Brossard, Greater Montreal → "Montreal"
+  Any city not in the canonical city list → "Other"
+
+Remote mapping:
+  "Remote (Canada)" or "Remote - Canada" or "Work from home, Canada" → "Remote — Canada"
+  "Remote (US and Canada)" or "Remote - North America" → "Remote — North America"
+  "Remote (Global)" or "Remote — Worldwide" or "Remote (anywhere)" → "Remote — Global"
+  "Hybrid - Vancouver, BC" → "Hybrid — Vancouver"
+  "Hybrid - Toronto, ON" → "Hybrid — Toronto"
+  Hybrid roles in suburb cities → use the canonical metro: "Hybrid - Burnaby" → "Hybrid — Vancouver"
+  If the role has no explicit remote/hybrid/in-office signal → use the city name or "Other"
+
+=== TEAM OR DEPARTMENT ===
+2–5 words. Organisational unit only — NOT role-level details.
+If the JD does not explicitly name a team or department, return null.
+Examples (good): "Marketing Analytics", "Risk Analytics", "Engineering — Backend", "Data Platform", "Applied Machine Learning"
+Examples (bad — too role-level): "Customer LTV Modelling", "Pricing Algorithm", "Demand Forecasting"
+Do NOT invent a team name. If it is unclear, return null.
+
+=== TOP SKILLS ===
+Up to 10 skills ordered by salience (most prominent first).
+Use short canonical labels: "Python", "SQL", "PyTorch", "Spark", "dbt", "Kubernetes", "A/B testing", etc.
+
+=== ROLE SUMMARY ===
+3–4 neutral sentences summarising the role for deduplication embedding.
+No marketing language ("exciting opportunity", "world-class team"), no salary figures, no company boilerplate.
+Focus on: what the role does, what skills are central, what the team works on, seniority/scope.
+
+=== JSON SCHEMA ===
+{
+  "canonical_title": "<string>",
+  "canonical_company": "<string>",
+  "canonical_seniority": "<Junior|Mid|Senior|Staff|Principal|Lead|Manager|Director>",
+  "canonical_location": "<one of the allowed location values above>",
+  "team_or_department": "<2-5 word org unit string or null>",
+  "top_skills": ["<skill1>", "<skill2>", ...],
+  "role_summary": "<3-4 neutral sentences>"
+}

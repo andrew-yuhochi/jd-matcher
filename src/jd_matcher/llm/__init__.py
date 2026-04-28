@@ -65,6 +65,12 @@ def _embedding_provider_from_config(
     return make_embedder(provider=provider, model=model, db_path=resolved_db)
 
 
+from jd_matcher.llm.extract import (  # noqa: E402
+    CanonicalExtraction,
+    ExtractionParseError,
+    extract_canonical,
+)
+
 import types as _types  # noqa: E402
 
 # Attach as class methods on the Protocol class objects so callers can use
@@ -89,4 +95,8 @@ __all__ = [
     "RateLimitError",
     "ProviderUnavailableError",
     "LLMProviderError",
+    # C18 — LLM Extraction
+    "CanonicalExtraction",
+    "ExtractionParseError",
+    "extract_canonical",
 ]

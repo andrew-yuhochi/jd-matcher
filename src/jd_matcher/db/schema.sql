@@ -257,3 +257,17 @@ CREATE TABLE IF NOT EXISTS llm_call_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user_called ON llm_call_ledger (user_id, called_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ledger_user_kind   ON llm_call_ledger (user_id, call_kind, model_name);
+
+-- -------------------------------------------------------------------------
+-- extraction_cache — cross-run cache for LLM extraction (M2 — TASK-M2-006 C18).
+-- Key: SHA-256(full_jd) + model_name.  Allows skipping the LLM call when an
+-- identical JD has been extracted before (even across pipeline runs).
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS extraction_cache (
+    text_hash                  TEXT NOT NULL,
+    model_name                 TEXT NOT NULL,
+    user_id                    TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
+    canonical_extraction_json  TEXT NOT NULL,
+    cached_at                  TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (text_hash, model_name)
+);
