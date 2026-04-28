@@ -1,243 +1,183 @@
-# TASK-M2-006 — Extraction Validation Report
+# TASK-M2-006 — Extraction Validation Report (Iteration 1)
 
-## Round 2 — Few-shot + defensive defaults (2026-04-27)
-
-Prompt changes applied to `prompts/canonical_extraction_v1.txt` (building on Round 1):
-- Added `=== DEFENSIVE DEFAULTS ===` block (5 rules: seniority lower-bound, NULL team when no org context, Canada-first location, drop seniority qualifiers from title, most-specific org level for hierarchies)
-- Added `=== EXAMPLES ===` block (3 complete JD → JSON few-shot examples: Senior IC + named team, Manager at services firm, Remote contractor/gig platform)
-
-All 71 C19-passed postings re-extracted fresh (extraction_cache fully busted for gpt-4o-mini before run).
-
-**Round 2 cost:** $0.074925 (139 live API calls, 211 cache hits across two partial runs)
-**Total project spend to date:** $0.075263
-**Cumulative spend including Round 1:** Round 1 = $0.030171 + Round 2 = $0.074925 = $0.105096 gross (Round 2 cache hits used Round 1 results where the posting hash hadn't changed)
-
----
-
-### Diff summary: Round 1 → Round 2
-
-**Total postings with ≥1 field change: 42** (of 71)
-**Improvements: 26 | Regressions: 5 | Neutral/ambiguous: 11**
-
-#### Confirmed improvements
-
-| ID | Field | Round 1 | Round 2 | Default fired |
-|----|-------|---------|---------|---------------|
-| #1 UBC | team | "Research Group \| Olson Lab \| Department Mechanical Engineering \| Faculty of Applied Science" | "Olson Lab" | Default #5 (most-specific org level) |
-| #2 Amazon | title | "Applied Scientist" | "Applied Scientist, Private Brands Discovery" | Default #4 (keep specialisation suffix) |
-| #3 CC&L | title | "Quantitative Data Analyst" | "Quantitative Data Analyst, Investment Data" | Default #4 |
-| #5 CC&L | title | "Data Scientist" | "Data Scientist, Investment Data" | Default #4 |
-| #22 RBC | team | "RBC Borealis" | "Borealis" | Default #5 (RBC is admin context) |
-| #27 EA | title | "Lead Data Scientist" | "Data Scientist - Search, Data & Insights" | Default #4 |
-| #28 Amazon | title | "Data Scientist" | "Data Scientist, Alexa Connections" | Default #4 (specialisation kept) |
-| #40 Cover Genius | title | "Senior Data Scientist - GenAI" | "Data Scientist - GenAI" | Default #4 (Senior stripped) |
-| #44 Instacart | title | "Data Scientist" | "Data Scientist - Shopping Experience (Search)" | Default #4 |
-| #53 EA SPORTS | team | "Generative AI Team" | "FC Generative AI" | More specific (correct sub-team) |
-| #54 Clio | title | "Senior Developer, Enterprise AI" | "Developer, Enterprise AI" | Default #4 (Senior stripped) |
-| #55 TELUS | title | "Senior Developer (AI/ML/Gen AI Solutions)" | "Developer (AI/ML/Gen AI Solutions)" | Default #4 |
-| #56 CC&L | title | "Portfolio Research Analyst" | "Portfolio Research Analyst, Quantitative Equities" | Default #4 |
-| #70 Outlier AI | team | "AI Training" | NULL | Default #2 (contracting platform, matches Example 3) |
-| #79 RBC | title | "Principal Engineer, AI & ML Solutions" | "Engineer, AI & ML Solutions" | Default #4 (Principal stripped from title) |
-| #80 Klue | title | "Senior Software Engineer" | "Software Engineer, AI (Agents)" | Default #4 |
-| #86 Quora | team | "Engineering" | "Distribution Team" | More specific team found |
-| #87 Outlier AI | team | "AI Training" | NULL | Default #2 (consistent with #70) |
-| #88 Outlier AI | team | "AI Training" | NULL | Default #2 (consistent with #70) |
-| #89 Recruiting in Motion | location | "Remote — Global" | "Remote — Canada" | Default #3 (Canada-first: JD is Canada-remote) |
-
-#### Confirmed regressions — DO NOT COMMIT
-
-| ID | Field | Round 1 | Round 2 | Issue |
-|----|-------|---------|---------|-------|
-| **#43 Ada** | location | **Remote — Canada** | **Other** | Raw DB location = "Canada"; LLM should map to "Remote — Canada" but returned "Other". Round 1 was correct. |
-| **#50 PointClickCare** | location | **Remote — Canada** | **Other** | Same issue: raw location = "Canada"; Round 1 correctly returned "Remote — Canada". |
-| **#8 Douglas College** | team | Business Intelligence & Data Analytics | NULL | Department name was present in JD; Default #2 over-fired — the JD DOES name the department. |
-| **#29 Coalition** | team | Analytics | NULL | "Analytics" is a legitimate department name in the JD (Lead Analytics for GTM). Default #2 over-fired. |
-| **#52 ABC Fitness** | team | AI Engineering | NULL | Named team was present; Default #2 over-fired. Also title stripped seniority qualifier but title changed from "Principal AI Engineer" to "AI Engineer" (should be "AI Engineer" — this part is improvement). |
-
-#### Neutral / ambiguous changes (wording only)
-
-| ID | Field | Round 1 | Round 2 | Note |
-|----|-------|---------|---------|------|
-| #7 Match | team | "Analytics Team" | "Analytics" | Equivalent meaning |
-| #19 Lumenalta | team | "Engineering" | NULL | Ambiguous — "Engineering" is generic; both defensible |
-| #26 Datatonic | team | "Machine Learning" | NULL | Ambiguous — generic vs. actual team name |
-| #31 Crossing Hurdles | title + seniority | "Data Operations Manager" / Manager | "Human Data Manager" / Mid | Title changed to posting's stated role; seniority flip to Mid is debatable |
-| #37 Apera AI | team | "AI Team" | "AI" | Equivalent meaning |
-| #45 PHSA | team | "Project Controls Technology Services" | "Project Controls" | Minor truncation |
-| #46 Axiom Builders | team | "Data Analytics" | NULL | Ambiguous — small company, could go either way |
-| #49 Coalition | team | "Machine Learning" | NULL | Ambiguous |
-| #62 BCIT | company + team | "BCIT" / "Information Technology Services" | "British Columbia Institute of Technology" / "Enterprise Applications & Services" | Company expanded (neutral), team changed (different dept name found — may be more accurate) |
-| #77 TEEMA | title | "Staff Data Scientist" | "Data Scientist (AI & Machine Learning)" | Neutralised (Staff seniority level kept correctly, title renamed from staffing JD language) |
-| #85 Aspire Software | team | "AI Agent Development" | NULL | Improvement — "AI Agent Development" was role-level, not org-unit |
-
----
-
-### Verification of 5 defensive defaults
-
-| Default | Expected | Result | Status |
-|---------|----------|--------|--------|
-| #1 Seniority lower-bound | "Engineer" alone → "Mid" | No ambiguous IC cases found in this batch to differentiate | Not verified in this batch |
-| #2 NULL team when no org context | Outlier AI (#70, #87, #88) → NULL | PASS — "AI Training" → NULL for all three Outlier postings | PASS |
-| #3 Canada-first location | #25 Affirm → "Remote — Canada" | FAIL — #25 still returns "Other" (Affirm is US-HQ, Kelowna location may be specific office not remote Canada) | PARTIAL — #89 Recruiting in Motion correctly changed from "Remote — Global" to "Remote — Canada" |
-| #4 Drop seniority qualifiers from title | "Sr. Data Scientist" → "Data Scientist" | PASS — fired on #28 Amazon (Sr. dropped), #40 Cover Genius (Senior dropped), #54 Clio (Senior dropped), #79 RBC (Principal dropped from title) | PASS |
-| #5 Org hierarchy → most-specific | UBC → "Olson Lab" | PASS — #1 UBC changed from full pipe-separated path to "Olson Lab" exactly as specified | PASS |
-
----
-
-### Root cause analysis for location regressions (#43, #50)
-
-The few-shot examples introduce "Remote — Canada" in Example 3 only for a "Remote (Worldwide)" JD, and no example shows a JD with bare "Canada" as the location. The defensive default #3 explicitly covers "US/Canada" → "Remote — Canada" but not "Canada" alone. When the LLM sees bare "Canada" as the location field in the prior hints, and the JD body describes a fully remote role without a specific city, Round 1 correctly inferred "Remote — Canada" from context. Round 2 regressed to "Other" — likely because the few-shot examples anchored the model toward "Remote — Global" for non-city, non-specific-Canada patterns, and the defensive defaults don't explicitly cover bare "Canada" → "Remote — Canada".
-
-**Root cause**: Defensive default #3 does not cover the case of bare "Canada" or "Canada (Remote)" as the only location signal. The fix is to add one line to default #3:
-```
-"Canada" or "Canada (Remote)" or just "Canada" alone → "Remote — Canada"
-```
-
-**Proposed Round 3 fix** (single-line addition to default #3):
-```
-"Canada" (bare) or "Canada (Remote)" → "Remote — Canada"
-```
-
-Also: Default #2 appears to be over-firing for named departments that are clearly described (Douglas College's "Business Intelligence & Data Analytics" team is the actual department that owns the BI & analytics function). The fix: tighten Default #2's condition — only return NULL when the JD genuinely has NO team/department mention, not when the JD's title itself contains a department name.
-
----
-
-### Decision: STOP — regressions found, commit blocked
-
-Per Round 2 workflow Step 9: regressions on #43 Ada and #50 PointClickCare (location: "Remote — Canada" → "Other") and #8 Douglas College and #29 Coalition (team: named dept → NULL) are confirmed. Prompt changes are NOT committed.
-
-Recommended path forward: Round 3 patch with two targeted additions:
-1. Add "Canada" (bare) → "Remote — Canada" to Default #3
-2. Add explicit caveat to Default #2: "if the job TITLE itself contains a department name (e.g. 'Manager, Business Intelligence & Data Analytics'), that IS the department — do not return NULL"
-
----
-
-## Round 1 — Targeted Fixes (2026-04-27)
-
-3 prompt fixes applied to `prompts/canonical_extraction_v1.txt`:
-
-1. **Team rule relaxation** — removed hard "2–5 words" constraint; org-unit semantics
-   now matter, not word count. Single-word units ("Engineering", "IT") and multi-word
-   org paths are both valid.
-2. **HR pay band guard for seniority** — "Staff - Non Union", "Pay Band X", etc. are
-   administrative HR classifications, not IC seniority levels. Addresses #1 UBC where
-   "Staff - Non Union" was misread as IC-level Staff.
-3. **Company name consistency for small/regional firms** — Inc/Ltd-stripping applies
-   ONLY to legal suffixes, not descriptive words like "Consulting", "Search", "Group".
-   Addresses #20/#58 Alquemy inconsistency.
-
-5 postings re-extracted (IDs: 1, 20, 54, 58, 80). Results:
-
-| Posting | Field | Before | After | Verdict |
-|---------|-------|--------|-------|---------|
-| #1 UBC Research Engineer | seniority | Staff | Mid | PASS — HR band guard fired correctly |
-| #20 Alquemy Data Scientist | company | Alquemy Search & Consulting | Alquemy Search & Consulting | PASS — no regression |
-| #58 Alquemy Data Scientist | company | Alquemy Search | Alquemy Search & Consulting | PASS — longer form rule applied |
-| #80 Klue Sr SWE AI | team | Engineering | Engineering | PASS — 1-word org-unit accepted |
-| #54 Clio Sr Dev Enterprise AI | team | IT | IT | PASS — 1-word org-unit accepted |
-
-**Side-effect to note:** Posting #1 now returns a verbose pipe-separated team path
-("Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science")
-reflecting UBC's layered org structure. This is semantically correct but verbose. Flag
-for Round 2 if multi-level org paths need normalisation.
-
-Re-extraction cost: $0.030171 (5 fresh API calls + 66 cache hits for the remainder)
-
----
-
-Date: 2026-04-27
+Date: 2026-04-28
 Source DB: /Users/andrew.yu/.jd-matcher/jd-matcher.db
-C19-passed postings analyzed: 71
-Cost (this run): $0.030171 across 72 live API calls (141 cache hits)
-Total cost on jd-matcher account to date: $0.030509
+C19-passed postings analyzed: 156
+Cost (this run): $0.066386 across 147 live API calls (9 cache hits)
+Total cost on jd-matcher account to date: $0.066386
 
-## Summary (Round 1)
+## Summary
 
 | Metric | Count |
 |--------|-------|
-| Postings analyzed | 71 |
-| Successful extractions | 71 |
+| Postings analyzed | 156 |
+| Successful extractions | 156 |
 | Parse failures (3-retry exhausted) | 0 |
-| Cache hits (no API call) | 141 |
-| New API calls | 72 |
+| Cache hits (no API call) | 9 |
+| New API calls | 147 |
 
-## Extractions — full table for user review (Round 1 — pre Round 2)
+## Extractions — full table for user review
 
 Sorted by company alphabetically, then title.
 
 | ID | Source | Email Title | LLM Title | LLM Company | Seniority | Location | Team | Skills (top 3) | Summary (excerpt) |
 |----|--------|-------------|-----------|-------------|-----------|----------|------|----------------|-------------------|
-| 52 | linkedin | Principal AI Engineer | Principal AI Engineer | ABC Fitness | Principal | Vancouver | AI Engineering | Python, AWS, Machine Learning | "The Principal AI Engineer will lead the development of LLM-powered product capabilities, collaborati..." |
-| 76 | indeed | French Canada - AI Data Contributor | AI Data Contributor | Acolad | Mid | Remote — Global | NULL | AI, Data Annotation, Translation | "The AI Data Contributor will support various AI training and data-related projects. Responsibilities..." |
-| 43 | linkedin | Senior Machine Learning Scientist | Senior Machine Learning Scientist | Ada | Senior | Remote — Canada | Product Development | Python, Machine Learning, Large Language Models | "As a Senior Machine Learning Scientist at Ada, you will be responsible for the quality and reliabili..." |
-| 25 | linkedin | Manager, Machine Learning Engineering | Manager, Machine Learning Engineering | Affirm | Manager | Other | Fraud Machine Learning | Machine Learning, Deep Learning, Fraud Detection | "The Manager of Machine Learning Engineering will lead a team focused on developing and improving fra..." |
-| 35 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, LLM | "The Senior Machine Learning Engineer will author high-fidelity reasoning traces that guide AI models..." |
-| 36 | linkedin | Senior Machine Learning Expert | Senior Machine Learning Expert | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, Model Evaluation | "The Senior Machine Learning Expert will author high-fidelity reasoning traces to train large languag..." |
-| 20 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will build and implement advanced machine learning and statistical models to pred..." |
-| 58 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will leverage advanced machine learning and statistical techniques to solve compl..." |
-| 21 | linkedin | data scientist | Data Scientist | Altea Healthcare | Mid | Vancouver | NULL | Python, Java, JavaScript | "The Data Scientist will assess and troubleshoot applications software and conduct business and techn..." |
-| 2 | linkedin | Applied Scientist, Private Brands Discovery | Applied Scientist | Amazon | Mid | Vancouver | Private Brands Discovery | Python, Machine Learning, Causal Inference | "The Applied Scientist will drive applied science projects in machine learning from ideation to launc..." |
-| 28 | linkedin | Sr. Data Scientist, Alexa Connections | Data Scientist | Amazon | Senior | Vancouver | Alexa Connections | Python, SQL, A/B testing | "The Senior Data Scientist in Alexa Connections will lead the development of machine learning and dat..." |
-| 37 | linkedin | Senior Machine Learning / Computer Vision Applied Scientist | Senior Machine Learning / Computer Vision Applied Scientist | Apera AI | Senior | Vancouver | AI Team | Machine Learning, Computer Vision, PyTorch | "The Senior Machine Learning and Computer Vision Applied Scientist will join the AI team at Apera AI,..." |
-| 85 | linkedin | AI Automation Engineer | AI Automation Engineer | Aspire Software | Mid | Remote — Canada | AI Agent Development | AI, Machine Learning, Product Development | "The AI Automation Engineer will design, build, and deploy AI agents for Aspire Software and its port..." |
-| 46 | linkedin | Data Analyst | Data Analyst | Axiom Builders | Mid | Vancouver | Data Analytics | Power BI, SQL, Data Analytics | "The Data Analyst will be responsible for creating and maintaining Power BI dashboards and scorecards..." |
-| 62 | indeed | Data Governance and Analytics Senior Systems Analyst | Data Governance and Analytics Senior Systems Analyst | BCIT | Senior | Vancouver | Information Technology Services | PL/SQL, MSSQL, Data Governance | "The Senior Systems Analyst will participate in ERP modernization initiatives, focusing on data gover..." |
-| 38 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | BDO | Senior | Vancouver | Technology Advisory Services | MLOps, Azure, Databricks | "The Senior Machine Learning Engineer will lead the design and implementation of end-to-end MLOps pip..." |
-| 78 | linkedin | Senior Data Analyst | Senior Data Analyst | Bird Construction | Senior | Vancouver | Business Intelligence & Analytics | Power BI, Data Governance, SQL | "The Senior Data Analyst will design, develop, and deliver analytics solutions using Power BI. This r..." |
-| 54 | linkedin | Senior Developer, Enterprise AI | Senior Developer, Enterprise AI | Clio | Senior | Vancouver | IT | Ruby, Python, SQL | "The Senior Developer, Enterprise AI is a hands-on technical leader responsible for building, operati..." |
-| 49 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | Machine Learning | Python, SQL, Machine Learning | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
-| 51 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | Machine Learning | Python, SQL, Machine Learning | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
-| 29 | linkedin | Senior Data Analyst | Senior Data Analyst | Coalition | Senior | Toronto | Analytics | SQL, Data Analysis, Python | "The Senior Data Analyst will lead analytics for the GTM and servicing motions, focusing on building..." |
-| 23 | linkedin | Lead Data Scientist | Lead Data Scientist | Cohere | Lead | Remote — Canada | Analytics and Data Insights | SQL, Python, Git | "As a Lead Data Scientist, you will tackle complex analytical problems and shape go-to-market strateg..." |
-| 17 | linkedin | Algorithm Engineer, AI | Algorithm Engineer, AI | Comm100 | Mid | Vancouver | Engineering | Python, TensorFlow, PyTorch | "The Algorithm Engineer, AI will research capabilities leading to AGI and track advancements in LLM t..." |
-| 18 | linkedin | AI Solutions Engineer | AI Solutions Engineer | Connor, Clark & Lunn Financial Group | Mid | Vancouver | IS Department | AI, LLMs, Azure | "The AI Solutions Engineer will lead the design, prototyping, and operationalization of AI solutions..." |
-| 5 | linkedin | Data Scientist, Investment Data | Data Scientist | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | Data Science, Machine Learning, AI | "The Data Scientist will join the Quantitative Equity Team to support investment data preparation and..." |
-| 56 | linkedin | Portfolio Research Analyst, Quantitative Equities | Portfolio Research Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | Quantitative Research, Portfolio Optimization, Risk Management | "The Portfolio Research Analyst will contribute to the Portfolio Construction group by enhancing the..." |
-| 3 | linkedin | Quantitative Data Analyst, Investment Data | Quantitative Data Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | Data Analytics, Data Science, Financial Knowledge | "The Quantitative Data Analyst will join the Quantitative Equity Team to support investment research..." |
-| 40 | linkedin | Senior Data Scientist - GenAI | Senior Data Scientist - GenAI | Cover Genius | Senior | Vancouver | Central AI Hub | Python, SQL, NLP | "The Senior Data Scientist for Generative AI will lead the LLM strategy within the Central AI Hub. Th..." |
-| 31 | linkedin | Data Operations Manager | $45/hr Remote | Data Operations Manager | Crossing Hurdles | Manager | Remote — Canada | NULL | Data Analysis, Data Workflow Management, KPI Monitoring | "The Data Operations Manager is responsible for designing and managing data workflows for annotation,..." |
-| 26 | linkedin | Lead Machine Learning Engineer (Team Lead) | Lead Machine Learning Engineer | Datatonic | Lead | Remote — Canada | Machine Learning | Machine Learning, Data Science, Google Cloud | "As a Lead Machine Learning Engineer, you will oversee a team of Machine Learning Engineers and Data..." |
-| 82 | linkedin | Machine Learning Engineer | Machine Learning Engineer | Datatonic | Senior | Remote — Canada | Machine Learning | Python, Machine Learning, Data Engineering | "The Senior Machine Learning Engineer will develop and implement machine learning models to solve rea..." |
-| 11 | linkedin | Data Science Manager | Data Science Manager | Deloitte | Manager | Hybrid — Vancouver | Artificial Intelligence | Python, SQL, Data Analysis | "The Data Science Manager will lead the delivery of advanced analytics solutions and advisory service..." |
-| 15 | linkedin | AI Productivity Analyst | AI Productivity Analyst | Dialpad | Mid | Vancouver | AI Transformation | GenAI, Machine Learning, Python | "The AI Productivity Analyst will evaluate and pilot third-party AI tools to enhance productivity at..." |
-| 16 | linkedin | AI Productivity Analyst | AI Productivity Analyst | Dialpad | Mid | Vancouver | Product Management | GenAI, Machine Learning, Python | "The AI Productivity Analyst will evaluate and pilot third-party AI tools to enhance productivity at..." |
-| 13 | linkedin | Analytics Engineer | Analytics Engineer | Dialpad | Mid | Vancouver | Data Analysis and QA | Python, SQL, GCP | "As an analytics engineer, you will support data analysis and quality assurance for Agentic AI initia..." |
-| 4 | linkedin | Applied Scientist | Applied Scientist | Dialpad | Mid | Vancouver | NLP team | Machine Learning, NLP, Python | "As an Applied Scientist at Dialpad, you will conduct research and development to enhance autonomous..." |
-| 8 | linkedin | Manager, Business Intelligence & Data Analytics | Manager, Business Intelligence & Data Analytics | Douglas College | Manager | Hybrid — Vancouver | Business Intelligence & Data Analytics | SQL, Tableau, Power BI | "The Manager of Business Intelligence & Data Analytics will oversee the production of datasets and ke..." |
-| 30 | linkedin | Data Scientist | Data Scientist | Dropbox | Mid | Other | Data Science | SQL, Statistical Analysis, Experimentation Design | "The Data Scientist will partner with product, engineering, and design teams to analyze user behavior..." |
-| 53 | linkedin | Senior Machine Learning Engineer - Generative AI Team | Senior Machine Learning Engineer | EA SPORTS | Senior | Vancouver | Generative AI Team | Machine Learning, Python, C++ | "The Senior Machine Learning Engineer will join the FC Generative AI team to research and develop mac..." |
-| 27 | linkedin | Lead Data Scientist - Search, Data & Insights (D&I) | Lead Data Scientist | Electronic Arts | Lead | Vancouver | Data and Insights | Python, SQL, AWS | "The Lead Data Scientist will work within the Data and Insights organization at Electronic Arts, focu..." |
-| 9 | linkedin | Manager, Data Analytics | Manager, Data Analytics | Fasken | Manager | Hybrid — Vancouver | Data Analytics & Engineering | Power BI, SQL, Python | "The Manager, Data Analytics will serve as a senior analytics leader and business partner within the..." |
-| 41 | linkedin | Senior Data Scientist | Senior Data Scientist | Fortra | Senior | Remote — Canada | Data Science | Python, Machine Learning, Data Science | "The Senior Data Scientist will lead complex data science projects and develop solutions for customer..." |
-| 67 | indeed | Senior Analytics Engineer, Analytics Enablement | Senior Analytics Engineer | Fullscript | Senior | Calgary | Analytics Enablement | SQL, Python, Looker | "The Senior Analytics Engineer will focus on enabling teams at Fullscript to self-serve data without..." |
-| 44 | linkedin | Senior Data Scientist - Shopping Experience (Search) | Senior Data Scientist | Instacart | Senior | Remote — Canada | Shopping Experience | SQL, Python, A/B testing | "The Senior Data Scientist will focus on analytics and experimentation strategies for the Shopping Ex..." |
-| 14 | linkedin | Transportation Data Scientist | Transportation Data Scientist | Jacobs | Mid | Vancouver | Data and Metrics Quality | Python, SQL, Machine Learning | "The Transportation Data Scientist will contribute transportation industry expertise to ensure the qu..." |
-| 48 | linkedin | Data Scientist Specialist (Lending) | Data Scientist Specialist | Jobgether | Mid | Remote — Canada | NULL | Python, SQL, Spark | "The Data Scientist Specialist will develop and deploy real-time scoring models to assess credit and..." |
-| 80 | linkedin | Senior Software Engineer, AI (Agents) | Senior Software Engineer | Klue | Senior | Vancouver | Engineering | Python, API, Distributed Systems | "The Senior Software Engineer will build and optimize LLM-powered agents at scale, focusing on backen..." |
-| 33 | linkedin | Data Analyst, Risk and Operational Performance | Data Analyst | Kraken | Mid | Remote — Canada | Core Services | SQL, Python, dbt | "The Data Analyst, Risk and Operational Performance will elevate decision-making by uncovering trends..." |
-| 32 | linkedin | Data Analyst, Growth | Data Analyst, Growth | Kraken | Mid | Remote — Canada | Data Team | SQL, Python, dbt | "The Data Analyst, Growth will focus on turning complex growth marketing data into actionable insight..." |
-| 42 | linkedin | Senior Data Scientist, AI Native (Growth) | Senior Data Scientist | Life360 | Senior | Remote — Canada | Data Science | Machine Learning, Statistical Modeling, A/B Testing | "The Senior Data Scientist will focus on scaling Life360's growth and user retention efforts. This ro..." |
-| 19 | linkedin | AI Engineer (Remote) | AI Engineer | Lumenalta | Mid | Remote — North America | Engineering | Python, TensorFlow, PyTorch | "The AI Engineer will design, build, and deploy AI models into production, focusing on backend Python..." |
-| 83 | linkedin | AI Engineer (Remote) | AI Engineer | Lumenalta | Mid | Remote — North America | Engineering | Python, TensorFlow, PyTorch | "The AI Engineer will design, build, and deploy AI models into production, focusing on backend Python..." |
-| 7 | linkedin | Manager, Data Science, Marketing Analytics | Manager, Data Science, Marketing Analytics | Match | Manager | Vancouver | Analytics Team | SQL, Python, A/B testing | "The Manager, Data Science will lead the Analytics Team in providing advanced marketing measurement t..." |
-| 84 | linkedin | AI Development Engineer - Remote | AI Development Engineer | NTT DATA | Mid | Remote — Canada | NULL | Python, Machine Learning, Data Engineering | "The AI Development Engineer will design, develop, and deploy AI-driven solutions to address complex..." |
-| 70 | indeed | Applied AI Engineer - AI Trainer | Applied AI Engineer - AI Trainer | Outlier AI | Mid | Remote — Global | AI Training | Python, SQL, JavaScript | "The Applied AI Engineer - AI Trainer will help train generative AI models by developing criteria to..." |
-| 87 | indeed | Senior Full Stack Engineer - AI Trainer | Applied AI Engineer - AI Trainer | Outlier AI | Mid | Remote — Global | AI Training | Python, SQL, JavaScript | "The Applied AI Engineer - AI Trainer will help train generative AI models by developing criteria to..." |
-| 88 | indeed | OpenClaw Agent Engineer - AI Trainer | Applied AI Engineer - AI Trainer | Outlier AI | Mid | Remote — Global | AI Training | Python, SQL, JavaScript | "The Applied AI Engineer - AI Trainer will help train generative AI models by developing criteria to..." |
-| 45 | linkedin | Data Analyst, Project Controls Technology Services | Data Analyst | PHSA | Mid | Vancouver | Project Controls Technology Services | SQL, Python, Data Analysis | "The Data Analyst in Project Controls develops and maintains complex datasets by conducting systems a..." |
-| 50 | linkedin | Senior Applied Researcher AI/ML ( CAD) | Senior Applied Researcher AI/ML | PointClickCare | Senior | Remote — Canada | Advanced Technology / Applied AI Research | Python, SQL, Machine Learning | "The Senior Applied Researcher in AI/ML will work on solving critical challenges in the healthcare ma..." |
-| 86 | linkedin | Senior Machine Learning Engineer, Ranking - Quora (Remote) | Senior Machine Learning Engineer | Quora | Senior | Remote — Canada | Engineering | Machine Learning, Python, C++ | "The Senior Machine Learning Engineer will work on improving and developing recommendation models for..." |
-| 22 | linkedin | Machine Learning Software Engineer | Machine Learning Software Engineer | RBC | Mid | Vancouver | RBC Borealis | Python, Machine Learning, Software Engineering | "The Machine Learning Software Engineer will be responsible for developing and delivering machine lea..." |
-| 79 | linkedin | Principal Engineer, AI & ML Solutions, GFT | Principal Engineer, AI & ML Solutions | RBC | Principal | Vancouver | Global Functions Technology | Python, Machine Learning, AI | "The Principal Engineer will oversee machine learning programs and projects, managing resources and d..." |
-| 89 | indeed | Ai Agent Designer | Ai Agent Designer | Recruiting in Motion | Mid | Remote — Global | NULL | Python, API, GenAI | "The Ai Agent Designer will design and deploy end-to-end AI agent solutions, managing the full delive..." |
-| 24 | linkedin | Data Science Manager, Growth | Data Science Manager, Growth | Stripe | Manager | Toronto | Growth Data Science | Data Science, Machine Learning, Statistical Analysis | "The Data Science Manager for Growth at Stripe will lead a team focused on optimizing the user journe..." |
-| 77 | linkedin | Staff Data Scientist | Staff Data Scientist | TEEMA | Staff | Vancouver | AI Organization | Python, PyTorch, TensorFlow | "The Staff Data Scientist will lead the technical strategy for AI initiatives, focusing on machine tr..." |
-| 55 | linkedin | Senior Developer (AI/ML/Gen AI Solutions) | Senior Developer (AI/ML/Gen AI Solutions) | TELUS | Senior | Vancouver | AI Accelerator | Python, React, Node.js | "The Senior Developer will lead cross-functional teams in designing and implementing AI/ML solutions...." |
-| 47 | linkedin | Data Analyst - FTT | Data Analyst | TransLink | Mid | Hybrid — Vancouver | Data Management Team | Data Analysis, Data Management, Data Modeling | "The Data Analyst will perform data analysis of enterprise data and provide expertise to business sta..." |
-| 1 | linkedin | Research Engineer | Research Engineer | University of British Columbia | Mid | Vancouver | Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science | Engineering, Statistical Analysis, Material Testing | "The Research Engineer is responsible for designing, developing, and implementing experimental progra..." |
-| 10 | linkedin | Senior Manager / Manager, Data Science | Senior Manager, Data Science | Vancity | Manager | Vancouver | Applied Machine Learning Pod | Machine Learning, MLOps, Azure | "The Senior Manager, Data Science will lead the development and delivery of machine learning and deci..." |
-| 39 | linkedin | Senior/Principal Machine Learning Engineer | Machine Learning Engineer | Workday | Senior | Vancouver | Agent Factory | Machine Learning, Deep Learning, Python | "As a Senior Machine Learning Engineer in Agent Factory, you will design and build core ML systems fo..." |
-| 68 | indeed | Ai Trainer / Ai Data Trainer - Remote | AI Trainer | YO IT CONSULTING | Mid | Remote — Global | NULL | AI training, data annotation, prompt engineering | "The AI Trainer / AI Data Trainer is responsible for improving and evaluating AI models by providing..." |
+| 109 | linkedin | Partner Alliance Analyst | Partner Alliance Analyst | 1Password | Mid | Remote — Canada | Partner Alliance | Salesforce, Data Analysis, Reporting | "The Partner Alliance Analyst supports Sales GTM motions, data, reporting, and operational execution..." |
+| 81 | linkedin | Principal AI Engineer | Principal AI Engineer | ABC Fitness | Principal | Vancouver | NULL | Python, AWS, ML | "The Principal AI Engineer will lead the development of LLM-powered product capabilities and collabor..." |
+| 143 | linkedin | Senior Machine Learning Scientist | Senior Machine Learning Scientist | Ada | Senior | Remote — Canada | Product Development | Machine Learning, Python, Large Language Models | "As a Senior Machine Learning Scientist at Ada, you will be responsible for the quality and reliabili..." |
+| 25 | linkedin | Data Analyst | Data Analyst | ADF Medical | Mid | Remote — Canada | Analytics & Business Intelligence | Data Analysis, Data Visualization, SQL | "The Data Analyst will collect, clean, and analyze large sets of patient and operational data. This r..." |
+| 120 | linkedin | Sr. Data Analyst | Data Analyst | Aecon | Senior | Vancouver | Data Governance | SQL, Power BI, Tableau | "The Senior Data Analyst operates at the enterprise level, producing cross-sector analytics and estab..." |
+| 136 | linkedin | Manager, Machine Learning Engineering (Fraud) | Manager, Machine Learning Engineering | Affirm | Manager | Other | Fraud Machine Learning | Machine Learning, Fraud Detection, Deep Learning | "The Manager of Machine Learning Engineering will lead a team focused on developing and improving fra..." |
+| 66 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, LLM Evaluation | "The Senior Machine Learning Engineer will author high-fidelity reasoning traces that guide AI models..." |
+| 67 | linkedin | Senior Machine Learning Expert | Senior Machine Learning Expert | Alignerr | Senior | Remote — Canada | NULL | Machine Learning, AI, Data Strategies | "The Senior Machine Learning Expert will author high-fidelity reasoning traces to train large languag..." |
+| 38 | linkedin | Statistician | Statistician | Alimentiv | Mid | Toronto | Analysis Services | Biostatistics, Statistical Analysis, Data Management | "The Statistician will apply biostatistical methods to support clinical trials and data management th..." |
+| 106 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Spark | "The role focuses on generating insights from complex datasets rather than building tools. The candid..." |
+| 133 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will build and implement advanced machine learning and statistical models to pred..." |
+| 148 | linkedin | Data Scientist | Data Scientist | Alquemy Search & Consulting | Mid | Vancouver | NULL | Python, SQL, Machine Learning | "The Data Scientist will leverage advanced machine learning and statistical techniques to solve compl..." |
+| 75 | linkedin | data scientist | Data Scientist | Altea Healthcare | Mid | Vancouver | NULL | Python, Java, JavaScript | "The Data Scientist will assess and troubleshoot applications software and conduct business and techn..." |
+| 88 | linkedin | Applied Scientist, Private Brands Discovery | Applied Scientist | Amazon | Mid | Vancouver | Private Brands Discovery | Python, Machine Learning, Causal Inference | "The Applied Scientist will work within the Private Brands Discovery team to design and implement mac..." |
+| 138 | linkedin | Sr. Data Scientist, Alexa Connections | Data Scientist | Amazon | Senior | Vancouver | Alexa Connections | Python, SQL, Machine Learning | "The Data Scientist in Alexa Connections will lead the development of machine learning and data scien..." |
+| 46 | linkedin | Software Development Engineer, Middle Mile Disruption Management | Software Development Engineer | Amazon | Mid | Vancouver | Middle Mile Transportation Technology | Machine Learning, Generative AI, Software Development | "The Software Development Engineer will be part of the Middle Mile Transportation Technology team, fo..." |
+| 58 | linkedin | Software Development Engineer, Middle Mile P&O | Software Development Engineer | Amazon | Mid | Vancouver | Middle Mile Planning and Optimization | Python, AWS, Machine Learning | "The Software Development Engineer will design and develop scalable distributed systems to optimize t..." |
+| 69 | linkedin | Senior Machine Learning / Computer Vision Applied Scientist | Senior Machine Learning / Computer Vision Applied Scientist | Apera AI | Senior | Vancouver | AI | Machine Learning, Computer Vision, Deep Learning | "The Senior Machine Learning / Computer Vision Applied Scientist will join the AI team at Apera AI, f..." |
+| 91 | linkedin | Senior Engineering Manager, AI Agents | Engineering Manager, AI Agents | Asana | Manager | Vancouver | Agent Orchestration | AI, Systems Integration, Engineering Management | "The Engineering Manager will lead the Agent Orchestration team, focusing on building integration cap..." |
+| 130 | linkedin | AI Automation Engineer | AI Automation Engineer | Aspire Software | Mid | Remote — Canada | NULL | AI, Machine Learning, Product Development | "The AI Automation Engineer will design, build, and ship AI agents for Aspire Software and its portfo..." |
+| 43 | linkedin | Senior Data Scientist | Senior Data Scientist | Autodesk | Senior | Toronto | Platform Strategy and Emerging Technologies | Python, Machine Learning, AI | "The Senior Data Scientist will join Autodesk’s Platform Strategy and Emerging Technologies team to d..." |
+| 51 | linkedin | Senior Principal Machine Learning Engineer | Senior Principal Machine Learning Engineer | Autodesk | Principal | Remote — Canada | NULL | Python, PyTorch, Machine Learning | "The Senior Principal Machine Learning Engineer will work at the intersection of research and enginee..." |
+| 146 | linkedin | Data Analyst | Data Analyst | Axiom Builders | Mid | Vancouver | NULL | Power BI, SQL, Data Analytics | "The Data Analyst will be responsible for creating and maintaining Power BI dashboards and scorecards..." |
+| 154 | linkedin | Performance Measurement Specialist | Performance Measurement Specialist | BC College of Nurses and Midwives | Mid | Hybrid — Vancouver | Research & Evaluation | quantitative data analysis, Power BI, SQL | "The Performance Measurement Specialist works cross-functionally to assess, measure, and report on Re..." |
+| 78 | linkedin | Senior Data Product Analyst (1-Year Contract) | Senior Data Product Analyst | BC Financial Services Authority | Senior | Vancouver | NULL | SQL, Power BI, DAX | "The Senior Data Product Analyst is responsible for partnering with business stakeholders to translat..." |
+| 82 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | BDO | Senior | Vancouver | Technology Advisory Services | MLOps, Azure, Databricks | "The Senior Machine Learning Engineer will lead the design and implementation of end-to-end MLOps pip..." |
+| 77 | linkedin | Senior Data Analyst | Senior Data Analyst | Bird Construction | Senior | Vancouver | Business Intelligence & Analytics | Power BI, Data Governance, Data Analytics | "The Senior Data Analyst will design, develop, and deliver analytics solutions using Power BI while e..." |
+| 150 | linkedin | Senior Data Analyst | Senior Data Analyst | Bird Construction | Senior | Vancouver | Business Intelligence & Analytics | Power BI, Data Governance, Data Analytics | "The Senior Data Analyst will design, develop, and deliver analytics solutions using Power BI while e..." |
+| 152 | linkedin | Associate AI Evaluation Scientist | Associate AI Evaluation Scientist | BMO | Mid | Vancouver | Applied AI | Python, Machine Learning, Data Science | "The Associate AI Evaluation Scientist is responsible for contributing to the data science execution..." |
+| 111 | linkedin | Manager Data Analytics and Reporting | Manager Data Analytics and Reporting | BMO | Manager | Hybrid — Toronto | NULL | SQL, SAS, Power BI | "This role involves managing data analytics and reporting within the organization. The manager will d..." |
+| 53 | linkedin | AI/ML ENGINEER | AI/ML Engineer | Boundary AI | Mid | Remote — Canada | NULL | Python, Machine Learning, APIs | "The AI/ML Engineer will work on an AI governance platform that ensures safety and compliance in AI m..." |
+| 114 | linkedin | Senior Research Analyst | Senior Research Analyst | CIBC | Senior | Toronto | Multi-Asset and Currency Research | Macroeconomic Analysis, Investment Research, Financial Markets Research | "The Senior Research Analyst will deliver high-quality investment research to influence portfolio dec..." |
+| 155 | linkedin | Relevance Engineer – Enterprise Search & AI Hybrid | Relevance Engineer | Cisco | Mid | Hybrid — Vancouver | Enterprise Search | Elasticsearch, Python, Generative AI | "The Relevance Engineer will architect and optimize hybrid retrieval systems to enhance search releva..." |
+| 27 | linkedin | Senior Data Scientist | Senior Data Scientist | Clio | Senior | Vancouver | Product | Python, SQL, Machine Learning | "The Senior Data Scientist will collaborate with the Growth and Insights teams to identify opportunit..." |
+| 44 | linkedin | Senior Data Scientist | Senior Data Scientist | Clio | Senior | Vancouver | Product | Python, SQL, Machine Learning | "The Senior Data Scientist will collaborate with the Growth and Insights teams to identify opportunit..." |
+| 86 | linkedin | Senior Developer, Enterprise AI | Senior Developer, Enterprise AI | Clio | Senior | Vancouver | IT | Ruby, Python, AI | "The Senior Developer, Enterprise AI is a hands-on technical leader responsible for building, operati..." |
+| 9 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | NULL | Python, ML, GenAI | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
+| 10 | linkedin | Applied Scientist II | Applied Scientist II | Coalition | Mid | Toronto | NULL | Python, ML, GenAI | "The Applied Scientist II will build and improve machine learning and GenAI models for underwriting d..." |
+| 139 | linkedin | Senior Data Analyst | Senior Data Analyst | Coalition | Senior | Toronto | NULL | SQL, Data Analysis, Data Modeling | "The Senior Data Analyst will lead analytics for the GTM and servicing motions, focusing on building..." |
+| 156 | linkedin | Senior Quantitative Risk Specialist | Senior Quantitative Risk Specialist | Coast Capital | Senior | Other | NULL | quantitative risk analytics, model development, Python | "The Senior Quantitative Risk Specialist designs, implements, and validates quantitative risk models..." |
+| 110 | linkedin | Data Engineer | Remote | Data Engineer | CodeGeniusRecruit | Mid | Remote — Canada | NULL | SQL, Python, dbt | "The Data Engineer will design end-to-end data science and analytics workflows to evaluate model perf..." |
+| 134 | linkedin | Lead Data Scientist | Lead Data Scientist | Cohere | Lead | Remote — Canada | Analytics and Data Insights | SQL, Python, Git | "As a Lead Data Scientist, you will tackle complex analytical problems and shape go-to-market strateg..." |
+| 100 | linkedin | Member of Technical Staff, MLE | Member of Technical Staff, MLE | Cohere | Mid | Toronto | MLE | Python, ML fundamentals, LLM frameworks | "As a Member of Technical Staff in Applied ML, you will work directly with enterprise customers to de..." |
+| 49 | linkedin | Member of Technical Staff, Search | Member of Technical Staff, Search | Cohere | Mid | Toronto | Search | Python, PyTorch, Tensorflow | "The Member of Technical Staff in Search will develop state-of-the-art models for information retriev..." |
+| 71 | linkedin | Senior Research Scientist, Cohere Labs | Senior Research Scientist | Cohere | Senior | Remote — Canada | Cohere Labs | Machine Learning, NLP, AI | "As a Senior Research Scientist at Cohere Labs, you will drive an independent research agenda on fron..." |
+| 28 | linkedin | Research Analyst | Research Analyst | Colliers | Mid | Hybrid — Vancouver | Research | Research, Data Analysis, Microsoft Excel | "The Research Analyst provides research and analytical support to the Vancouver Brokerage team. This..." |
+| 24 | linkedin | Algorithm Engineer, AI | Algorithm Engineer | Comm100 | Mid | Vancouver | NULL | Python, TensorFlow, PyTorch | "The Algorithm Engineer will research key capabilities leading to AGI and track the latest advancemen..." |
+| 20 | linkedin | AI Solutions Engineer | AI Solutions Engineer | Connor, Clark & Lunn Financial Group | Mid | Hybrid — Vancouver | IS Department | AI, LLMs, Azure | "The AI Solutions Engineer will lead the design, prototyping, and operationalization of AI solutions..." |
+| 21 | linkedin | Data Scientist, Investment Data | Data Scientist | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | Data Science, Machine Learning, AI | "The Data Scientist will join the Quantitative Equity Team to support investment data preparation and..." |
+| 123 | linkedin | Portfolio Research Analyst, Quantitative Equities | Portfolio Research Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | quantitative research, portfolio optimization, risk management | "The Portfolio Research Analyst will contribute to the construction of optimal portfolios and trades..." |
+| 94 | linkedin | Quantitative Data Analyst, Investment Data | Quantitative Data Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity Team | Data Analytics, Data Science, Financial Knowledge | "The Quantitative Data Analyst will join the Quantitative Equity Team to support research through dat..." |
+| 95 | linkedin | Quantitative Equity Technology, Quantitative Developer | Quantitative Developer | Connor, Clark & Lunn Financial Group | Mid | Vancouver | NULL | Python, Kdb+/Q, R | "The Quantitative Developer plays a crucial role in a quantitative equity fund by developing innovati..." |
+| 93 | linkedin | Quantitative Equity Analyst – Data Science | Quantitative Equity Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equities Team | Data Science, Process Engineering, Machine Learning | "The Quantitative Equity Analyst will join the Quantitative Equities Team, focusing on data science a..." |
+| 96 | linkedin | Quantitative Equity Research, Alpha | Quantitative Research Analyst | Connor, Clark & Lunn Financial Group | Mid | Vancouver | Quantitative Equity | quantitative research, finance, data science | "The Quantitative Research Analyst will join the Quantitative Equity team to tackle challenges at the..." |
+| 122 | linkedin | Quantitative Researcher, Fixed Income | Quantitative Researcher | Connor, Clark & Lunn Financial Group | Mid | Hybrid — Vancouver | Fixed Income Team | Quantitative Analysis, Fixed Income, Credit Risk | "The Quantitative Researcher will develop proprietary analytics to guide investment decisions in the..." |
+| 87 | linkedin | Senior AI Solutions Engineer | Senior AI Solutions Engineer | Connor, Clark & Lunn Financial Group | Senior | Vancouver | AI Enablement | AI Solutions, LLMs, Embeddings | "The Senior AI Solutions Engineer will design and prototype AI-enabled workflows and build reference..." |
+| 142 | linkedin | Senior Data Scientist - GenAI | Senior Data Scientist | Cover Genius | Senior | Vancouver | Central AI Hub | Python, SQL, NLP | "The Senior Data Scientist for Generative AI will lead the LLM strategy within the Central AI Hub. Th..." |
+| 124 | linkedin | AI / ML Engineer | Remote | AI Engineer | Crossing Hurdles | Mid | Remote — Canada | NULL | Python, AI, Machine Learning | "The AI Engineer will develop, test, and optimize AI models and intelligent agents for various applic..." |
+| 60 | linkedin | Data Analyst | $80/hr Remote | Data Analyst | Crossing Hurdles | Mid | Remote — Canada | NULL | Metabase, SQL, Data Analytics | "The Data Analyst will design, develop, and deploy business intelligence solutions to enhance busines..." |
+| 140 | linkedin | Data Operations Manager | $45/hr Remote | Data Operations Manager | Crossing Hurdles | Manager | Remote — Canada | NULL | Data Analysis, Workflow Optimization, KPI Monitoring | "The Data Operations Manager is responsible for designing and managing data workflows for annotation,..." |
+| 125 | linkedin | Senior AI/ML Engineer | Senior AI/ML Engineer | CyberCoders | Senior | Remote — Canada | NULL | Python, Kotlin, TypeScript | "The Senior AI/ML Engineer will design, build, and operate AI components for the platform. This role..." |
+| 32 | linkedin | Scientist II, Analytical Development | Scientist II, Analytical Development | Cytiva | Mid | Vancouver | Analytical Development | Liquid Chromatography, LC-MS, HPLC | "The Scientist II in Analytical Development will support bio-analytical characterization techniques f..." |
+| 107 | linkedin | Data Engineer | Data Engineer | DarkVision | Mid | Other | Imaging & AI | Python, Data Visualization, Data Pipeline Development | "The Data Engineer will develop and optimize data pipelines for reporting and visualization deliverab..." |
+| 31 | linkedin | Machine Learning Scientist | Machine Learning Scientist | DarkVision | Mid | Other | Imaging & AI | Python, Deep Learning, PyTorch | "The Machine Learning Scientist will research, design, and prototype deep learning architectures for..." |
+| 137 | linkedin | Lead Machine Learning Engineer (Team Lead) | Lead Machine Learning Engineer | Datatonic | Lead | Remote — Canada | Machine Learning | Machine Learning, Data Science, Google Cloud | "The Lead Machine Learning Engineer will oversee a team of Machine Learning Engineers and Data Scient..." |
+| 1 | linkedin | Machine Learning Engineer | Machine Learning Engineer | Datatonic | Senior | Remote — Canada | NULL | Python, Machine Learning, Data Engineering | "The Senior Machine Learning Engineer will be responsible for engineering high-quality code in Python..." |
+| 79 | linkedin | Data Quality Manager (Master Data), Deloitte Global Operations | Data Quality Manager | Deloitte | Manager | Vancouver | Global Data Integration & Service Management | SQL, Data Management, Data Governance | "The Data Quality Manager will lead and consult on master data quality initiatives within the Global..." |
+| 13 | linkedin | Data Science Manager | Data Science Manager | Deloitte | Manager | Hybrid — Vancouver | Artificial Intelligence | Python, SQL, data analysis | "The Data Science Manager will lead the delivery of advanced analytics solutions and advisory service..." |
+| 116 | linkedin | Manager, AI/ML Models - Financial Engineering & Modeling | Manager, AI/ML Models - Financial Engineering & Modeling | Deloitte | Manager | Hybrid — Toronto | Risk, Regulatory & Forensics | AI, Machine Learning, NLP | "The role involves leading and overseeing complex engagements in the AI Model Risk Space for financia..." |
+| 153 | linkedin | Senior Data Scientist | Senior Data Scientist | Deloitte | Senior | Hybrid — Vancouver | Artificial Intelligence | Python, SQL, Machine Learning | "The Senior Data Scientist will deliver advisory services to high growth organizations, working with..." |
+| 92 | linkedin | AI Productivity Analyst | AI Productivity Analyst | Dialpad | Mid | Vancouver | AI Transformation | GenAI, Machine Learning, Python | "The AI Productivity Analyst will evaluate and pilot third-party AI tools to enhance productivity at..." |
+| 128 | linkedin | AI Productivity Analyst | AI Productivity Analyst | Dialpad | Mid | Vancouver | Product Management | GenAI, Machine Learning, Python | "The AI Productivity Analyst will evaluate and pilot third-party AI tools to enhance productivity at..." |
+| 22 | linkedin | Analytics Engineer | Analytics Engineer | Dialpad | Mid | Vancouver | Data Analysis and QA | Python, SQL, GCP | "The Analytics Engineer will be part of the Data Analysis and QA team, focusing on data support for A..." |
+| 64 | linkedin | Applied Scientist | Applied Scientist | Dialpad | Mid | Vancouver | NLP | Machine Learning, NLP, Python | "As an Applied Scientist at Dialpad, you will conduct research and development to enhance autonomous..." |
+| 90 | linkedin | AI Solution Architect | AI Solution Architect | Diligent | Senior | Hybrid — Vancouver | Business Applications and Analytics | AI, GenAI, Python | "The AI Solution Architect will lead the development and implementation of AI technologies across var..." |
+| 108 | linkedin | AI/ML Engineer (ChatGPT, Claude, LLM, AgenticAI) | AI/ML Engineer | Diligente Technologies | Mid | Remote — Canada | NULL | Python, Machine Learning, Generative AI | "The role involves working as an AI/ML Engineer with a focus on Generative AI and AI agents. The cand..." |
+| 132 | linkedin | Manager, Business Intelligence & Data Analytics | Manager, Business Intelligence & Data Analytics | Douglas College | Manager | Other | NULL | SQL, Tableau, Power BI | "The Manager of Business Intelligence & Data Analytics will oversee the production of datasets such a..." |
+| 8 | linkedin | Data Scientist | Data Scientist | Dropbox | Mid | Other | Data Science | SQL, Statistical Analysis, Experimentation Design | "The Data Scientist will partner with product, engineering, and design teams to analyze user behavior..." |
+| 68 | linkedin | Senior Machine Learning Engineer - Generative AI Team | Senior Machine Learning Engineer | EA SPORTS | Senior | Vancouver | Generative AI Team | Machine Learning, Python, C++ | "The Senior Machine Learning Engineer will join the Generative AI team to research and develop machin..." |
+| 63 | linkedin | AI Enablement Engineer | AI Enablement Engineer | Electronic Arts | Mid | Vancouver | EA Experiences | Python, AI solutions, C# | "As an AI Enablement Engineer, you will develop and implement AI solutions to enhance efficiency with..." |
+| 65 | linkedin | Lead Data Scientist - Search, Data & Insights (D&I) | Lead Data Scientist | Electronic Arts | Lead | Vancouver | Data and Insights | Python, SQL, AWS | "The Lead Data Scientist will work within the Data and Insights organization at Electronic Arts, focu..." |
+| 26 | linkedin | Senior Data Analyst - Data & Insights | Senior Data Analyst | Electronic Arts | Senior | Vancouver | Data and Insights | SQL, Python, Data Visualization | "The Senior Data Analyst will lead analytics projects for live-service titles and games as a platform..." |
+| 33 | linkedin | Senior Software Engineer - Machine Learning | Senior Software Engineer - Machine Learning | Electronic Arts | Senior | Vancouver | NULL | Python, PyTorch, TensorFlow | "The Senior Software Engineer - Machine Learning will design, train, and deploy large-scale AI models..." |
+| 76 | linkedin | Manager, Data Analytics | Manager, Data Analytics | Fasken | Manager | Hybrid — Vancouver | Data Analytics & Engineering | Power BI, SQL, Python | "The Manager, Data Analytics will serve as a senior analytics leader and business partner within the..." |
+| 15 | linkedin | Senior Data Scientist | Senior Data Scientist | Fortra | Senior | Remote — Canada | NULL | Python, Machine Learning, Data Science | "The Senior Data Scientist is responsible for developing, enhancing, and maintaining data science sol..." |
+| 18 | linkedin | Senior Machine Learning Engineer | Senior Machine Learning Engineer | FreshBooks | Senior | Toronto | NULL | Machine Learning, Python, SQL | "As a Senior Machine Learning Engineer, you will manage the entire machine learning lifecycle, from e..." |
+| 5 | linkedin | AI ML Engineer | AI/ML Engineer | Galent | Mid | Remote — Canada | NULL | Python, AI / LLM Agents, MCP | "The AI/ML Engineer will design, build, and maintain Python-based services and automation workflows...." |
+| 6 | linkedin | Artificial Intelligence Engineer | Artificial Intelligence Engineer | Galent | Mid | Remote — Canada | NULL | Python, AI / LLM Agents, MCP | "The role involves designing, building, and maintaining Python-based services and automation workflow..." |
+| 45 | linkedin | Intermediate II Software Developer - Artificial Intelligence | Intermediate Software Developer | Global Relay | Mid | Vancouver | Engineering | Python, Machine Learning, Agile | "The Intermediate Software Developer will build artificial intelligence and machine learning solution..." |
+| 29 | linkedin | Finance & Strategy Manager, Hopper/ HTS (100% Remote - Canada) | Finance & Strategy Manager | Hopper | Manager | Remote — Canada | Finance and Strategy | SQL, AI, Financial Planning & Analysis | "The Finance & Strategy Manager will build systems to support high-stakes decision-making across Hopp..." |
+| 30 | linkedin | Managing Consultant SAP Analytics - BDC Architect | Managing Consultant SAP Analytics - BDC Architect | IBM | Senior | Vancouver | NULL | SAP HANA, SQL, PL/SQL | "The Managing Consultant specializing in SAP Analytics will design, develop, and manage S/4HANA and S..." |
+| 17 | linkedin | Sr. ML Data Scientist (LIME/SHAP) | ML Data Scientist | Insight Global | Senior | Remote — Canada | NULL | Machine Learning, Data Science, Python | "The role involves delivering production-grade machine learning solutions in enterprise environments...." |
+| 144 | linkedin | Senior Data Scientist - Shopping Experience (Search) | Senior Data Scientist | Instacart | Senior | Remote — Canada | Shopping Experience | SQL, Python, A/B testing | "The Senior Data Scientist will focus on the analytics and experimentation strategy for the Shopping..." |
+| 117 | linkedin | Manager, Data Architecture and AI | Manager, Data Architecture and AI | Intact | Manager | Montreal | Intact Lab | Data Management, Artificial Intelligence, Leadership | "The Manager of Data Architecture and AI will lead a team of architects to achieve the organization's..." |
+| 127 | linkedin | Transportation Data Scientist | Transportation Data Scientist | Jacobs | Mid | Vancouver | Data and Metrics Quality | Python, SQL, Machine Learning | "The Transportation Data Scientist will contribute transportation industry expertise to ensure the qu..." |
+| 7 | linkedin | Data Scientist Specialist (Lending) | Data Scientist | Jobgether | Mid | Remote — Canada | NULL | Python, SQL, Spark | "The Data Scientist Specialist will develop and deploy real-time scoring models to assess credit and..." |
+| 36 | linkedin | Data Scientist, Early Career (Canada) | Data Scientist | Jobright | Junior | Remote — Canada | NULL | Python, SQL, PyTorch | "The Early Career Data Scientist will develop and deploy predictive models and machine learning algor..." |
+| 99 | linkedin | Data Scientist, Early Career (Canada) | Data Scientist | Jobright | Junior | Remote — Canada | NULL | Python, SQL, PyTorch | "The Early Career Data Scientist will develop and deploy predictive models and machine learning algor..." |
+| 37 | linkedin | Machine Learning Engineer - Early Career (Canada) | Machine Learning Engineer | Jobright | Junior | Remote — Canada | NULL | Python, SQL, data analysis | "The Early Career Machine Learning Engineer will design, build, and maintain scalable infrastructure..." |
+| 103 | linkedin | Machine Learning Engineer - Early Career (Canada) | Machine Learning Engineer | Jobright | Junior | Remote — Canada | NULL | Python, SQL, data analysis | "The Early Career Machine Learning Engineer will design, build, and maintain scalable infrastructure..." |
+| 52 | linkedin | AI Engineer (Remote) | AI Engineer | Jobs AI | Mid | Remote — Canada | NULL | Python, Machine Learning, Large Language Models | "The AI Engineer will design, implement, and optimize large language model solutions using Python. Th..." |
+| 50 | linkedin | Bioinformatics Scientist (Remote) | Bioinformatics Scientist | Jobs Ai | Mid | Remote — Canada | NULL | bioinformatics, genomics, data analysis | "The Bioinformatics Scientist will leverage expertise in genomics data analysis to ensure high-qualit..." |
+| 59 | linkedin | Data Analyst (Remote) | Data Analyst | Jobs Ai | Mid | Remote — Canada | NULL | Metabase, SQL, data modeling | "The Data Analytics Specialist will design, develop, and deploy business intelligence solutions using..." |
+| 56 | linkedin | Data Scientist (Remote) | Data Scientist | Jobs AI | Mid | Remote — Canada | NULL | Python, SQL, A/B testing | "The Data Scientist will turn data into decisions by running experiments and building models. This ro..." |
+| 48 | linkedin | Machine Learning Engineer (Remote) | Machine Learning Engineer | Jobs Ai | Mid | Remote — Canada | NULL | Machine Learning, Deep Learning, TensorFlow | "The role involves leading and conducting research in machine learning and artificial intelligence. T..." |
+| 41 | linkedin | Senior Machine Learning Engineer (Remote) | Senior Machine Learning Engineer | Jobs Ai | Senior | Remote — Canada | NULL | Python, AWS, LLMs | "The Senior Machine Learning Engineer will design, build, and scale AI models and infrastructure. Thi..." |
+| 54 | linkedin | Agentic AI Engineer | Agentic AI Engineer | Joveo | Mid | Remote — Canada | NULL | Python, AI agents, LangChain | "The Agentic AI Engineer will build autonomous, multi-step AI agents that perform actions across Jove..." |
+| 55 | linkedin | Data Scientist | Data Scientist | Joveo | Mid | Remote — Canada | NULL | Python, NLP, Machine Learning | "The Data Scientist will join a cross-functional team to build and deploy NLP models and predictive a..." |
+| 97 | linkedin | Data Scientist | Data Scientist | Joveo | Mid | Remote — Canada | NULL | Python, NLP, Machine Learning | "The Data Scientist will join a cross-functional team to build and deploy NLP models and predictive a..." |
+| 61 | linkedin | Senior Software Engineer, AI (Agents) | Senior Software Engineer | Klue | Senior | Vancouver | Engineering | Python, LLM, API | "The Senior Software Engineer will build and optimize LLM-powered agents at scale, focusing on backen..." |
+| 40 | linkedin | Data Scientist, AI/ML Platform | Data Scientist | KOHO | Mid | Remote — Canada | AI/ML Platform | Python, Machine Learning, Model Development | "The Data Scientist will design, build, and ship machine learning models that address product challen..." |
+| 85 | linkedin | Manager, Financial Crimes- Data Analytics | Manager, Financial Crimes - Data Analytics | KPMG | Manager | Vancouver | National Financial Crimes Centre of Excellence | Data Analytics, Anti-Money Laundering, SQL | "The Manager of Financial Crimes - Data Analytics will coordinate client engagements focused on finan..." |
+| 104 | linkedin | Data Analyst, Risk and Operational Performance | Data Analyst | Kraken | Mid | Remote — Canada | Core Services | SQL, Python, dbt | "The Data Analyst, Risk and Operational Performance will elevate decision-making by uncovering trends..." |
+| 141 | linkedin | Data Analyst, Growth | Data Analyst, Growth | Kraken | Mid | Remote — Canada | Data | SQL, Python, dbt | "The Data Analyst, Growth will turn complex growth marketing data into actionable insights to support..." |
+| 16 | linkedin | Senior Data Scientist, AI Native (Growth) | Senior Data Scientist | Life360 | Senior | Remote — Canada | Data Science | Machine Learning, Statistical Modeling, A/B Testing | "The Senior Data Scientist will contribute to Life360's growth and user retention efforts by optimizi..." |
+| 2 | linkedin | AI Engineer (Remote) | AI Engineer | Lumenalta | Mid | Remote — Canada | NULL | Python, AI, Machine Learning | "The AI Engineer will design, build, and deploy AI models into production, focusing on backend Python..." |
+| 4 | linkedin | AI Engineer (Remote) | AI Engineer | Lumenalta | Mid | Remote — Canada | NULL | Python, AI, Machine Learning | "The AI Engineer will design, build, and deploy AI models into production, focusing on backend Python..." |
+| 34 | linkedin | R&D Scientist, Novel Ingredients | R&D Scientist | Marine Biologics | Mid | Vancouver | NULL | patent filing, chemistry, biochemistry | "The R&D Scientist will focus on IP scoping and patent filing, translating lab results into patentabl..." |
+| 84 | linkedin | Manager, Data Science, Marketing Analytics | Manager, Data Science, Marketing Analytics | Match | Manager | Vancouver | Analytics Team | SQL, A/B testing, Python | "The Manager, Data Science in Marketing Analytics will lead the analytics team to standardize marketi..." |
+| 80 | linkedin | Senior Data Analyst, Core | Senior Data Analyst | Match Group | Senior | Vancouver | Core Data | SQL, Data Analysis, Product Analytics | "The Senior Data Analyst will work within the Core Data team to identify and unlock product and cross..." |
+| 121 | linkedin | Data Business Analyst - Coquitlam | Data Business Analyst | Natural Factors | Mid | Other | NULL | Data Governance, Business Analysis, Manufacturing | "The Data Business Analyst will analyze business processes and identify areas for improvement within..." |
+| 73 | linkedin | Staff Data Scientist | Staff Data Scientist | Northbeam | Staff | Remote — Canada | Data Science | Python, SQL, Statistics | "The Staff Data Scientist will advance the statistical and experimentation foundations of Northbeam's..." |
+| 129 | linkedin | AI Development Engineer - Remote | AI Development Engineer | NTT DATA | Mid | Remote — Canada | NULL | Python, machine learning, deep learning | "The AI Development Engineer will design, develop, and deploy AI-driven solutions to address complex..." |
+| 72 | linkedin | Senior Applied Researcher AI/ML ( CAD) | Senior Applied Researcher | PointClickCare | Senior | Other | Advanced Technology / Applied AI Research | Python, SQL, Machine Learning | "The Senior Applied Researcher in AI/ML will work within the Advanced Technology / Applied AI Researc..." |
+| 145 | linkedin | Data Analyst, Project Controls Technology Services | Data Analyst | Provincial Health Services Authority | Mid | Vancouver | Project Controls | SQL, Python, Data Analysis | "The Data Analyst in Project Controls develops and maintains complex datasets, conducts systems analy..." |
+| 19 | linkedin | Senior Machine Learning Engineer, Ranking - Quora (Remote) | Senior Machine Learning Engineer | Quora | Senior | Remote — Canada | Engineering | Machine Learning, Python, C++ | "The Senior Machine Learning Engineer will work on improving and developing machine learning ranking..." |
+| 62 | linkedin | Machine Learning Software Engineer | Machine Learning Software Engineer | RBC | Mid | Toronto | Borealis | Python, Machine Learning, Software Engineering | "The Machine Learning Software Engineer will be responsible for developing and delivering machine lea..." |
+| 151 | linkedin | Principal Engineer, AI & ML Solutions, GFT | Principal Engineer, AI & ML Solutions | RBC | Principal | Toronto | Global Functions Technology | Python, Machine Learning, AI | "The Principal Engineer, AI & ML Solutions oversees machine learning programs and projects, managing..." |
+| 115 | linkedin | Senior Data Engineer, GFT | Senior Data Engineer | RBC | Senior | Vancouver | Global Functions Technology | Python, Spark, Data Engineering | "The Senior Data Engineer will develop a feature store with integrated data quality and governance to..." |
+| 89 | linkedin | Senior Development Manager – Modernization and AI Transformation | Senior Development Manager | RBC | Senior | Toronto | Technology and Operations | Software Engineering, Leadership, Cloud | "The Senior Development Manager will lead and mentor multiple software engineering teams focused on m..." |
+| 102 | linkedin | Senior Data Scientist - Agentic AI products | Senior Data Scientist | Rockwell Automation | Senior | Toronto | Data Science & Innovation | Python, SQL, Predictive modeling | "The Senior Data Scientist will own the data and modeling layer for agentic AI products. This role in..." |
+| 74 | linkedin | AI Sim - Staff ML Research Engineer | AI Sim - Staff ML Research Engineer | SandboxAQ | Staff | Other | AI Sim R&D | ML Engineering, GPU Expertise, Distributed Systems | "The Staff ML Research Engineer will bridge visionary research and production-grade reality, focusing..." |
+| 70 | linkedin | Sr. AI Threat Researcher | AI Threat Researcher | Sophos | Senior | Remote — Canada | X-Ops Insights | AI, Threat Intelligence, Python | "The role involves researching how threat actors leverage AI across the attack lifecycle and developi..." |
+| 126 | linkedin | Associate Data Scientist - User Fraud | Associate Data Scientist | Spotify | Mid | Toronto | Data Science | SQL, Python, Data Analysis | "The Data Scientist will focus on expanding detection and mitigation methods against abuse across aud..." |
+| 47 | linkedin | Process Development Scientist, GMP Media | Process Development Scientist | STEMCELL Technologies | Mid | Vancouver | Process Development | GMP, Process Development, Quality by Design | "The Process Development Scientist will lead process development initiatives for GMP media products,..." |
+| 135 | linkedin | Data Science Manager, Growth | Data Science Manager | Stripe | Manager | Toronto | Growth Data Science | Data Science, Machine Learning, Statistical Analysis | "The Data Science Manager for Growth at Stripe is responsible for leading a team of data scientists a..." |
+| 35 | linkedin | Senior R&D Engineer | R&D Engineer | Synopsys | Senior | Vancouver | R&D Engineering | C++, Python, Software Development | "The Senior R&D Engineer will participate in planning, architecture, and research to drive product in..." |
+| 149 | linkedin | Staff Data Scientist | Staff Data Scientist | TEEMA | Staff | Vancouver | NULL | Python, PyTorch, TensorFlow | "The Staff Data Scientist will lead the technical strategy for AI initiatives, focusing on machine tr..." |
+| 14 | linkedin | Développeur principal ou développeuse principale (IA, apprentissage-machine, solutions d'IA générati | Développeur principal | TELUS | Principal | Vancouver | Accélérateur d’IA | Python, React, JavaScript | "The role involves leading cross-functional teams to design and implement end-to-end AI and machine l..." |
+| 11 | linkedin | Senior Developer (AI/ML/Gen AI Solutions) | Senior Developer | TELUS | Senior | Vancouver | AI Accelerator | AI/ML, Full Stack Development, Cloud Platforms | "The Senior Developer will lead cross-functional teams in designing and implementing AI/ML solutions...." |
+| 118 | linkedin | Senior Manager, Solutions Architecture - Data & AI | Senior Manager, Solutions Architecture - Data & AI | TELUS Digital | Manager | Other | NULL | Data Architecture, Machine Learning, Cloud Computing | "The Senior Manager, Solutions Architecture - Data & AI will bridge the gap between pre-sales strateg..." |
+| 119 | linkedin | Senior Manager, Solutions Architecture - Data & AI | Senior Manager, Solutions Architecture - Data & AI | TELUS Digital | Manager | Other | NULL | Data Architecture, Machine Learning, Cloud Computing | "The Senior Manager, Solutions Architecture - Data & AI will bridge the gap between pre-sales strateg..." |
+| 101 | linkedin | Applied Scientist, Customer Growth | Applied Scientist, Customer Growth | Thumbtack | Mid | Other | Applied Science | Python, AI, Data Science | "The Applied Scientist in Customer Growth will drive applied science initiatives focused on business..." |
+| 42 | linkedin | Senior Data Scientist, People Analytics | Senior Data Scientist | Thumbtack | Senior | Other | People Data Science | SQL, Tableau, Python | "The Senior Data Scientist will shape how data, analytics, and AI influence talent decisions at Thumb..." |
+| 105 | linkedin | Machine Learning Engineer | Machine Learning Engineer | Traffix | Mid | Toronto | NULL | Python, SQL, Azure | "As a Machine Learning Engineer I at Traffix, you will support the productization of data models by w..." |
+| 147 | linkedin | Data Analyst - FTT | Data Analyst | TransLink | Mid | Hybrid — Vancouver | Data Management Team | Data Analysis, Data Management, Data Modeling | "The Data Analyst will perform data analysis of enterprise data and provide expertise to business sta..." |
+| 112 | linkedin | Remote Quantitative Analyst (Finance) - 75403 | Quantitative Analyst | Turing | Mid | Remote — Canada | NULL | Quantitative Finance, Statistical Analysis, Algorithmic Strategy Development | "Turing is seeking a Quantitative Analyst to enhance the performance of AI models in finance. The rol..." |
+| 113 | linkedin | Remote Quantitative Analyst (Finance) - 75403 | Quantitative Analyst | Turing | Mid | Remote — Canada | NULL | Quantitative Finance, Statistical Analysis, Algorithmic Strategy Development | "Turing is seeking a Quantitative Analyst to enhance the performance of AI models in finance. The rol..." |
+| 131 | linkedin | Research Engineer | Research Engineer | University of British Columbia | Mid | Vancouver | Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science | Engineering, Statistical Analysis, Material Testing | "The Research Engineer is responsible for designing, developing, and implementing experimental progra..." |
+| 12 | linkedin | Senior Manager / Manager, Data Science | Senior Manager, Data Science | Vancity | Senior | Vancouver | AI Centre of Excellence | Machine Learning, Data Science, MLOps | "The Senior Manager, Data Science will lead the development and delivery of machine learning and deci..." |
+| 23 | linkedin | AI Software Developer (Healthcare Systems & Automation) | AI Software Developer | Vancouver Psychology Centre | Mid | Vancouver | NULL | Python, JavaScript, API integrations | "The AI Software Developer will design, build, and maintain internal automation systems to support cl..." |
+| 39 | linkedin | Senior Data Scientist, Finance & Market Risk | Senior Data Scientist | Wealthsimple | Senior | Remote — Canada | Finance and Market Risk Data Science | SQL, Python, Data Visualization | "The Senior Data Scientist in Finance & Market Risk will apply advanced analytics techniques to solve..." |
+| 98 | linkedin | Research And Development Specialist | Research And Development Specialist | Work Consulting | Mid | Remote — Canada | NULL | AI, Biomedical Science, Physics | "The role involves driving research and development projects across various priority areas including..." |
+| 83 | linkedin | Senior/Principal Machine Learning Engineer | Senior/Principal Machine Learning Engineer | Workday | Senior | Vancouver | Agent Factory | Machine Learning, Deep Learning, Python | "The Senior/Principal Machine Learning Engineer will design and build core ML systems for Workday's A..." |
+| 57 | linkedin | AI Specialist - Applied ML Research | AI Specialist - Applied ML Research | Xanadu | Mid | Toronto | AI | Python, Machine Learning, AI | "The AI Specialist will drive applied AI initiatives by optimizing R&D efforts and analyzing diverse..." |
+| 3 | linkedin | AI/ML Engineer - Remote | AI/ML Engineer | YO HR Consultancy | Mid | Remote — Canada | NULL | Python, AWS, Machine Learning | "The AI/ML Engineer will play a pivotal role in driving government initiatives and contributing to pr..." |
 
 ## How to label (instructions for the user)
 

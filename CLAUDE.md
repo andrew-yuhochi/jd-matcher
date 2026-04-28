@@ -12,12 +12,18 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 | **Last completed** | TASK-M2-006 — LLM Extraction (C18) — strict canonical labels (Done 2026-04-27) |
 | **Next task** | TASK-M2-007 — Embedding Pipeline (C20) [data-pipeline] |
 | **Next command** | /implement jd-matcher TASK-M2-007 |
+| **Scope note** | Indeed extraction deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28 / PRD §9 R3. PoC = LinkedIn-only. browser_fetcher.py infrastructure committed (`ce7def0`) and ready for MVP reactivation. |
 
 ---
 
 ## Local environment
 
 This project ships with a venv at `.venv/` (Python 3.11). Bare `python` on this machine resolves to pyenv 3.14 which lacks `google.auth`/`googleapiclient` and will produce false test failures. **Always run pytest as `.venv/bin/python -m pytest …`** (or `source .venv/bin/activate` first).
+
+### Data safety
+- Local DB: `~/.jd-matcher/jd-matcher.db`. Wiped 2026-04-28 by an unidentified subagent/sandbox interaction; recovered via Gmail re-ingest + LLM re-extraction (~$0.07).
+- Recovery snapshot: `~/.jd-matcher/snapshots/jd-matcher-recovery-2026-04-28-1556.db` (atomic SQLite .backup, ~42MB).
+- **Before any destructive DB operation in future**: snapshot first via `sqlite3 ~/.jd-matcher/jd-matcher.db ".backup ~/.jd-matcher/snapshots/$(date +%Y%m%d-%H%M).db"`. Daily backup cron is a backlog item.
 
 ---
 
