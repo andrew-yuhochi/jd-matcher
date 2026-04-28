@@ -11,8 +11,8 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 6 | 20 |
-| In Progress | 0 | 0 |
+| Done | 4 | 18 |
+| In Progress | 2 | 2 |
 | To Do | 7 | 7 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
@@ -139,7 +139,7 @@
 
 ##### TASK-M2-004 — Filter correctness validation (user reviews filtered list)
 
-- **Status**: Done (2026-04-27)
+- **Status**: In Progress (Re-opened 2026-04-28 — dataset expanded from 91 → 156 postings; new 65 postings need re-validation against calibrated YAML before milestone closes. Original Done-state and 4 calibration iterations preserved in commit history.)
 - **Blocked reason**:
 - **Agent**: data-pipeline + user
 - **Component**: C19 (validation) — TDD §C19
@@ -200,7 +200,7 @@
 
 ##### TASK-M2-006 — LLM Extraction (C18) — strict canonical labels
 
-- **Status**: Done (2026-04-27)
+- **Status**: In Progress (Re-opened 2026-04-28 — dataset expanded from 71 → 156 C19-passed postings; original user-eyeball validation only covered 12 of the original 71. Need to spot-check ~10–15 of the new 65 postings before milestone closes — extraction quality compounds through C20 embedding + C21 dedup, so prompt issues caught now save downstream rework. All 156 already extracted via Round 1 prompt at $0.066 cost; cached in extraction_cache.)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C18 (LLM Extraction) — TDD §C18
