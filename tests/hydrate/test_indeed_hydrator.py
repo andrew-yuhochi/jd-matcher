@@ -404,3 +404,104 @@ def test_json_ld_description_html_is_stripped_to_plain_text(
     second_idx = result.description.index("Second para.")
     between = result.description[first_idx + len("First para.") : second_idx]
     assert "\n" in between, "Paragraph text must be separated by newlines"
+
+
+# ---------------------------------------------------------------------------
+# browser_fetcher escalation tests (TASK-M2-014 infra)
+# ---------------------------------------------------------------------------
+
+
+def test_indeed_escalates_to_browser_fetcher_on_cf_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When requests returns 403+Cf-Mitigated, indeed.py calls browser_fetcher.fetch_html."""
+    monkeypatch.delenv("SKIP_LIVE", raising=False)
+
+    sess = MagicMock()
+    sess.headers = MagicMock()
+    sess.headers.update = MagicMock()
+    cf_resp = MagicMock()
+    cf_resp.status_code = 403
+    cf_resp.content = b"<html><title>Security Check</title></html>"
+    cf_resp.headers = {"Cf-Mitigated": "challenge"}
+    sess.get.return_value = cf_resp
+    sess.close = MagicMock()
+
+    browser_html = _SAMPLE_JSON_LD_HTML
+
+    with (
+        patch("jd_matcher.hydrate.indeed.requests.Session", return_value=sess),
+        patch("jd_matcher.hydrate.indeed.HYDRATOR_RATE_LIMITER"),
+        patch(
+            "jd_matcher.hydrate.browser_fetcher.fetch_html",
+            return_value=(browser_html, "patchright"),
+        ) as mock_browser,
+    ):
+        result = hydrate("https://www.indeed.com/viewjob?jk=abc1234567890123")
+
+    mock_browser.assert_called_once()
+    assert result.hydration_status == "complete"
+    assert result.title == "Data Governance Senior Analyst"
+
+
+def test_indeed_browser_fetcher_failure_returns_failed_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When browser_fetcher fails all tiers, hydration_status='failed' with correct reason."""
+    monkeypatch.delenv("SKIP_LIVE", raising=False)
+
+    sess = MagicMock()
+    sess.headers = MagicMock()
+    sess.headers.update = MagicMock()
+    cf_resp = MagicMock()
+    cf_resp.status_code = 403
+    cf_resp.content = b"<html><title>Security Check</title></html>"
+    cf_resp.headers = {"Cf-Mitigated": "challenge"}
+    sess.get.return_value = cf_resp
+    sess.close = MagicMock()
+
+    with (
+        patch("jd_matcher.hydrate.indeed.requests.Session", return_value=sess),
+        patch("jd_matcher.hydrate.indeed.HYDRATOR_RATE_LIMITER"),
+        patch(
+            "jd_matcher.hydrate.browser_fetcher.fetch_html",
+            return_value=(None, "failed_all_tiers"),
+        ),
+    ):
+        result = hydrate("https://www.indeed.com/viewjob?jk=abc1234567890123")
+
+    assert result.hydration_status == "failed"
+    assert result.failure_reason is not None
+    assert "browser_fetcher_failed_all_tiers" in result.failure_reason
+    assert "403" in result.failure_reason
+
+
+def test_indeed_non_cf_403_does_not_escalate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plain 403 without Cf-Mitigated header still escalates (403 is in escalation set)."""
+    monkeypatch.delenv("SKIP_LIVE", raising=False)
+
+    sess = MagicMock()
+    sess.headers = MagicMock()
+    sess.headers.update = MagicMock()
+    resp_403 = MagicMock()
+    resp_403.status_code = 403
+    resp_403.content = b"<html>Forbidden</html>"
+    resp_403.headers = {}
+    sess.get.return_value = resp_403
+    sess.close = MagicMock()
+
+    with (
+        patch("jd_matcher.hydrate.indeed.requests.Session", return_value=sess),
+        patch("jd_matcher.hydrate.indeed.HYDRATOR_RATE_LIMITER"),
+        patch(
+            "jd_matcher.hydrate.browser_fetcher.fetch_html",
+            return_value=(None, "failed_all_tiers"),
+        ) as mock_browser,
+    ):
+        result = hydrate("https://www.indeed.com/viewjob?jk=abc1234567890123")
+
+    # 403 (even without Cf-Mitigated) is in the escalation set
+    mock_browser.assert_called_once()
+    assert result.hydration_status == "failed"

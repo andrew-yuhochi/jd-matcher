@@ -50,14 +50,19 @@ _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 _LOGS_DIR = Path(__file__).parents[2] / "logs"
 
 # M1 sources in execution order
-_GMAIL_SOURCES = ("linkedin", "indeed")
-_HYDRATOR_SOURCES = ("linkedin", "indeed")
+# PoC: LinkedIn only. Indeed deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28
+# / PRD §9 R3 — Cloudflare IP-level enforcement on user's employer-managed Mac
+# blocks all bypass paths (requests, curl_cffi, patchright headed, CDP-attach
+# disabled by MDM policy). Re-enable at MVP-M1 when user runs on personal
+# hardware OR procures commercial proxy. Infrastructure (browser_fetcher.py +
+# indeed.py escalation) remains in place — flip this list to re-activate.
+_GMAIL_SOURCES = ("linkedin",)  # was: ("linkedin", "indeed")
+# PoC LinkedIn-only — see _GMAIL_SOURCES comment above
+_HYDRATOR_SOURCES = ("linkedin",)
 
 _STEP_LABELS = [
-    "Fetching Gmail (linkedin)… (1/4)",
-    "Fetching Gmail (indeed)… (2/4)",
-    "Hydrating JDs (linkedin)… (3/4)",
-    "Hydrating JDs (indeed)… (4/4)",
+    "Fetching Gmail (linkedin)… (1/2)",
+    "Hydrating JDs (linkedin)… (2/2)",
 ]
 
 
@@ -169,8 +174,8 @@ def run_pipeline(
     # Collect canonical URLs for hydration — query DB after dedup so we only
     # hydrate postings that were actually registered (dedup-respected).
     li_urls = _get_pending_hydration_urls(resolved_db, "linkedin")
-    in_urls = _get_pending_hydration_urls(resolved_db, "indeed")
-    hydration_urls = {"linkedin": li_urls, "indeed": in_urls}
+    hydration_urls = {"linkedin": li_urls}
+    # Indeed deferred to MVP — see _GMAIL_SOURCES / _HYDRATOR_SOURCES comments
 
     # -----------------------------------------------------------------------
     # Phase 2: Hydration

@@ -271,6 +271,9 @@ class TestPipelineIngestLogIntegration:
         must not write its own pipeline_runs row. Previously, the internal write attempted
         Gmail API calls with Application Default Credentials (ADC), polluting pipeline_runs
         with phantom 'failed' rows and triggering DefaultCredentialsError in production.
+
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, revert total_row_count assertion to 4.
         """
         LimitedIngester = self._make_limited_ingester(5)
 
@@ -296,10 +299,9 @@ class TestPipelineIngestLogIntegration:
             f"Found {ingest_row_count} pipeline_runs rows with '_ingest_' in run_id. "
             "GmailIngester must not write its own row when canonical_run_id is provided."
         )
-        # Orchestrator writes exactly 4 canonical rows: gmail_linkedin, gmail_indeed,
-        # hydrator_linkedin, hydrator_indeed.
-        assert total_row_count == 4, (
-            f"Expected exactly 4 pipeline_runs rows (one per canonical source), got {total_row_count}. "
+        # Orchestrator writes exactly 2 canonical rows: gmail_linkedin, hydrator_linkedin.
+        assert total_row_count == 2, (
+            f"Expected exactly 2 pipeline_runs rows (one per canonical source), got {total_row_count}. "
             "Double-write or missing orchestrator rows detected."
         )
 
@@ -479,7 +481,12 @@ class TestCredentialFailurePropagation:
         test_db: Path,
         logs_dir: Path,
     ) -> None:
-        """Simulated Gmail fetch error → pipeline_runs has 'failed' rows for both gmail sources."""
+        """Simulated Gmail fetch error → pipeline_runs has a 'failed' row for gmail_linkedin.
+
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, also assert gmail_indeed in failed_sources
+        and revert the pipeline_runs row count assertion to 2.
+        """
         with patch(
             "jd_matcher.ingest.gmail.GmailIngester._fetch_from_gmail",
             side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
@@ -489,12 +496,9 @@ class TestCredentialFailurePropagation:
         ):
             summary = run_pipeline(db_path=test_db, credentials=None)
 
-        # Both gmail sources should be in failed_sources
+        # gmail_linkedin should be in failed_sources
         assert "gmail_linkedin" in summary.failed_sources, (
             f"Expected gmail_linkedin in failed_sources, got {summary.failed_sources}"
-        )
-        assert "gmail_indeed" in summary.failed_sources, (
-            f"Expected gmail_indeed in failed_sources, got {summary.failed_sources}"
         )
 
         conn = sqlite3.connect(test_db)
@@ -503,14 +507,14 @@ class TestCredentialFailurePropagation:
                 """
                 SELECT source, health_status, failure_reason
                 FROM pipeline_runs
-                WHERE source IN ('gmail_linkedin', 'gmail_indeed')
+                WHERE source = 'gmail_linkedin'
                 ORDER BY source
                 """
             ).fetchall()
         finally:
             conn.close()
 
-        assert len(rows) == 2, f"Expected 2 pipeline_runs rows for gmail sources, got {len(rows)}"
+        assert len(rows) == 1, f"Expected 1 pipeline_runs row for gmail_linkedin, got {len(rows)}"
         for source, health_status, failure_reason in rows:
             assert health_status == "failed", (
                 f"{source}: expected health_status='failed', got {health_status!r}"
@@ -527,7 +531,11 @@ class TestCredentialFailurePropagation:
         test_db: Path,
         logs_dir: Path,
     ) -> None:
-        """Simulated Gmail fetch error → total_new_postings == 0 AND failed_sources non-empty."""
+        """Simulated Gmail fetch error → total_new_postings == 0 AND failed_sources non-empty.
+
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, revert failed_sources count assertion to >= 2.
+        """
         with patch(
             "jd_matcher.ingest.gmail.GmailIngester._fetch_from_gmail",
             side_effect=RuntimeError("DefaultCredentialsError: no credentials"),
@@ -538,7 +546,7 @@ class TestCredentialFailurePropagation:
             summary = run_pipeline(db_path=test_db, credentials=None)
 
         assert summary.total_new_postings == 0
-        assert len(summary.failed_sources) >= 2
+        assert len(summary.failed_sources) >= 1
 
 
 class TestInsertEmailLogConflict:

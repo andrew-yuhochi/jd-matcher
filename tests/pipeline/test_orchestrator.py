@@ -2,12 +2,15 @@
 Tests for src/jd_matcher/pipeline.py (C11 — Pipeline orchestrator).
 
 AC coverage:
-  AC1 — 3 runs × 4 sources = 12 pipeline_runs rows, all with non-null health_status
+  AC1 — 3 runs × 2 sources = 6 pipeline_runs rows, all with non-null health_status
   AC2 — hydrator_linkedin failure does not cascade to other sources
   AC3 — source_failure event emitted on healthy → failed transition
   AC4 — structured JSON log written; ≥1 line per step; all lines parse; no stdout
-  AC5 — 5 LinkedIn + 5 Indeed fixture emails → N unique postings in DB
+  AC5 — 5 LinkedIn fixture emails → N unique postings in DB
   AC6 — idempotency: second run on same mailbox produces 0 new postings
+
+PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+When Indeed is re-activated at MVP-M1, these tests need to revert to dual-source expectations.
 """
 
 from __future__ import annotations
@@ -101,15 +104,17 @@ def _events_of_type(db_path: Path, event_type: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# AC1 — 3 runs × 4 sources = 12 pipeline_runs rows, all with non-null health_status
+# AC1 — 3 runs × 2 sources = 6 pipeline_runs rows, all with non-null health_status
+# PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+# When Indeed is re-activated at MVP-M1, revert counts: 2 sources → 4, 6 rows → 12.
 # ---------------------------------------------------------------------------
 
 
 class TestMandatoryPersistence:
-    def test_three_runs_produce_twelve_rows(
+    def test_three_runs_produce_six_rows(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each of 3 pipeline runs writes exactly 4 rows — 12 total."""
+        """Each of 3 pipeline runs writes exactly 2 rows — 6 total."""
         run_ids = []
         for _ in range(3):
             summary = run_pipeline(db_path=test_db)
@@ -118,8 +123,8 @@ class TestMandatoryPersistence:
         rows = _all_pipeline_runs(test_db)
         # Filter to rows with run_ids from the orchestrator (not sub-run ingester rows)
         orch_rows = [r for r in rows if r[0] in run_ids]
-        assert len(orch_rows) == 12, (
-            f"Expected 12 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
+        assert len(orch_rows) == 6, (
+            f"Expected 6 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
         )
 
     def test_all_rows_have_non_null_health_status(
@@ -136,14 +141,18 @@ class TestMandatoryPersistence:
             conn.close()
         assert null_rows == [], f"Found rows with NULL health_status: {null_rows}"
 
-    def test_four_sources_per_run(
+    def test_two_sources_per_run(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each run produces exactly one row for each of the 4 M1 sources."""
+        """Each run produces exactly one row for each of the 2 PoC sources.
+
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, expected set reverts to 4 sources.
+        """
         summary = run_pipeline(db_path=test_db)
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         sources_written = {r[0] for r in rows}
-        expected = {"gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"}
+        expected = {"gmail_linkedin", "hydrator_linkedin"}
         assert sources_written == expected, (
             f"Sources in pipeline_runs mismatch. Got: {sources_written}"
         )
@@ -158,94 +167,36 @@ class TestPerSourceIsolation:
     def test_hydrator_linkedin_failure_does_not_cascade_to_gmail_sources(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Forcing hydrator_linkedin to raise must not prevent Gmail sources from completing.
+        """Forcing hydrator_linkedin to raise must not prevent gmail_linkedin from completing.
 
-        Note: hydrator_indeed may also be degraded/failed depending on fixture coverage
-        (many indeed job IDs from emails have no matching hydration fixture), so we only
-        assert that the Gmail sources remain healthy and that linkedin failure is isolated.
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, also assert gmail_indeed remains healthy.
         """
-        from jd_matcher.hydrate.indeed import HydratedIndeedJD
-        from datetime import date
-
         def _raise_on_linkedin(url: str, fixtures_dir: Any = None) -> None:
             raise RuntimeError("Simulated hydrator_linkedin failure")
 
-        def _healthy_indeed(url: str, fixtures_dir: Any = None) -> HydratedIndeedJD:
-            return HydratedIndeedJD(
-                url=url,
-                job_id="test",
-                title="Test Job",
-                company="Test Co",
-                location="Vancouver",
-                description="Test description",
-                posted_date=None,
-                seniority_level=None,
-                employment_type=None,
-                industries=None,
-                raw_html=b"<html>ok</html>",
-                hydration_status="complete",
-                failure_reason=None,
-            )
-
-        with patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise_on_linkedin), \
-             patch("jd_matcher.pipeline.indeed_hydrate", side_effect=_healthy_indeed):
+        with patch("jd_matcher.pipeline.linkedin_hydrate", side_effect=_raise_on_linkedin):
             summary = run_pipeline(db_path=test_db)
 
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         row_by_source = {r[0]: r for r in rows}
 
-        # Confirm all 4 sources have rows
-        assert set(row_by_source.keys()) == {
-            "gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"
-        }
+        # Confirm both PoC sources have rows
+        assert set(row_by_source.keys()) == {"gmail_linkedin", "hydrator_linkedin"}
 
         # hydrator_linkedin: since Fix 2b added per-URL exception handling,
         # individual URL exceptions are caught and skipped (not propagated to the
         # outer try/except). All URLs raise → results=[] → compute_source_health([])
         # returns "healthy". The invariant is that it DOES NOT cascade to Gmail sources,
-        # not that it must be marked failed (that only happens if an exception escapes
-        # the outer try/except, which per-URL handling prevents).
+        # not that it must be marked failed.
         assert row_by_source["hydrator_linkedin"][1] in ("healthy", "degraded", "failed"), (
             "hydrator_linkedin must have a valid health_status row even when all URLs fail"
         )
 
-        # Gmail sources are isolated from hydrator failures
-        for source in ("gmail_linkedin", "gmail_indeed"):
-            assert row_by_source[source][1] == "healthy", (
-                f"{source} should be healthy but got {row_by_source[source][1]}"
-            )
-
-        # indeed hydrator should be healthy (mocked to return complete results)
-        assert row_by_source["hydrator_indeed"][1] == "healthy", (
-            "hydrator_indeed should be healthy (mocked to return complete results)"
+        # gmail_linkedin is isolated from hydrator failures
+        assert row_by_source["gmail_linkedin"][1] == "healthy", (
+            f"gmail_linkedin should be healthy but got {row_by_source['gmail_linkedin'][1]}"
         )
-
-    def test_gmail_indeed_failure_does_not_cascade(
-        self, test_db: Path, skip_live: None, logs_dir: Path
-    ) -> None:
-        """Forcing gmail_indeed ingester to fail must not affect gmail_linkedin."""
-        import jd_matcher.pipeline as pipeline_mod
-
-        original_ingester = pipeline_mod.GmailIngester
-
-        class FaultyIngester:
-            def __init__(self, credentials: Any, db_path: Path) -> None:
-                self._inner = original_ingester(credentials, db_path)
-                self._db_path = db_path
-
-            def fetch_for_sender(self, sender: str, since_date: Any, run_id: str = "", canonical_run_id: str | None = None) -> list:
-                if sender == "indeed":
-                    raise RuntimeError("Simulated gmail_indeed ingester failure")
-                return self._inner.fetch_for_sender(sender, since_date, run_id=run_id, canonical_run_id=canonical_run_id)
-
-        with patch("jd_matcher.pipeline.GmailIngester", FaultyIngester):
-            summary = run_pipeline(db_path=test_db)
-
-        rows = _pipeline_runs_for_run(test_db, summary.run_id)
-        row_by_source = {r[0]: r for r in rows}
-
-        assert row_by_source["gmail_indeed"][1] == "failed"
-        assert row_by_source["gmail_linkedin"][1] == "healthy"
 
 
 # ---------------------------------------------------------------------------
@@ -433,17 +384,19 @@ class TestStructuredLogging:
 
 
 class TestEndToEndFixtureRun:
+    """PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+    When Indeed is re-activated at MVP-M1, restore Indeed fixture counting and
+    revert the docstring to "5 LinkedIn + 5 Indeed fixtures".
+    """
+
     def _count_unique_urls_in_fixtures(self, limit_per_source: int = 5) -> int:
-        """Count unique canonical URLs that the parsers extract from the first N fixtures."""
-        import re
-        from jd_matcher.ingest.gmail import GmailIngester, RawEmail
+        """Count unique canonical URLs that the LinkedIn parser extracts from the first N fixtures."""
+        from jd_matcher.ingest.gmail import RawEmail
         from jd_matcher.parse.linkedin_email import parse as parse_li
-        from jd_matcher.parse.indeed_email import parse as parse_in
         from datetime import datetime, timezone
         import email as _email_module
 
         li_files = sorted(LINKEDIN_EML_DIR.glob("*.eml"))[:limit_per_source]
-        in_files = sorted(INDEED_EML_DIR.glob("*.eml"))[:limit_per_source]
 
         seen: set[str] = set()
         for path in li_files:
@@ -458,18 +411,6 @@ class TestEndToEndFixtureRun:
             )
             for p in parse_li(raw):
                 seen.add(p.url)
-        for path in in_files:
-            body = path.read_bytes()
-            msg = _email_module.message_from_bytes(body)
-            raw = RawEmail(
-                id=path.stem,
-                sender=msg.get("From", ""),
-                subject=msg.get("Subject", ""),
-                received_at=datetime.now(timezone.utc),
-                body_bytes=body,
-            )
-            for p in parse_in(raw):
-                seen.add(p.url)
         return len(seen)
 
     def test_e2e_fixture_run_produces_expected_postings(
@@ -478,13 +419,12 @@ class TestEndToEndFixtureRun:
         logs_dir: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """5 LinkedIn + 5 Indeed fixtures → exactly N unique postings (N computed from fixtures)."""
+        """5 LinkedIn fixtures → exactly N unique postings (N computed from fixtures).
+
+        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+        When Indeed is re-activated at MVP-M1, also count Indeed fixture URLs here.
+        """
         monkeypatch.setenv("SKIP_LIVE", "1")
-
-        # Patch the fixture root to use only the first 5 of each
-        import jd_matcher.ingest.gmail as gmail_mod
-
-        original_root = gmail_mod._FIXTURES_ROOT
 
         class _LimitedIngester:
             """Ingester that only returns the first 5 .eml files per sender."""
@@ -502,7 +442,7 @@ class TestEndToEndFixtureRun:
         expected = self._count_unique_urls_in_fixtures(limit_per_source=5)
         actual = _count_postings(test_db)
         assert actual == expected, (
-            f"Expected {expected} postings from 5+5 fixtures, got {actual}"
+            f"Expected {expected} postings from 5 LinkedIn fixtures, got {actual}"
         )
 
 
@@ -558,24 +498,43 @@ class TestIdempotency:
 
 
 class TestPipelineRunSummary:
-    def test_summary_has_four_source_results(
+    """PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
+    When Indeed is re-activated at MVP-M1, revert counts: 2 sources → 4, 2 steps → 4.
+    """
+
+    def test_summary_has_two_source_results(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
         summary = run_pipeline(db_path=test_db)
         assert isinstance(summary, PipelineRunSummary)
-        assert len(summary.sources) == 4
+        assert len(summary.sources) == 2
 
     def test_summary_source_names_correct(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
+        """PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1)."""
         summary = run_pipeline(db_path=test_db)
         source_names = {s.source for s in summary.sources}
-        assert source_names == {
-            "gmail_linkedin", "gmail_indeed", "hydrator_linkedin", "hydrator_indeed"
-        }
+        assert source_names == {"gmail_linkedin", "hydrator_linkedin"}
 
     def test_summary_has_steps(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
+        """PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 — expect 2 steps, not 4."""
         summary = run_pipeline(db_path=test_db)
-        assert len(summary.steps) == 4
+        assert len(summary.steps) == 2
+
+
+# ---------------------------------------------------------------------------
+# PoC scope tripwire — Indeed deferred to MVP-M1
+# ---------------------------------------------------------------------------
+
+
+def test_gmail_sources_constant_is_linkedin_only_in_poc():
+    """PoC: Indeed deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28.
+    Re-enabling means flipping _GMAIL_SOURCES."""
+    from jd_matcher.pipeline import _GMAIL_SOURCES
+    assert _GMAIL_SOURCES == ("linkedin",), (
+        "Indeed deferred to MVP-M1; if re-activating, also update "
+        "ALIGNMENT-LOG and PRD §9 R3 status"
+    )

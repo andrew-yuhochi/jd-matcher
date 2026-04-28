@@ -153,6 +153,9 @@ def _fetch_live(url: str, job_id: str) -> HydratedIndeedJD:
     Uses a Session with the full M1-005b stealth stack (9 headers) so that
     Cloudflare's browser-check heuristics pass. Bare requests.get() with only
     a User-Agent header produces 403 on production Indeed URLs.
+
+    Auto-escalates to browser_fetcher when Cloudflare blocks the requests path
+    (detected via 403 + Cf-Mitigated: challenge header).
     """
     fetch_url = _VIEWJOB_URL.format(jk=job_id)
     HYDRATOR_RATE_LIMITER.wait()
@@ -186,30 +189,69 @@ def _fetch_live(url: str, job_id: str) -> HydratedIndeedJD:
         session.close()
 
     raw_html = resp.content
-    if resp.status_code != 200:
-        reason = f"http_{resp.status_code}"
-        if resp.status_code == 429:
-            reason = "429_rate_limited"
-        logger.warning(
-            "indeed hydrate: HTTP %s for job_id=%s", resp.status_code, job_id
-        )
-        return HydratedIndeedJD(
-            url=url,
-            job_id=job_id,
-            title=None,
-            company=None,
-            location=None,
-            description=None,
-            posted_date=None,
-            seniority_level=None,
-            employment_type=None,
-            industries=None,
-            raw_html=raw_html,
-            hydration_status="failed",
-            failure_reason=reason,
-        )
 
-    return _parse_html(raw_html, job_id, url)
+    is_cf_blocked = (
+        resp.status_code == 403
+        and resp.headers.get("Cf-Mitigated") == "challenge"
+    )
+
+    if resp.status_code == 200 and not is_cf_blocked:
+        return _parse_html(raw_html, job_id, url)
+
+    if is_cf_blocked or resp.status_code in (403, 429, 503):
+        logger.info(
+            "indeed hydrate: requests path blocked (status=%s); "
+            "escalating to browser_fetcher for job_id=%s",
+            resp.status_code,
+            job_id,
+        )
+        import jd_matcher.hydrate.browser_fetcher as _bf
+
+        html_bytes, source = _bf.fetch_html(fetch_url)
+        if html_bytes is None:
+            return HydratedIndeedJD(
+                url=url,
+                job_id=job_id,
+                title=None,
+                company=None,
+                location=None,
+                description=None,
+                posted_date=None,
+                seniority_level=None,
+                employment_type=None,
+                industries=None,
+                raw_html=raw_html,
+                hydration_status="failed",
+                failure_reason=f"browser_fetcher_failed_all_tiers (last requests={resp.status_code})",
+            )
+        logger.info(
+            "indeed hydrate: browser_fetcher succeeded via %s for job_id=%s",
+            source,
+            job_id,
+        )
+        return _parse_html(html_bytes, job_id, url)
+
+    reason = f"http_{resp.status_code}"
+    if resp.status_code == 429:
+        reason = "429_rate_limited"
+    logger.warning(
+        "indeed hydrate: HTTP %s for job_id=%s", resp.status_code, job_id
+    )
+    return HydratedIndeedJD(
+        url=url,
+        job_id=job_id,
+        title=None,
+        company=None,
+        location=None,
+        description=None,
+        posted_date=None,
+        seniority_level=None,
+        employment_type=None,
+        industries=None,
+        raw_html=raw_html,
+        hydration_status="failed",
+        failure_reason=reason,
+    )
 
 
 def _parse_html(html_bytes: bytes, job_id: str, source_url: str) -> HydratedIndeedJD:

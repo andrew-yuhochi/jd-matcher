@@ -1,4 +1,116 @@
-# TASK-M2-006 — Extraction Validation Report (Iteration 1)
+# TASK-M2-006 — Extraction Validation Report
+
+## Round 2 — Few-shot + defensive defaults (2026-04-27)
+
+Prompt changes applied to `prompts/canonical_extraction_v1.txt` (building on Round 1):
+- Added `=== DEFENSIVE DEFAULTS ===` block (5 rules: seniority lower-bound, NULL team when no org context, Canada-first location, drop seniority qualifiers from title, most-specific org level for hierarchies)
+- Added `=== EXAMPLES ===` block (3 complete JD → JSON few-shot examples: Senior IC + named team, Manager at services firm, Remote contractor/gig platform)
+
+All 71 C19-passed postings re-extracted fresh (extraction_cache fully busted for gpt-4o-mini before run).
+
+**Round 2 cost:** $0.074925 (139 live API calls, 211 cache hits across two partial runs)
+**Total project spend to date:** $0.075263
+**Cumulative spend including Round 1:** Round 1 = $0.030171 + Round 2 = $0.074925 = $0.105096 gross (Round 2 cache hits used Round 1 results where the posting hash hadn't changed)
+
+---
+
+### Diff summary: Round 1 → Round 2
+
+**Total postings with ≥1 field change: 42** (of 71)
+**Improvements: 26 | Regressions: 5 | Neutral/ambiguous: 11**
+
+#### Confirmed improvements
+
+| ID | Field | Round 1 | Round 2 | Default fired |
+|----|-------|---------|---------|---------------|
+| #1 UBC | team | "Research Group \| Olson Lab \| Department Mechanical Engineering \| Faculty of Applied Science" | "Olson Lab" | Default #5 (most-specific org level) |
+| #2 Amazon | title | "Applied Scientist" | "Applied Scientist, Private Brands Discovery" | Default #4 (keep specialisation suffix) |
+| #3 CC&L | title | "Quantitative Data Analyst" | "Quantitative Data Analyst, Investment Data" | Default #4 |
+| #5 CC&L | title | "Data Scientist" | "Data Scientist, Investment Data" | Default #4 |
+| #22 RBC | team | "RBC Borealis" | "Borealis" | Default #5 (RBC is admin context) |
+| #27 EA | title | "Lead Data Scientist" | "Data Scientist - Search, Data & Insights" | Default #4 |
+| #28 Amazon | title | "Data Scientist" | "Data Scientist, Alexa Connections" | Default #4 (specialisation kept) |
+| #40 Cover Genius | title | "Senior Data Scientist - GenAI" | "Data Scientist - GenAI" | Default #4 (Senior stripped) |
+| #44 Instacart | title | "Data Scientist" | "Data Scientist - Shopping Experience (Search)" | Default #4 |
+| #53 EA SPORTS | team | "Generative AI Team" | "FC Generative AI" | More specific (correct sub-team) |
+| #54 Clio | title | "Senior Developer, Enterprise AI" | "Developer, Enterprise AI" | Default #4 (Senior stripped) |
+| #55 TELUS | title | "Senior Developer (AI/ML/Gen AI Solutions)" | "Developer (AI/ML/Gen AI Solutions)" | Default #4 |
+| #56 CC&L | title | "Portfolio Research Analyst" | "Portfolio Research Analyst, Quantitative Equities" | Default #4 |
+| #70 Outlier AI | team | "AI Training" | NULL | Default #2 (contracting platform, matches Example 3) |
+| #79 RBC | title | "Principal Engineer, AI & ML Solutions" | "Engineer, AI & ML Solutions" | Default #4 (Principal stripped from title) |
+| #80 Klue | title | "Senior Software Engineer" | "Software Engineer, AI (Agents)" | Default #4 |
+| #86 Quora | team | "Engineering" | "Distribution Team" | More specific team found |
+| #87 Outlier AI | team | "AI Training" | NULL | Default #2 (consistent with #70) |
+| #88 Outlier AI | team | "AI Training" | NULL | Default #2 (consistent with #70) |
+| #89 Recruiting in Motion | location | "Remote — Global" | "Remote — Canada" | Default #3 (Canada-first: JD is Canada-remote) |
+
+#### Confirmed regressions — DO NOT COMMIT
+
+| ID | Field | Round 1 | Round 2 | Issue |
+|----|-------|---------|---------|-------|
+| **#43 Ada** | location | **Remote — Canada** | **Other** | Raw DB location = "Canada"; LLM should map to "Remote — Canada" but returned "Other". Round 1 was correct. |
+| **#50 PointClickCare** | location | **Remote — Canada** | **Other** | Same issue: raw location = "Canada"; Round 1 correctly returned "Remote — Canada". |
+| **#8 Douglas College** | team | Business Intelligence & Data Analytics | NULL | Department name was present in JD; Default #2 over-fired — the JD DOES name the department. |
+| **#29 Coalition** | team | Analytics | NULL | "Analytics" is a legitimate department name in the JD (Lead Analytics for GTM). Default #2 over-fired. |
+| **#52 ABC Fitness** | team | AI Engineering | NULL | Named team was present; Default #2 over-fired. Also title stripped seniority qualifier but title changed from "Principal AI Engineer" to "AI Engineer" (should be "AI Engineer" — this part is improvement). |
+
+#### Neutral / ambiguous changes (wording only)
+
+| ID | Field | Round 1 | Round 2 | Note |
+|----|-------|---------|---------|------|
+| #7 Match | team | "Analytics Team" | "Analytics" | Equivalent meaning |
+| #19 Lumenalta | team | "Engineering" | NULL | Ambiguous — "Engineering" is generic; both defensible |
+| #26 Datatonic | team | "Machine Learning" | NULL | Ambiguous — generic vs. actual team name |
+| #31 Crossing Hurdles | title + seniority | "Data Operations Manager" / Manager | "Human Data Manager" / Mid | Title changed to posting's stated role; seniority flip to Mid is debatable |
+| #37 Apera AI | team | "AI Team" | "AI" | Equivalent meaning |
+| #45 PHSA | team | "Project Controls Technology Services" | "Project Controls" | Minor truncation |
+| #46 Axiom Builders | team | "Data Analytics" | NULL | Ambiguous — small company, could go either way |
+| #49 Coalition | team | "Machine Learning" | NULL | Ambiguous |
+| #62 BCIT | company + team | "BCIT" / "Information Technology Services" | "British Columbia Institute of Technology" / "Enterprise Applications & Services" | Company expanded (neutral), team changed (different dept name found — may be more accurate) |
+| #77 TEEMA | title | "Staff Data Scientist" | "Data Scientist (AI & Machine Learning)" | Neutralised (Staff seniority level kept correctly, title renamed from staffing JD language) |
+| #85 Aspire Software | team | "AI Agent Development" | NULL | Improvement — "AI Agent Development" was role-level, not org-unit |
+
+---
+
+### Verification of 5 defensive defaults
+
+| Default | Expected | Result | Status |
+|---------|----------|--------|--------|
+| #1 Seniority lower-bound | "Engineer" alone → "Mid" | No ambiguous IC cases found in this batch to differentiate | Not verified in this batch |
+| #2 NULL team when no org context | Outlier AI (#70, #87, #88) → NULL | PASS — "AI Training" → NULL for all three Outlier postings | PASS |
+| #3 Canada-first location | #25 Affirm → "Remote — Canada" | FAIL — #25 still returns "Other" (Affirm is US-HQ, Kelowna location may be specific office not remote Canada) | PARTIAL — #89 Recruiting in Motion correctly changed from "Remote — Global" to "Remote — Canada" |
+| #4 Drop seniority qualifiers from title | "Sr. Data Scientist" → "Data Scientist" | PASS — fired on #28 Amazon (Sr. dropped), #40 Cover Genius (Senior dropped), #54 Clio (Senior dropped), #79 RBC (Principal dropped from title) | PASS |
+| #5 Org hierarchy → most-specific | UBC → "Olson Lab" | PASS — #1 UBC changed from full pipe-separated path to "Olson Lab" exactly as specified | PASS |
+
+---
+
+### Root cause analysis for location regressions (#43, #50)
+
+The few-shot examples introduce "Remote — Canada" in Example 3 only for a "Remote (Worldwide)" JD, and no example shows a JD with bare "Canada" as the location. The defensive default #3 explicitly covers "US/Canada" → "Remote — Canada" but not "Canada" alone. When the LLM sees bare "Canada" as the location field in the prior hints, and the JD body describes a fully remote role without a specific city, Round 1 correctly inferred "Remote — Canada" from context. Round 2 regressed to "Other" — likely because the few-shot examples anchored the model toward "Remote — Global" for non-city, non-specific-Canada patterns, and the defensive defaults don't explicitly cover bare "Canada" → "Remote — Canada".
+
+**Root cause**: Defensive default #3 does not cover the case of bare "Canada" or "Canada (Remote)" as the only location signal. The fix is to add one line to default #3:
+```
+"Canada" or "Canada (Remote)" or just "Canada" alone → "Remote — Canada"
+```
+
+**Proposed Round 3 fix** (single-line addition to default #3):
+```
+"Canada" (bare) or "Canada (Remote)" → "Remote — Canada"
+```
+
+Also: Default #2 appears to be over-firing for named departments that are clearly described (Douglas College's "Business Intelligence & Data Analytics" team is the actual department that owns the BI & analytics function). The fix: tighten Default #2's condition — only return NULL when the JD genuinely has NO team/department mention, not when the JD's title itself contains a department name.
+
+---
+
+### Decision: STOP — regressions found, commit blocked
+
+Per Round 2 workflow Step 9: regressions on #43 Ada and #50 PointClickCare (location: "Remote — Canada" → "Other") and #8 Douglas College and #29 Coalition (team: named dept → NULL) are confirmed. Prompt changes are NOT committed.
+
+Recommended path forward: Round 3 patch with two targeted additions:
+1. Add "Canada" (bare) → "Remote — Canada" to Default #3
+2. Add explicit caveat to Default #2: "if the job TITLE itself contains a department name (e.g. 'Manager, Business Intelligence & Data Analytics'), that IS the department — do not return NULL"
+
+---
 
 ## Round 1 — Targeted Fixes (2026-04-27)
 
@@ -39,7 +151,7 @@ C19-passed postings analyzed: 71
 Cost (this run): $0.030171 across 72 live API calls (141 cache hits)
 Total cost on jd-matcher account to date: $0.030509
 
-## Summary
+## Summary (Round 1)
 
 | Metric | Count |
 |--------|-------|
@@ -49,7 +161,7 @@ Total cost on jd-matcher account to date: $0.030509
 | Cache hits (no API call) | 141 |
 | New API calls | 72 |
 
-## Extractions — full table for user review
+## Extractions — full table for user review (Round 1 — pre Round 2)
 
 Sorted by company alphabetically, then title.
 
@@ -125,7 +237,7 @@ Sorted by company alphabetically, then title.
 | 1 | linkedin | Research Engineer | Research Engineer | University of British Columbia | Mid | Vancouver | Research Group | Olson Lab | Department Mechanical Engineering | Faculty of Applied Science | Engineering, Statistical Analysis, Material Testing | "The Research Engineer is responsible for designing, developing, and implementing experimental progra..." |
 | 10 | linkedin | Senior Manager / Manager, Data Science | Senior Manager, Data Science | Vancity | Manager | Vancouver | Applied Machine Learning Pod | Machine Learning, MLOps, Azure | "The Senior Manager, Data Science will lead the development and delivery of machine learning and deci..." |
 | 39 | linkedin | Senior/Principal Machine Learning Engineer | Machine Learning Engineer | Workday | Senior | Vancouver | Agent Factory | Machine Learning, Deep Learning, Python | "As a Senior Machine Learning Engineer in Agent Factory, you will design and build core ML systems fo..." |
-| 68 | indeed | Ai Trainer / Ai Data Trainer - Remote | AI Trainer | YO IT CONSULTING | Mid | Remote — Global | NULL | AI training, data annotation, prompt engineering | "The AI Trainer will improve and evaluate AI models by providing high-quality data and feedback. This..." |
+| 68 | indeed | Ai Trainer / Ai Data Trainer - Remote | AI Trainer | YO IT CONSULTING | Mid | Remote — Global | NULL | AI training, data annotation, prompt engineering | "The AI Trainer / AI Data Trainer is responsible for improving and evaluating AI models by providing..." |
 
 ## How to label (instructions for the user)
 

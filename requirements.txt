@@ -25,3 +25,6 @@ typing-inspection==0.4.2
 click==8.3.3
 # LLM provider (M2+)
 openai==2.32.0
+# Browser-based URL fetcher — Cloudflare bypass (TASK-M2-014)
+# Run once after install: .venv/bin/python -m patchright install chromium
+patchright==1.52.0
