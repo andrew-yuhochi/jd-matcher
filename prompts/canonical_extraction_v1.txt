@@ -44,6 +44,15 @@ IGNORE HR classifications when extracting seniority:
 Extract seniority from the IC level title (Engineer I, Senior Engineer,
 Principal Scientist, etc.) or, if not stated, default to "Mid".
 
+=== TOP AI LAB SENIORITY CONVENTIONS ===
+"Member of Technical Staff" / "MTS" at top AI labs (Cohere, OpenAI,
+Anthropic, Google DeepMind, Meta AI, Mistral, Perplexity, Inflection)
+is a SENIOR IC role:
+  "Member of Technical Staff" → "Senior" by default
+  "Sr. Member of Technical Staff" / "Senior MTS" → "Staff"
+  "Member of Technical Staff II" → "Staff" (II suffix at MTS = senior tier)
+This convention overrides the "no level prefix → Mid" default for these companies.
+
 === CANONICAL LOCATION ===
 Use ONLY these values — never return a province, country, or postal code:
   Vancouver | Toronto | Montreal | Calgary | Edmonton | Ottawa | Halifax
@@ -90,6 +99,24 @@ Use short canonical labels: "Python", "SQL", "PyTorch", "Spark", "dbt", "Kuberne
 3–4 neutral sentences summarising the role for deduplication embedding.
 No marketing language ("exciting opportunity", "world-class team"), no salary figures, no company boilerplate.
 Focus on: what the role does, what skills are central, what the team works on, seniority/scope.
+
+=== CANONICAL TITLE ===
+Use the job title as posted, with the following normalizations:
+  Strip leading/trailing whitespace.
+  Normalize internal whitespace (collapse multiple spaces).
+  Preserve the title's original capitalization (do not uppercase or lowercase).
+
+=== TITLE SPECIALIZATION PARENTHETICALS ===
+Preserve parenthetical specialization suffixes that identify the role's
+focus area:
+  "Senior Developer (AI/ML/Gen AI Solutions)" → keep "(AI/ML/Gen AI Solutions)"
+  "Software Engineer (Machine Learning)" → keep "(Machine Learning)"
+  "Backend Engineer (Data Platform)" → keep "(Data Platform)"
+
+Drop parenthetical suffixes that are administrative noise:
+  "Senior Data Scientist (Remote)" → drop "(Remote)" (location-only)
+  "Senior Data Scientist (1-Year Contract)" → drop "(1-Year Contract)" (contract-type)
+  "Senior Data Scientist (LinkedIn Auto-Apply)" → drop (system label)
 
 === JSON SCHEMA ===
 {
