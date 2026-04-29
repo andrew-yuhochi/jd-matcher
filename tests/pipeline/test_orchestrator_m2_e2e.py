@@ -11,21 +11,27 @@ AC coverage:
            stage pipeline_runs counts.
 
 AC #3, #4, #5 are covered in tests/state/test_canonical_view.py.
+
+Regression guard (added 2026-04-29):
+  test_two_postings_with_shared_block_key_merge_correctly — prevents the Phase 5
+  batch-decide / Phase 6 batch-apply split that caused 0 merges (commit 233e050).
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import struct
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from jd_matcher.db.init_db import init_db
-from jd_matcher.pipeline import run_pipeline
+from jd_matcher.pipeline import SourceResult, run_pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +277,182 @@ class TestCostWatchdog:
 
         # Pipeline must complete with a run_id (not raise)
         assert summary.run_id is not None
+
+
+# ---------------------------------------------------------------------------
+# Regression guard: per-posting interleaved decide+apply (fixes commit 233e050)
+# ---------------------------------------------------------------------------
+
+
+def _make_unit_vector(dim: int = 8) -> bytes:
+    """Return a packed float32 unit vector of `dim` dimensions."""
+    arr = np.ones(dim, dtype=np.float32)
+    arr = arr / np.linalg.norm(arr)
+    return arr.tobytes()
+
+
+def _seed_posting(
+    conn: sqlite3.Connection,
+    *,
+    company: str,
+    location: str,
+    title: str,
+    seniority: str,
+    skills_json: str,
+) -> int:
+    """Insert a minimal posting row and return its id."""
+    now = datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """
+        INSERT INTO postings
+            (user_id, canonical_company, canonical_title, canonical_location,
+             seniority_band, top_skills, hydration_status, first_seen, last_seen)
+        VALUES ('default', ?, ?, ?, ?, ?, 'complete', ?, ?)
+        """,
+        (company, title, location, seniority, skills_json, now, now),
+    )
+    conn.commit()
+    return cur.lastrowid  # type: ignore[return-value]
+
+
+def _seed_embedding(
+    conn: sqlite3.Connection,
+    posting_id: int,
+    vector_blob: bytes,
+    dim: int = 8,
+) -> None:
+    """Insert a posting_embeddings row for posting_id with the given vector."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        INSERT INTO posting_embeddings
+            (posting_id, user_id, text_source, text_hash, embedding,
+             embedding_dim, model_name, embedded_at)
+        VALUES (?, 'default', 'role_summary', 'deadbeef', ?, ?, 'text-embedding-3-small', ?)
+        """,
+        (str(posting_id), vector_blob, dim, now),
+    )
+    conn.commit()
+
+
+class TestDedupMergeInterleave:
+    """Regression guard for the batch-decide / batch-apply bug (commit 233e050).
+
+    The original pipeline batched ALL decide() calls before ANY apply() calls.
+    Because decide() reads canonical_postings to find block candidates, every
+    decide() saw an empty table → 0 merges.
+
+    After the fix, decide+apply run per-posting.  This test verifies that two
+    postings with an identical BLOCK key (company + team_or_department + location)
+    AND identical embeddings actually merge instead of both becoming new_canonicals.
+    """
+
+    def test_two_postings_with_shared_block_key_merge_correctly(
+        self, test_db: Path, logs_dir: Path
+    ) -> None:
+        """Two identical postings must produce 1 canonical (not 2).
+
+        Would have FAILED on commit 233e050 (0 merges → 2 canonicals).
+        Must PASS after the per-posting interleave fix.
+        """
+        conn = sqlite3.connect(test_db)
+
+        # Shared block-key attributes — identical across both postings
+        COMPANY = "Acme Corp"
+        LOCATION = "Vancouver, BC"
+        TITLE = "Senior Data Scientist"
+        SENIORITY = "Senior"
+        SKILLS = '["python", "machine learning", "sql"]'
+        VEC_BLOB = _make_unit_vector(dim=8)
+        DIM = 8
+
+        pid1 = _seed_posting(
+            conn,
+            company=COMPANY,
+            location=LOCATION,
+            title=TITLE,
+            seniority=SENIORITY,
+            skills_json=SKILLS,
+        )
+        pid2 = _seed_posting(
+            conn,
+            company=COMPANY,
+            location=LOCATION,
+            title=TITLE,
+            seniority=SENIORITY,
+            skills_json=SKILLS,
+        )
+        _seed_embedding(conn, pid1, VEC_BLOB, DIM)
+        _seed_embedding(conn, pid2, VEC_BLOB, DIM)
+        conn.close()
+
+        empty_source_result = SourceResult(
+            source="gmail_linkedin", health_status="healthy"
+        )
+
+        # Patch heavy phases so they are no-ops:
+        #   - Gmail source runner: returns empty SourceResult (no postings fetched)
+        #   - Hydrator source runner: returns empty SourceResult (no hydration)
+        #   - LLM extraction: bypassed (postings have no full_jd → pending list = [])
+        #   - Embedding: bypassed (postings already have posting_embeddings rows)
+        #   - title_cosine: return 1.0 so fuse score = 0.4+0.3+0.2+0.1 = 1.0 ≥ 0.90
+        with (
+            patch(
+                "jd_matcher.pipeline._run_gmail_source",
+                return_value=empty_source_result,
+            ),
+            patch(
+                "jd_matcher.pipeline._run_hydrator_source",
+                return_value=empty_source_result,
+            ),
+            patch(
+                "jd_matcher.dedup.engine.title_cosine",
+                return_value=1.0,
+            ),
+        ):
+            summary = run_pipeline(db_path=test_db)
+
+        # --- Assertions ---
+        db_conn = sqlite3.connect(test_db)
+        try:
+            canonical_count = db_conn.execute(
+                "SELECT COUNT(*) FROM canonical_postings"
+            ).fetchone()[0]
+            link_count = db_conn.execute(
+                "SELECT COUNT(*) FROM posting_canonical_links"
+            ).fetchone()[0]
+            # The second posting's link must be 'content_dedup', not 'new_canonical'
+            merge_kind_for_pid2 = db_conn.execute(
+                "SELECT merge_kind FROM posting_canonical_links WHERE posting_id = ?",
+                (str(pid2),),
+            ).fetchone()
+            # Both postings share the same canonical_id
+            canonical_ids = db_conn.execute(
+                "SELECT DISTINCT canonical_id FROM posting_canonical_links"
+            ).fetchall()
+        finally:
+            db_conn.close()
+
+        assert canonical_count == 1, (
+            f"Expected 1 canonical_posting (two identical postings must merge), "
+            f"got {canonical_count}. This indicates the batch-decide/batch-apply "
+            f"bug has regressed."
+        )
+        assert link_count == 2, (
+            f"Expected 2 posting_canonical_links (both postings linked), got {link_count}"
+        )
+        assert merge_kind_for_pid2 is not None, (
+            f"posting {pid2} has no posting_canonical_links row"
+        )
+        assert merge_kind_for_pid2[0] == "content_dedup", (
+            f"posting {pid2} should be 'content_dedup', got '{merge_kind_for_pid2[0]}'"
+        )
+        assert len(canonical_ids) == 1, (
+            f"Both postings must share the same canonical_id, got {canonical_ids}"
+        )
+        assert summary.new_canonicals_created == 1, (
+            f"PipelineRunSummary.new_canonicals_created should be 1, got {summary.new_canonicals_created}"
+        )
+        assert summary.merges_applied == 1, (
+            f"PipelineRunSummary.merges_applied should be 1, got {summary.merges_applied}"
+        )

@@ -395,12 +395,27 @@ def run_pipeline(
     )
 
     # -----------------------------------------------------------------------
-    # Phase 5: C21 — Dedup decision (read-only)
-    # Collects decisions; C29/C30 application happens in Phase 6.
-    # Skips posting_ids that already have a posting_canonical_links row
-    # (idempotency — re-running the pipeline doesn't double-link).
+    # Phase 5 (combined): C21 decide + C30 repost + C29 apply — per-posting loop
+    #
+    # Each posting's decide → detect_repost → apply runs atomically before the
+    # next posting's decide() executes.  This is critical: dedup_decide() reads
+    # canonical_postings to find block candidates.  If decide() were batched
+    # across all postings before any apply() wrote to canonical_postings (the
+    # original two-phase bug in commit 233e050), every decide() would see an
+    # empty canonical_postings table → every posting gets action='new' → 0
+    # merges.  The per-posting interleave ensures that posting B's decide() sees
+    # the canonical that posting A's apply() just created.
+    #
+    # Both pipeline_runs rows (dedup_c21 + dedup_merge_c29) are still written
+    # separately per TDD §C11 M2-update — they record stats from this combined
+    # loop and are preserved for cost/health observability.
+    #
+    # Idempotency: skips posting_ids that already have a posting_canonical_links
+    # row (re-running the pipeline doesn't double-link).
     # -----------------------------------------------------------------------
     step_label = "Dedup decisions (C21)…"
+    steps_emitted.append(step_label)
+    step_label = "Merge apply (C29+C30)…"
     steps_emitted.append(step_label)
 
     dedup_total = 0
@@ -408,8 +423,14 @@ def run_pipeline(
     dedup_merge = 0
     dedup_full_jd_skipped = 0
     dedup_block_zero = 0
-    # List of (posting_id, DedupDecision) pairs for Phase 5 to apply
-    pending_decisions: list[tuple[int, DedupDecision]] = []
+    merges_applied = 0
+    new_canonicals_created = 0
+    reposts_detected = 0
+
+    dedup_health_status = "healthy"
+    dedup_failure_reason: str | None = None
+    merge_health_status = "healthy"
+    merge_failure_reason: str | None = None
 
     try:
         embedded_ids = _get_embedded_posting_ids(resolved_db)
@@ -424,6 +445,8 @@ def run_pipeline(
                     })
                 )
                 continue
+
+            # --- C21: decide ---
             try:
                 decision: DedupDecision = dedup_decide(pid, db_path=resolved_db)
                 dedup_total += 1
@@ -435,7 +458,6 @@ def run_pipeline(
                     dedup_full_jd_skipped += 1
                 if decision.stage1_block_size == 0:
                     dedup_block_zero += 1
-                pending_decisions.append((pid, decision))
                 logger.info(
                     json.dumps({
                         "event": "dedup_decision",
@@ -458,59 +480,14 @@ def run_pipeline(
                         "error": f"{type(exc).__name__}: {exc}",
                     })
                 )
+                continue  # can't apply without a decision
 
-        _write_pipeline_run(
-            resolved_db,
-            run_id=run_id,
-            source="dedup_c21",
-            health_status="healthy",
-            failure_reason=None,
-            started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
-            last_successful_fetch_at=datetime.now(timezone.utc),
-        )
-        logger.info(
-            json.dumps({
-                "event": "dedup_phase_complete",
-                "run_id": run_id,
-                "decisions_total": dedup_total,
-                "action_new": dedup_new,
-                "action_merge": dedup_merge,
-                "full_jd_skipped": dedup_full_jd_skipped,
-                "block_zero_short_circuit": dedup_block_zero,
-            })
-        )
-    except Exception as exc:
-        logger.error(
-            json.dumps({
-                "event": "dedup_phase_failed",
-                "run_id": run_id,
-                "error": f"{type(exc).__name__}: {exc}",
-            })
-        )
-
-    # -----------------------------------------------------------------------
-    # Phase 6: C30 → C29 — Repost detection + merge application
-    # For each decision collected in Phase 5:
-    #   1. detect_repost() — may retag merge_kind to 'repost'
-    #   2. apply_decision() — writes canonical_postings + posting_canonical_links
-    # -----------------------------------------------------------------------
-    step_label = "Merge apply (C29+C30)…"
-    steps_emitted.append(step_label)
-
-    merges_applied = 0
-    new_canonicals_created = 0
-    reposts_detected = 0
-
-    try:
-        for pid, raw_decision in pending_decisions:
+            # --- C30: repost detection + C29: apply (immediately after decide) ---
             try:
-                # C30: check for repost (no-op if action='new')
-                repost_decision = detect_repost(raw_decision, pid, db_path=resolved_db)
+                repost_decision = detect_repost(decision, pid, db_path=resolved_db)
                 if repost_decision.merge_kind == "repost":
                     reposts_detected += 1
 
-                # C29: apply the (possibly-retagged) decision
                 merge_result: MergeResult = dedup_apply(repost_decision, pid, db_path=resolved_db)
                 if merge_result.was_new:
                     new_canonicals_created += 1
@@ -538,33 +515,60 @@ def run_pipeline(
                     })
                 )
 
-        _write_pipeline_run(
-            resolved_db,
-            run_id=run_id,
-            source="dedup_merge_c29",
-            health_status="healthy",
-            failure_reason=None,
-            started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
-            last_successful_fetch_at=datetime.now(timezone.utc),
-        )
-        logger.info(
-            json.dumps({
-                "event": "merge_phase_complete",
-                "run_id": run_id,
-                "merges_applied": merges_applied,
-                "new_canonicals_created": new_canonicals_created,
-                "reposts_detected": reposts_detected,
-            })
-        )
     except Exception as exc:
+        dedup_health_status = "failed"
+        merge_health_status = "failed"
+        dedup_failure_reason = f"{type(exc).__name__}: {exc}"
+        merge_failure_reason = dedup_failure_reason
         logger.error(
             json.dumps({
-                "event": "merge_phase_failed",
+                "event": "dedup_merge_phase_failed",
                 "run_id": run_id,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": dedup_failure_reason,
             })
         )
+
+    _write_pipeline_run(
+        resolved_db,
+        run_id=run_id,
+        source="dedup_c21",
+        health_status=dedup_health_status,
+        failure_reason=dedup_failure_reason,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        last_successful_fetch_at=datetime.now(timezone.utc) if dedup_health_status == "healthy" else None,
+    )
+    logger.info(
+        json.dumps({
+            "event": "dedup_phase_complete",
+            "run_id": run_id,
+            "decisions_total": dedup_total,
+            "action_new": dedup_new,
+            "action_merge": dedup_merge,
+            "full_jd_skipped": dedup_full_jd_skipped,
+            "block_zero_short_circuit": dedup_block_zero,
+        })
+    )
+
+    _write_pipeline_run(
+        resolved_db,
+        run_id=run_id,
+        source="dedup_merge_c29",
+        health_status=merge_health_status,
+        failure_reason=merge_failure_reason,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        last_successful_fetch_at=datetime.now(timezone.utc) if merge_health_status == "healthy" else None,
+    )
+    logger.info(
+        json.dumps({
+            "event": "merge_phase_complete",
+            "run_id": run_id,
+            "merges_applied": merges_applied,
+            "new_canonicals_created": new_canonicals_created,
+            "reposts_detected": reposts_detected,
+        })
+    )
 
     # -----------------------------------------------------------------------
     # Cost-watchdog: emit WARNING if monthly LLM spend exceeds threshold.
