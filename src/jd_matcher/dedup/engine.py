@@ -206,29 +206,21 @@ def _block_lookup(
 ) -> list[_CanonicalCandidate]:
     """Query canonical_postings for BLOCK candidates.
 
-    Uses idx_canonical_user_block (user_id, canonical_company,
-    team_or_department, canonical_location).  NULL team_or_department
-    blocks ONLY against other NULLs.
-
-    Case-insensitive comparison is handled by normalising the lookup keys
-    to title-case before querying — this preserves the index scan on
-    idx_canonical_user_block (LOWER() wrapping in SQL defeats the index).
-    Values stored in canonical_postings originate from C18 LLM extraction
-    which uses consistent capitalisation; the normalisation here is a
-    safety net for test fixtures and cross-source variants.
+    Issues a single exact-case SQL query against idx_canonical_user_block
+    (user_id, canonical_company, team_or_department, canonical_location).
+    Case normalisation is the caller's responsibility — LOWER() / COLLATE
+    NOCASE in SQL would defeat the index scan (TDD §C21).  In practice,
+    C18 LLM extraction emits consistent capitalisation so exact-case
+    matching handles all real lookups correctly.  NULL team_or_department
+    blocks ONLY against other NULLs (strict by design, per TDD §C21).
 
     The NOT EXISTS clause excludes canonicals where any linked posting has
     applied.status IN ('Inactive', 'Expired').  No-op at M2; load-bearing
     at MVP-M1 when those statuses are introduced.
+
+    See TestBlockLookup in tests/dedup/test_engine.py for behaviour
+    verification, including the case-sensitivity contract.
     """
-    # Case-insensitive matching: idx_canonical_user_block is a BINARY-collation index,
-    # so LOWER() / COLLATE NOCASE in SQL defeats the index scan.  Instead, we normalise
-    # the lookup keys at the application layer (strip + lower) and search canonicals
-    # whose stored values lower() to the same string.  The two-query fan-out (first
-    # exact-case, then any remaining lower-case matches) is safe because canonical_id
-    # deduplication prevents double-counting.  In practice, C18 LLM extraction emits
-    # consistent capitalisation so the exact-case branch handles ≥99% of real lookups
-    # and the lower-case fan-out is a safety net for test fixtures.
     _NOT_EXISTS = """
         AND NOT EXISTS (
             SELECT 1

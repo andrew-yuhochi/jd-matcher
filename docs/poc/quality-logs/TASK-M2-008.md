@@ -102,7 +102,7 @@ Formula: `0.4 × emb + 0.3 × skills + 0.2 × title + 0.1 × seniority`
 |----------|-------|----------|--------|-------|
 | (i) Same company + different teams | Shopify/Marketing Analytics vs Shopify/Risk Analytics, Vancouver | action='new', block_size=0 | action='new', block_size=0 | PASS |
 | (ii) Same company + same team + different roles | TD Bank/Risk Analytics: Senior Risk Modeller (Credit) vs (Operational), orthogonal embeddings | action='new', block_size=1, score<0.90 | action='new', block_size=1, score=0.279 | PASS |
-| (iii) Cross-source same role → MERGE | Shopify/ML Platform: same ML Engineer from LinkedIn + Indeed, near-identical embeddings | action='merge', similarity≥0.90 | action='merge', similarity=0.96 | PASS |
+| (iii) Cross-source same role → MERGE | Shopify/ML Platform: same ML Engineer from LinkedIn + Indeed, near-identical embeddings | action='merge', similarity≥0.90 | action='merge', similarity=~0.9999 | PASS |
 | (iv) Same role + different location | Lumenalta/Data Platform, Vancouver vs Toronto | action='new', block_size=0 | action='new', block_size=0 | PASS |
 
 ---
