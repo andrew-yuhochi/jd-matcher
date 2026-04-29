@@ -218,3 +218,40 @@ Specific items requiring a decision if user overrides:
 - BACKLOG.md: 3 new MVP-M1 entries added (Indeed via personal machine / via commercial proxy / browser_fetcher.py asset note)
 - DATA-SOURCES.md: PoC status note appended to Indeed section
 M1 untouched (SC-2 + SC-3 already PASSED at M1; Indeed parsing + hydration are proven). Commercial thesis intact: Beta Gate 2 names Himalayas/Job Bank/HN/Remotive (not Indeed) as the non-LinkedIn proof sources, so LinkedIn-only PoC execution preserves the Beta evaluation surface. browser_fetcher.py committed by main session in a separate follow-up commit. See commit for SHA.
+
+---
+
+## 2026-04-29 — Add `role_orientation: list[str]` field to C18 canonical extraction (M2 / TASK-M2-006b Phase B)
+
+**Verdict**: DRIFTING
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN M2: "LLM extraction call producing `canonical_company / canonical_seniority / canonical_location / team_or_department / top_skills / role_summary` (used here for normalisation only — full classification deferred to M3)"
+- PRD §5 Scope IN M3: "Single LLM extraction prompt... producing all of: canonical fields + salary + tags + `primary_focus` + `fit_score` + `fit_reasoning` + `requires_pr_or_citizenship`"
+- TDD §1.0 M2 scope note: "steps 6 (LLM extraction — normalisation only, full classification still deferred to M3)"
+- TDD §1.0 FUSE formula (M2): "`0.4 × embedding_cosine(role_summary) + 0.3 × jaccard(top_skills) + 0.2 × title_cosine + 0.1 × seniority_match`" — role_orientation is not a current FUSE term
+- PRD §4 Phase Objectives (2): "Content-aware deduplication (LLM-extracted fields + embedding similarity, two-stage)"
+- PRD §5 Scope IN M4: "CV text extraction... cosine rank against `role_summary + top_skills` embedding" — role_orientation is listed as a downstream use for M4 CV matching, which is out of M2 scope
+
+**Analysis**: The verdict is DRIFTING, not VIOLATES, for three reasons. First, the field is classification — not normalisation. PRD §5 M2 explicitly confines the LLM extraction call to normalisation fields; the full classification layer (tags, focus, score, reasoning) is M3 scope. `role_orientation` is a classification tag (it categorises the role's mode of work), which makes it an M3 or later addition by PRD §5's own logic — adding it at M2 expands the extraction contract beyond the stated M2 boundary without changing the PRD. Second, both primary downstream uses are out of M2 scope: C21 FUSE (this milestone) does not include orientation as a FUSE term per TDD §1.0, so adding the field now gives M2 no observable benefit; M4 CV matching and UI filtering are later milestones. The field would sit inert in the schema through M2 and M3. Third, the proposal is not a VIOLATES because the field does not touch any PRD §6 Scope OUT clause (it is not auto-apply, CV rewriting, auth, billing, or any listed deferred category), and the implementation cost (~100 LOC, zero incremental LLM cost) is genuinely low. What makes it DRIFTING rather than ALIGNED: it expands the M2 LLM extraction contract beyond the normalisation-only boundary stated in PRD §5 M2, adds a schema column with no M2 or M3 AC attached to it, and produces no user-observable deliverable within the current milestone. Pattern note: this is the second non-normalisation field proposed for the M2 extraction pass (after top_skills canonicalization in M2-006b). No escalating drift pattern is observed — both are anchored to real downstream M4 uses — but the accumulation of M3/M4-serving fields into the M2 extraction prompt bears watching.
+
+**Recommendation**: DRIFTING — present the drift, then ask: "Override and add to TASK-M2-006b in-place, or park as BACKLOG item targeting M3?"
+
+Preferred framing if user overrides: add as a clearly-labelled sub-item inside TASK-M2-006b Phase C (prompt patch) with an explicit note that the field is M3/M4-serving, has no M2 AC, and its first measured quality check is deferred to M3 hand-label pass. Do not create a separate TASK-M2-006c — the implementation is small enough that a sub-item inside the active task is sufficient, and keeping it bundled avoids a phantom task with no AC of its own.
+
+Preferred framing if user parks: add to BACKLOG.md as "M3-candidate — `role_orientation` classification field (Engineering / Problem-Solving / Communication) — add to M3 single extraction prompt pass alongside tags and primary_focus; M4 CV matching and UI filter downstream uses; no FUSE weight in M2 per current TDD §1.0." This is the cleaner landing zone because M3 is already expanding the extraction prompt to full classification — `role_orientation` slots naturally into that expansion with a real AC (e.g., ≥80% label agreement on the 30 M3 hand-labeled postings, same set as SC-9/SC-10).
+
+**User decision**: Accepted Recommendation B — defer `role_orientation` to M3 alongside the full classification expansion. Field will NOT be added to M2-006b scope.
+**Outcome**: BACKLOG entry created under "Deferred to PoC M3 — role_orientation classification field" per Gate 2 protocol. TASK-M2-006b proceeds with top_skills canonicalization only (purely technical, 43-entry taxonomy). No schema change at M2. M3 will add `role_orientation` to the expanded classification prompt alongside tags, primary_focus, fit_score, and fit_reasoning, with a ≥80% label-agreement AC on the M3 30-posting hand-label set. See BACKLOG.md for full implementation spec. Logged 2026-04-29.
+
+---
+
+## 2026-04-29 — User decision follow-up: role_orientation defer accepted (TASK-M2-006b Phase B)
+
+- **Triggered by**: TASK-M2-006b Phase B completion — user reviewed BA DRIFTING verdict above
+- **Mode**: follow-up (no new BA analysis required)
+- **References**: BA entry immediately above (same date), BACKLOG.md "PoC-M3 — role_orientation"
+
+**User decision**: Accepted BA Recommendation B (defer `role_orientation` to M3). No override.
+**Action taken**: BACKLOG entry created (per Gate 2 step 3, user said defer). TASK-M2-006b Phase C–E proceeds without `role_orientation`. ALIGNMENT-LOG updated.
+**Outcome**: Logged per Gate 2 protocol. No ALIGNMENT-LOG amendment required — BA verdict stands as DRIFTING with user deferral, no override.

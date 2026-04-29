@@ -15,6 +15,49 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 ---
 
+## Deferred to PoC M3 — role_orientation classification field
+
+### PoC-M3 — `role_orientation` classification field (Engineering / Problem-Solving / Communication)
+
+**Decision date**: 2026-04-29
+**Approved by**: User (BA verdict DRIFTING; user chose Recommendation B — defer to M3)
+**Source**: TASK-M2-006b Phase B 2026-04-29 — BA verdict DRIFTING, user chose defer
+**Status**: Parked
+**Target phase**: M3
+
+**What**: Add a new field to the C18 canonical extraction at M3:
+
+```
+role_orientation: list[str]   # 1–3 items, each from
+                              #   {Engineering | Problem-Solving | Communication}
+```
+
+Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
+
+**Definitions**:
+- Engineering — executor: builds and ships systems / pipelines / models
+- Problem-Solving — researcher: designs methods to solve identified problems
+- Communication — consultant: works with stakeholders to discover bottlenecks and propose ideas
+
+**Rationale (why M3 not M2)**: `top_skills` must stay purely technical for clean FUSE Jaccard semantics. `role_orientation` is a first-class role attribute (not a technique). M3 already expands the C18 prompt for full classification (tags / primary_focus / fit_score / fit_reasoning); `role_orientation` slots in there with a natural AC.
+
+**Downstream uses**:
+- C21 FUSE small-weight term (~+0.05 × orientation_jaccard) — different orientations within same team are genuinely different roles
+- M4 CV recommendation: match posting orientation to user's CV variants
+- Web UI: tag posting card with orientation chip
+- MVP+ filtering: "show me engineering-heavy roles only"
+
+**Implementation cost at M3 (~100 LOC)**:
+- `ALTER TABLE postings ADD COLUMN role_orientation TEXT` (JSON list)
+- Pydantic field on `CanonicalExtraction` with len-1-to-3 validator
+- New `=== ROLE ORIENTATION ===` section in `canonical_extraction_v1.txt` with definitions + few-shot examples
+- 5 hand-crafted synthetic JDs with known orientation labels for regression
+- Re-extraction at M3 picks up the field automatically
+
+**AC (at M3)**: ≥80% label agreement on the M3 30-posting hand-label set (same set that gates SC-9 and SC-10).
+
+---
+
 ## Deferred to PoC M3 — Smart layer (LLM extraction + classification)
 
 - LLM extraction call producing fit_score, tags, salary, dedup fields, industry, PR-required flag, Canadian-employer-likelihood.

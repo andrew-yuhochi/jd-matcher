@@ -95,6 +95,82 @@ If the team name is unclear or the JD only describes the role itself
 Up to 10 skills ordered by salience (most prominent first).
 Use short canonical labels: "Python", "SQL", "PyTorch", "Spark", "dbt", "Kubernetes", "A/B testing", etc.
 
+=== TOP SKILLS — CANONICAL TAXONOMY ===
+
+top_skills MUST be SPECIFIC TECHNIQUES, FRAMEWORKS, TOOLS, OR LANGUAGES
+used in the role. Do NOT include soft skills (Communication, Collaboration,
+Problem-Solving, Analytical Skills, Teamwork, Leadership, Time Management,
+etc.) — those are role-orientation signals captured separately and MUST
+be excluded from top_skills entirely.
+
+When a skill in the JD matches one of the canonical forms below, return
+the EXACT canonical spelling (case + punctuation matters). Tail skills
+not in this list may be returned in their natural form.
+
+CANONICAL TAXONOMY (43 entries — emit the canonical form on the LEFT):
+
+Languages & databases:
+  Python · SQL
+
+ML / AI core:
+  Machine Learning   (use this for: ML, machine learning, AI/ML)
+  AI
+  Deep Learning      (use this for: deep learning, Neural Networks)
+  NLP                (use this for: Natural Language Processing,
+                      natural language processing)
+  LLMs               (use this for: LLM, Large Language Models)
+  Generative AI      (use this for: GenAI, generative ai)
+  Computer Vision
+  Causal Inference
+  Predictive Modeling
+  MLOps              (use this for: ML Engineering, mlops)
+
+ML frameworks:
+  PyTorch            (NOT Pytorch / pytorch)
+  TensorFlow         (NOT Tensorflow / tensorflow)
+  Scikit-Learn       (NOT scikit-learn / Scikit-learn)
+
+Data work:
+  Data Analysis · Data Engineering (use this for: Data Pipelines)
+  Data Science · Data Analytics · Data Visualization
+  Statistical Analysis · Statistics
+  A/B Testing · Feature Engineering · Data Mining
+  Data Modeling · Data Governance · Data Management · Data Quality
+
+Cloud & infrastructure:
+  AWS · GCP · Azure · Cloud Computing · Cloud Platforms
+  CI/CD · Kubernetes · Microservices · Databricks
+
+Big data:
+  Spark              (use this for: Apache Spark, PySpark)
+
+BI / reporting:
+  Power BI · Business Intelligence
+
+General techniques:
+  Optimization · Automation
+
+EXAMPLES (mapping JD wording → top_skills emission):
+
+JD mentions "experience with PySpark and Apache Spark for ETL"
+  → top_skills includes "Spark" (single entry, not "PySpark" + "Apache Spark")
+
+JD mentions "ML modeling, especially LLMs and GenAI prompt engineering"
+  → top_skills: ["Machine Learning", "LLMs", "Generative AI", ...]
+    (LLMs and Generative AI are kept separate — LLMs is a sub-skill)
+
+JD mentions "strong communication and collaboration skills, with NLP expertise"
+  → top_skills: ["NLP", ...]
+    (Communication and collaboration EXCLUDED — soft skills)
+
+JD mentions "Pytorch, tensorflow, and scikit-learn experience"
+  → top_skills: ["PyTorch", "TensorFlow", "Scikit-Learn", ...]
+    (canonical capitalization enforced)
+
+JD mentions "data pipelines and dbt"
+  → top_skills: ["Data Engineering", "dbt", ...]
+    ("Data Pipelines" is absorbed into "Data Engineering"; dbt is tail/free-form)
+
 === ROLE SUMMARY ===
 3–4 neutral sentences summarising the role for deduplication embedding.
 No marketing language ("exciting opportunity", "world-class team"), no salary figures, no company boilerplate.
