@@ -1,15 +1,21 @@
-# Title-Based Interest Filter (C19) — pre_deny / allow / deny pattern config
+# Title-Based Interest Filter (C19) — pre_deny / deny_company / allow / deny pattern config
 #
-# Matching architecture (3 tiers, evaluated in order):
-#   1. pre_deny[] — checked FIRST, unconditional DROP, no allow rescue possible.
+# Matching architecture (4 tiers, evaluated in order):
+#   1. pre_deny[]      — title-based, unconditional DROP, no allow rescue possible.
 #      Used for absolute disqualifiers: leadership titles, entry-level / new-grad
 #      variants that must drop even when an ML/Data allow pattern would fire.
-#   2. allow[]    — checked SECOND, escape hatch from `deny[]`. If any allow pattern
+#   2. deny_company[]  — company-based, unconditional DROP (new at Iter 7).
+#      Matched against the company name string, not the title. Skipped when
+#      company is None/empty (backward compat). No allow rescue possible.
+#      Used for staffing firms / job-ad platforms where the end-employer is
+#      intentionally anonymous in the JD body.
+#   3. allow[]         — title-based, escape hatch from `deny[]`. If any allow pattern
 #      matches, the posting PASSES regardless of any `deny` match. Allow does NOT
-#      rescue pre_deny matches — those are unconditional.
-#   3. deny[]     — checked LAST, default-drop list. Title drops if (a) not pre-denied,
-#      (b) not allowed, AND (c) matches any deny pattern.
-#   4. If no tier matches, the posting PASSES.
+#      rescue pre_deny or deny_company matches — those are unconditional.
+#   4. deny[]          — title-based, default-drop list. Title drops if (a) not
+#      pre-denied, (b) not company-denied, (c) not allowed, AND (d) matches any
+#      deny pattern.
+#   5. If no tier matches, the posting PASSES.
 #
 # When in doubt: use deny[] for "block by default but rescue specific data-adjacent
 # variants" patterns (e.g., deny generic Software Engineer but allow Software
@@ -67,6 +73,22 @@ pre_deny:
   # NOT level-suffix detection (I/II are ambiguous — some companies use them for senior IC).
   - { pattern: "(?i)\\bEarly Career\\b", kind: regex,
       note: "Entry-level — same policy as Junior/Intern (calibrated #36, #37, #99, #103)" }
+
+deny_company:
+  # Iteration 7 (2026-04-27) — staffing firms / job-ad platforms.
+  # Recruiter-as-employer postings: end-employer often anonymous in JD body.
+  # Drop entirely per user direction (not desired in daily triage).
+  # Hard-drop semantics: no allow override can rescue these.
+  - { pattern: "(?i)\\bJobs\\s*Ai\\b", kind: regex,
+      note: "Job-board aggregator (6 postings in 2026-04-27 calibration set)" }
+  - { pattern: "(?i)\\bJoveo\\b", kind: regex,
+      note: "Programmatic job ad platform (3 postings)" }
+  - { pattern: "(?i)\\bCrossing\\s+Hurdles\\b", kind: regex,
+      note: "Staffing/recruiting firm (3 postings)" }
+  - { pattern: "(?i)\\bAlquemy\\s+Search\\s*&?\\s*Consulting\\b", kind: regex,
+      note: "Recruiting firm (3 postings)" }
+  - { pattern: "(?i)\\bYO\\s+HR\\s+Consultancy\\b", kind: regex,
+      note: "Staffing firm (1 posting)" }
 
 allow:
   # --- Calibration overrides (added 2026-04-27, Iteration 2) ---

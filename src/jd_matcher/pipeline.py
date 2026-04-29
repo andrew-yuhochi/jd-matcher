@@ -288,7 +288,9 @@ def _run_gmail_source(
 
                 for posting in postings:
                     # C19: title filter — checked BEFORE register_new / seen_urls write.
-                    decision = filter_title(posting.title)
+                    # company= uses email-parsed name (best-effort from C4); deny_company
+                    # patterns fire here, before LLM extraction runs.
+                    decision = filter_title(posting.title, company=posting.company)
                     if decision.action == "drop":
                         urls_filtered += 1
                         run_filtered_total += 1

@@ -1,31 +1,47 @@
 # TASK-M2-004 — Filter Validation Report (Iteration 1)
 
-Date: 2026-04-28
+Date: 2026-04-29
 Source DB: /Users/andrew.yu/.jd-matcher/jd-matcher.db
 Total postings analyzed: 183  (skipped 0 with empty canonical_title)
-Config snapshot: config/title_filters.yaml @ commit eff5063
+Config snapshot: config/title_filters.yaml @ commit c8ebf70
 
 ## Summary
 
 | Metric            | Count | % of analyzed |
 |-------------------|-------|---------------|
 | Total analyzed    | 183   | 100%          |
-| Filtered (drop)   | 15   | 8.2%       |
-| Passed (pass)     | 168   | 91.8%       |
+| Filtered (drop)   | 31   | 16.9%       |
+| Passed (pass)     | 152   | 83.1%       |
 
 ## Filtered postings — for user review (label correct-drop or FALSE POSITIVE)
 
 | ID | Source | Title | Company | Location | Matched Pattern |
 |----|--------|-------|---------|----------|-----------------|
+| 3 | linkedin_email,linkedin_hydrator | AI/ML Engineer - Remote | YO HR Consultancy | Canada | `(?i)\bYO\s+HR\s+Consultancy\b` |
 | 29 | linkedin_email,linkedin_hydrator | Finance & Strategy Manager, Hopper/ HTS (100% Remote - Canada) | Hopper | Vancouver, British Columbia, Canada | `(?i)\bFinance.{0,5}(&|and)\s*Strategy\b` |
 | 32 | linkedin_email,linkedin_hydrator | Scientist II, Analytical Development | Cytiva | Vancouver, British Columbia, Canada | `(?i)\bAnalytical Development\b` |
 | 34 | linkedin_email,linkedin_hydrator | R&D Scientist, Novel Ingredients | Marine Biologics | Vancouver, British Columbia, Canada | `(?i)\bNovel Ingredients\b` |
 | 36 | linkedin_email,linkedin_hydrator | Data Scientist, Early Career (Canada) | Jobright.ai | Canada | `(?i)\bEarly Career\b` |
 | 37 | linkedin_email,linkedin_hydrator | Machine Learning Engineer - Early Career (Canada) | Jobright.ai | Canada | `(?i)\bEarly Career\b` |
+| 41 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
 | 47 | linkedin_email,linkedin_hydrator | Process Development Scientist, GMP Media | STEMCELL Technologies | Burnaby, British Columbia, Canada | `(?i)\bGMP\s+Media\b` |
+| 48 | linkedin_email,linkedin_hydrator | Machine Learning Engineer (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
+| 50 | linkedin_email,linkedin_hydrator | Bioinformatics Scientist (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
+| 52 | linkedin_email,linkedin_hydrator | AI Engineer (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
+| 54 | linkedin_email,linkedin_hydrator | Agentic AI Engineer | Joveo Ai | Canada | `(?i)\bJoveo\b` |
+| 55 | linkedin_email,linkedin_hydrator | Data Scientist | Joveo Ai | Canada | `(?i)\bJoveo\b` |
+| 56 | linkedin_email,linkedin_hydrator | Data Scientist (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
+| 59 | linkedin_email,linkedin_hydrator | Data Analyst (Remote) | Jobs Ai | Canada | `(?i)\bJobs\s*Ai\b` |
+| 60 | linkedin_email,linkedin_hydrator | Data Analyst | $80/hr Remote | Crossing Hurdles | Canada | `(?i)\bCrossing\s+Hurdles\b` |
+| 97 | linkedin_email,linkedin_hydrator | Data Scientist | Joveo Ai | Canada | `(?i)\bJoveo\b` |
 | 99 | linkedin_email,linkedin_hydrator | Data Scientist, Early Career (Canada) | Jobright.ai | Canada | `(?i)\bEarly Career\b` |
 | 103 | linkedin_email,linkedin_hydrator | Machine Learning Engineer - Early Career (Canada) | Jobright.ai | Canada | `(?i)\bEarly Career\b` |
+| 106 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada | `(?i)\bAlquemy\s+Search\s*&?\s*Consulting\b` |
 | 109 | linkedin_email,linkedin_hydrator | Partner Alliance Analyst | 1Password | Canada | `(?i)\bPartner Alliance\b` |
+| 124 | linkedin_email,linkedin_hydrator | AI / ML Engineer | Remote | Crossing Hurdles | Canada | `(?i)\bCrossing\s+Hurdles\b` |
+| 133 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada | `(?i)\bAlquemy\s+Search\s*&?\s*Consulting\b` |
+| 140 | linkedin_email,linkedin_hydrator | Data Operations Manager | $45/hr Remote | Crossing Hurdles | Canada | `(?i)\bCrossing\s+Hurdles\b` |
+| 148 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada | `(?i)\bAlquemy\s+Search\s*&?\s*Consulting\b` |
 | 163 | indeed_email,indeed_hydrator | Startup Event Representative (Tech / Web Summit Vancouver) |  |  | `(?i)\bEvent Representative\b` |
 | 171 | indeed_email,indeed_hydrator | AI Trainer - Freelance Data Annotator |  |  | `(?i)\b(AI Trainer|AI Data Trainer|Data Annotator|Data Contributor)\b` |
 | 172 | indeed_email,indeed_hydrator | Email Operations Specialist (Klaviyo/AI/Figma/Claude) |  |  | `(?i)\bEmail Operations\b` |
@@ -39,14 +55,11 @@ Sorted by title alphabetically for scanning.
 
 | ID | Source | Title | Company | Location |
 |----|--------|-------|---------|----------|
-| 54 | linkedin_email,linkedin_hydrator | Agentic AI Engineer | Joveo Ai | Canada |
-| 124 | linkedin_email,linkedin_hydrator | AI / ML Engineer | Remote | Crossing Hurdles | Canada |
 | 130 | linkedin_email,linkedin_hydrator | AI Automation Engineer | Aspire Software | Canada |
 | 129 | linkedin_email,linkedin_hydrator | AI Development Engineer - Remote | NTT DATA North America | Toronto, Ontario, Canada |
 | 63 | linkedin_email,linkedin_hydrator | AI Enablement Engineer | Electronic Arts (EA) | Vancouver, British Columbia, Canada |
 | 2 | linkedin_email,linkedin_hydrator | AI Engineer (Remote) | Lumenalta | Canada |
 | 4 | linkedin_email,linkedin_hydrator | AI Engineer (Remote) | Lumenalta | Vancouver, British Columbia, Canada |
-| 52 | linkedin_email,linkedin_hydrator | AI Engineer (Remote) | Jobs Ai | Canada |
 | 5 | linkedin_email,linkedin_hydrator | AI ML Engineer | Galent | Canada |
 | 92 | linkedin_email,linkedin_hydrator | AI Productivity Analyst | Dialpad | Vancouver, British Columbia, Canada |
 | 128 | linkedin_email,linkedin_hydrator | AI Productivity Analyst | Dialpad Japan | Vancouver, British Columbia, Canada |
@@ -58,7 +71,6 @@ Sorted by title alphabetically for scanning.
 | 57 | linkedin_email,linkedin_hydrator | AI Specialist - Applied ML Research | Xanadu | Toronto, Ontario, Canada |
 | 53 | linkedin_email,linkedin_hydrator | AI/ML ENGINEER | AMworkplace | Canada |
 | 108 | linkedin_email,linkedin_hydrator | AI/ML Engineer (ChatGPT, Claude, LLM, AgenticAI) | Diligente Technologies | Canada |
-| 3 | linkedin_email,linkedin_hydrator | AI/ML Engineer - Remote | YO HR Consultancy | Canada |
 | 24 | linkedin_email,linkedin_hydrator | Algorithm Engineer, AI | Comm100 | Vancouver, British Columbia, Canada |
 | 22 | linkedin_email,linkedin_hydrator | Analytics Engineer | Dialpad | Vancouver, British Columbia, Canada |
 | 64 | linkedin_email,linkedin_hydrator | Applied Scientist | Dialpad | Vancouver, British Columbia, Canada |
@@ -69,12 +81,9 @@ Sorted by title alphabetically for scanning.
 | 6 | linkedin_email,linkedin_hydrator | Artificial Intelligence Engineer | Galent | Canada |
 | 152 | linkedin_email,linkedin_hydrator | Associate AI Evaluation Scientist | BMO | Vancouver, British Columbia, Canada |
 | 126 | linkedin_email,linkedin_hydrator | Associate Data Scientist - User Fraud | Spotify | Toronto, Ontario, Canada |
-| 50 | linkedin_email,linkedin_hydrator | Bioinformatics Scientist (Remote) | Jobs Ai | Canada |
 | 25 | linkedin_email,linkedin_hydrator | Data Analyst | ADF Medical | Vancouver, British Columbia, Canada |
 | 146 | linkedin_email,linkedin_hydrator | Data Analyst | Axiom Builders | Vancouver, British Columbia, Canada |
-| 59 | linkedin_email,linkedin_hydrator | Data Analyst (Remote) | Jobs Ai | Canada |
 | 147 | linkedin_email,linkedin_hydrator | Data Analyst - FTT | TransLink | Vancouver, British Columbia, Canada |
-| 60 | linkedin_email,linkedin_hydrator | Data Analyst | $80/hr Remote | Crossing Hurdles | Canada |
 | 141 | linkedin_email,linkedin_hydrator | Data Analyst, Growth | Kraken | Canada |
 | 145 | linkedin_email,linkedin_hydrator | Data Analyst, Project Controls Technology Services | Provincial Health Services Authority | Burnaby, British Columbia, Canada |
 | 104 | linkedin_email,linkedin_hydrator | Data Analyst, Risk and Operational Performance | Kraken | Canada |
@@ -82,19 +91,12 @@ Sorted by title alphabetically for scanning.
 | 107 | linkedin_email,linkedin_hydrator | Data Engineer | DarkVision | North Vancouver, British Columbia, Canada |
 | 110 | linkedin_email,linkedin_hydrator | Data Engineer | Remote | CodeGeniusRecruit | Canada |
 | 180 | indeed_email,indeed_hydrator | Data Governance and Analytics Senior Systems Analyst |  |  |
-| 140 | linkedin_email,linkedin_hydrator | Data Operations Manager | $45/hr Remote | Crossing Hurdles | Canada |
 | 79 | linkedin_email,linkedin_hydrator | Data Quality Manager (Master Data), Deloitte Global Operations | Deloitte | Vancouver, British Columbia, Canada |
 | 13 | linkedin_email,linkedin_hydrator | Data Science Manager | Deloitte | Vancouver, British Columbia, Canada |
 | 135 | linkedin_email,linkedin_hydrator | Data Science Manager, Growth | Stripe | Toronto, Ontario, Canada |
 | 8 | linkedin_email,linkedin_hydrator | Data Scientist | Dropbox | Canada |
-| 55 | linkedin_email,linkedin_hydrator | Data Scientist | Joveo Ai | Canada |
 | 75 | linkedin_email,linkedin_hydrator | data scientist | Altea Healthcare | Burnaby, British Columbia, Canada |
-| 97 | linkedin_email,linkedin_hydrator | Data Scientist | Joveo Ai | Canada |
-| 106 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada |
-| 133 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada |
-| 148 | linkedin_email,linkedin_hydrator | Data Scientist | Alquemy Search & Consulting | Vancouver, British Columbia, Canada |
 | 166 | indeed_email,indeed_hydrator | Data Scientist |  |  |
-| 56 | linkedin_email,linkedin_hydrator | Data Scientist (Remote) | Jobs Ai | Canada |
 | 7 | linkedin_email,linkedin_hydrator | Data Scientist Specialist (Lending) | Jobgether | Canada |
 | 40 | linkedin_email,linkedin_hydrator | Data Scientist, AI/ML Platform | KOHO | Canada |
 | 21 | linkedin_email,linkedin_hydrator | Data Scientist, Investment Data | Connor, Clark & Lunn Financial Group (CC&L) | Vancouver, British Columbia, Canada |
@@ -109,7 +111,6 @@ Sorted by title alphabetically for scanning.
 | 173 | indeed_email,indeed_hydrator | Lead Platform Engineer - Canada |  |  |
 | 1 | linkedin_email,linkedin_hydrator | Machine Learning Engineer | Datatonic | Canada |
 | 105 | linkedin_email,linkedin_hydrator | Machine Learning Engineer | TRAFFIX | Toronto, Ontario, Canada |
-| 48 | linkedin_email,linkedin_hydrator | Machine Learning Engineer (Remote) | Jobs Ai | Canada |
 | 31 | linkedin_email,linkedin_hydrator | Machine Learning Scientist | DarkVision | North Vancouver, British Columbia, Canada |
 | 62 | linkedin_email,linkedin_hydrator | Machine Learning Software Engineer | RBC | Toronto, Ontario, Canada |
 | 111 | linkedin_email,linkedin_hydrator | Manager Data Analytics and Reporting | BMO | Toronto, Ontario, Canada |
@@ -175,7 +176,6 @@ Sorted by title alphabetically for scanning.
 | 18 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer | FreshBooks | Toronto, Ontario, Canada |
 | 66 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer | Alignerr | Vancouver, British Columbia, Canada |
 | 82 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer | BDO Canada | Vancouver, British Columbia, Canada |
-| 41 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer (Remote) | Jobs Ai | Canada |
 | 68 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer - Generative AI Team | EA SPORTS | Vancouver, British Columbia, Canada |
 | 19 | linkedin_email,linkedin_hydrator | Senior Machine Learning Engineer, Ranking - Quora (Remote) | Quora | Canada |
 | 67 | linkedin_email,linkedin_hydrator | Senior Machine Learning Expert | Alignerr | Vancouver, British Columbia, Canada |

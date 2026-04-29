@@ -3,12 +3,15 @@ Title-Based Interest Filter (C19) — pre-LLM cheap heuristic filter.
 
 Evaluation logic:
   1. Decode HTML entities in the title (so &amp; → &, &#38; → &, etc.).
-  2. Check pre_deny[] patterns FIRST (case-insensitive). If any match → DROP
-     unconditionally (no allow override can rescue these — used for entry-level
-     and similar absolute disqualifiers that override even ML/Data context).
-  3. Check allow[] patterns (case-insensitive). If any match → PASS.
-  4. Check deny[] patterns (case-insensitive). If any match → DROP.
-  5. No match in either list → PASS.
+  2. Check pre_deny[] patterns FIRST against title (case-insensitive). If any
+     match → DROP unconditionally (no allow override can rescue these — used for
+     entry-level and similar absolute disqualifiers that override even ML/Data
+     context).
+  3. Check deny_company[] patterns against company (case-insensitive). If any
+     match → DROP unconditionally. Skipped entirely when company is None/empty.
+  4. Check allow[] patterns (case-insensitive). If any match → PASS.
+  5. Check deny[] patterns (case-insensitive). If any match → DROP.
+  6. No match in either list → PASS.
 
 Config is loaded once per process from config/title_filters.yaml and
 cached via a module-level sentinel. Callers may pass a custom TitleFilters
@@ -46,9 +49,10 @@ class FilterPattern(BaseModel):
 
 
 class TitleFilters(BaseModel):
-    pre_deny: list[FilterPattern] = []  # checked before allow — no rescue possible
-    allow: list[FilterPattern] = []
-    deny: list[FilterPattern] = []
+    pre_deny: list[FilterPattern] = []      # title-based, checked first — no rescue possible
+    deny_company: list[FilterPattern] = []  # company-based, checked after pre_deny — no rescue possible
+    allow: list[FilterPattern] = []         # title-based escape hatch from deny[]
+    deny: list[FilterPattern] = []          # title-based default-drop
 
 
 class FilterDecision(BaseModel):
@@ -73,6 +77,7 @@ def load_filters(config_path: Path | None = None) -> TitleFilters:
     raw = yaml.safe_load(resolved.read_text(encoding="utf-8"))
     return TitleFilters(
         pre_deny=[FilterPattern(**p) for p in (raw.get("pre_deny") or [])],
+        deny_company=[FilterPattern(**p) for p in (raw.get("deny_company") or [])],
         allow=[FilterPattern(**p) for p in (raw.get("allow") or [])],
         deny=[FilterPattern(**p) for p in (raw.get("deny") or [])],
     )
@@ -93,12 +98,21 @@ def _matches(pattern: FilterPattern, title: str) -> bool:
 
 def filter_title(
     title: str,
+    company: str | None = None,
     filters: TitleFilters | None = None,
 ) -> FilterDecision:
-    """Evaluate title against allow/deny lists and return a FilterDecision.
+    """Evaluate title (and optionally company) against filter tiers and return a FilterDecision.
+
+    Evaluation order (4 tiers):
+      1. pre_deny[]     — title-based, unconditional drop, no rescue possible
+      2. deny_company[] — company-based, unconditional drop; skipped when company is None/empty
+      3. allow[]        — title-based escape hatch from deny[]
+      4. deny[]         — title-based default-drop
 
     Args:
         title:   The job title string (raw — HTML entities decoded internally).
+        company: Optional company name string. When provided, deny_company patterns
+                 are matched against it. Pass None (or omit) for backward compat.
         filters: Optional pre-loaded TitleFilters; loads from config file if None.
 
     Returns:
@@ -130,7 +144,24 @@ def filter_title(
                 reason=pd.note or pd.pattern,
             )
 
-    # 2. Allow list checked next — any match → unconditional pass.
+    # 2. Deny-company list — matched against company string, not title.
+    #    Skipped entirely when company is None or empty string (backward compat).
+    #    Hard-drop: no allow override can rescue these.
+    if company:
+        for dc in cfg.deny_company:
+            if _matches(dc, company):
+                logger.info(
+                    "title_filter: DROP (deny-company) company=%r matched_pattern=%r",
+                    company,
+                    dc.pattern,
+                )
+                return FilterDecision(
+                    action="drop",
+                    matched_pattern=dc.pattern,
+                    reason=dc.note or dc.pattern,
+                )
+
+    # 3. Allow list checked next — any match → unconditional pass.
     for ap in cfg.allow:
         if _matches(ap, decoded):
             logger.debug(
@@ -144,7 +175,7 @@ def filter_title(
                 reason=f"allow override: {ap.note}" if ap.note else "allow override",
             )
 
-    # 3. Deny list — first match → drop.
+    # 4. Deny list — first match → drop.
     for dp in cfg.deny:
         if _matches(dp, decoded):
             logger.info(
@@ -158,7 +189,7 @@ def filter_title(
                 reason=dp.note or dp.pattern,
             )
 
-    # 4. Neither list matched → pass.
+    # 5. No tier matched → pass.
     logger.debug("title_filter: PASS (no deny match) title=%r", decoded)
     return FilterDecision(action="pass", matched_pattern=None, reason=None)
 

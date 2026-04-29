@@ -143,7 +143,16 @@ def run_validation(
     passed: list[PassRecord] = []
 
     for posting in postings:
-        decision: FilterDecision = filter_title(posting.canonical_title, filters=filters)
+        # validate.py uses LLM-extracted canonical_company (more accurate than the
+        # email-parsed posting.company used in pipeline.py at ingest time). For
+        # deny_company patterns (staffing firms whose names the LLM doesn't normalize
+        # away), both sources surface the same value — so calibration results match
+        # production behaviour.
+        decision: FilterDecision = filter_title(
+            posting.canonical_title,
+            company=posting.canonical_company or None,
+            filters=filters,
+        )
         if decision.action == "drop":
             dropped.append(DropRecord(posting=posting, decision=decision))
         else:

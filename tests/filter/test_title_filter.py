@@ -403,6 +403,44 @@ def test_iteration_5_calibration(title: str, expected_action: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Iteration 7 calibration cases (2026-04-27) — company-based filtering
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title,company,expected_action", [
+    # Staffing firms / job-ad platforms — company match triggers deny_company drop.
+    # Title alone would not drop these (all are plausible DS/ML titles).
+    ("Bioinformatics Scientist (Remote)",        "Jobs Ai",                     "drop"),
+    ("Senior Machine Learning Engineer",          "Jobs AI",                     "drop"),  # case variant
+    ("Data Scientist",                            "Joveo",                       "drop"),
+    ("AI Engineer",                               "Crossing Hurdles",            "drop"),
+    ("Data Operations Manager",                   "Crossing Hurdles",            "drop"),
+    ("Data Scientist",                            "Alquemy Search & Consulting", "drop"),
+    ("AI/ML Engineer",                            "Alquemy Search & Consulting", "drop"),  # variant
+    ("AI/ML Engineer",                            "YO HR Consultancy",           "drop"),
+    # Critical regression: legitimate companies must KEEP
+    ("Senior Data Scientist",                     "Stripe",                      "pass"),
+    ("Senior Machine Learning Engineer",          "Cohere",                      "pass"),
+    ("Data Scientist",                            "Dropbox",                     "pass"),
+    ("AI Engineer",                               "Lumenalta",                   "pass"),
+    # Backward compat: company=None — deny_company tier skipped entirely
+    ("Senior Data Scientist",                     None,                          "pass"),
+    ("Director of Engineering",                   None,                          "drop"),  # via pre_deny
+    ("AI Intern",                                 None,                          "drop"),  # via pre_deny
+    # Edge: empty string treated as falsy — deny_company tier skipped
+    ("Senior Data Scientist",                     "",                            "pass"),
+])
+def test_iteration_7_company_filtering(title: str, company: str | None, expected_action: str) -> None:
+    """Iteration 7: company-based filtering via deny_company tier."""
+    from jd_matcher.filter.title_filter import filter_title
+    decision = filter_title(title, company=company)
+    assert decision.action == expected_action, (
+        f"title={title!r} company={company!r}: expected {expected_action}, "
+        f"got {decision.action} (matched {decision.matched_pattern!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 
