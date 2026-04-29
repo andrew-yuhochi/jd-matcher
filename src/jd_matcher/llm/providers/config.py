@@ -30,6 +30,8 @@ class LLMConfig(BaseModel):
     embedding: ProviderConfig = ProviderConfig(
         provider="openai", model="text-embedding-3-small"
     )
+    # Cost-watchdog threshold — WARNING log if monthly LLM spend exceeds this.
+    monthly_cost_warn_usd: float = 2.00
 
 
 def load_llm_config(path: Path | None = None) -> LLMConfig:

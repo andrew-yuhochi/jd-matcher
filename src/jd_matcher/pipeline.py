@@ -43,6 +43,8 @@ from jd_matcher.hydrate.indeed import hydrate as indeed_hydrate
 from jd_matcher.hydrate.linkedin import hydrate as linkedin_hydrate
 from jd_matcher.ingest.gmail import GmailIngester
 from jd_matcher.llm.embed import embed_postings_batch
+from jd_matcher.llm.extract import PostingRow, extract_canonical
+from jd_matcher.llm.providers.config import load_llm_config
 from jd_matcher.parse.indeed_email import parse as parse_indeed
 from jd_matcher.parse.linkedin_email import ParsedPosting, parse as parse_linkedin
 
@@ -225,7 +227,102 @@ def run_pipeline(
         )
 
     # -----------------------------------------------------------------------
-    # Phase 3: C20 — Embedding (role_summary → text-embedding-3-small)
+    # Phase 3: C18 — LLM extraction (hydrated postings → canonical fields)
+    # Runs after hydration; cache hits are the common case on re-runs.
+    # Filtered postings (C19 drops) are excluded because they never entered
+    # the postings table — so they never appear in _get_pending_extraction_ids.
+    # -----------------------------------------------------------------------
+    step_label = "LLM extraction (C18)…"
+    steps_emitted.append(step_label)
+
+    llm_extract_posting_count = 0
+    llm_extract_success_count = 0
+    llm_extract_failure_count = 0
+    llm_extract_cache_hits = 0
+    llm_extract_total_cost_usd = 0.0
+    llm_extract_health_status = "healthy"
+    llm_extract_failure_reason: Optional[str] = None
+
+    try:
+        pending_extract_ids = _get_pending_extraction_ids(resolved_db)
+        llm_extract_posting_count = len(pending_extract_ids)
+
+        if pending_extract_ids:
+            max_ledger_id_before_extract = _get_max_ledger_id(resolved_db)
+            for pid in pending_extract_ids:
+                posting = _fetch_posting_row(resolved_db, pid)
+                if posting is None:
+                    continue
+                try:
+                    extract_canonical(posting, db_path=resolved_db)
+                    llm_extract_success_count += 1
+                except Exception as exc:
+                    llm_extract_failure_count += 1
+                    logger.warning(
+                        json.dumps({
+                            "event": "llm_extraction_posting_failed",
+                            "run_id": run_id,
+                            "posting_id": pid,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        })
+                    )
+            # Count cache hits from new ledger rows written during this phase
+            llm_extract_cache_hits = _count_extraction_cache_hits_since(
+                resolved_db, max_ledger_id_before_extract
+            )
+            llm_extract_total_cost_usd = _sum_extraction_cost_since(
+                resolved_db, max_ledger_id_before_extract
+            )
+
+            if llm_extract_failure_count > 0 and llm_extract_success_count == 0:
+                llm_extract_health_status = "failed"
+                llm_extract_failure_reason = f"{llm_extract_failure_count} extraction failures, 0 successes"
+            elif llm_extract_failure_count > 0:
+                llm_extract_health_status = "degraded"
+                llm_extract_failure_reason = f"{llm_extract_failure_count}/{llm_extract_posting_count} extraction failures"
+
+        logger.info(
+            json.dumps({
+                "event": "llm_extraction_phase_complete",
+                "run_id": run_id,
+                "posting_count": llm_extract_posting_count,
+                "success_count": llm_extract_success_count,
+                "failure_count": llm_extract_failure_count,
+                "cache_hits": llm_extract_cache_hits,
+                "total_cost_usd": llm_extract_total_cost_usd,
+            })
+        )
+    except Exception as exc:
+        llm_extract_health_status = "failed"
+        llm_extract_failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(
+            json.dumps({
+                "event": "llm_extraction_phase_failed",
+                "run_id": run_id,
+                "error": llm_extract_failure_reason,
+            })
+        )
+
+    _write_pipeline_run(
+        resolved_db,
+        run_id=run_id,
+        source="llm_extraction",
+        health_status=llm_extract_health_status,
+        failure_reason=llm_extract_failure_reason,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        last_successful_fetch_at=datetime.now(timezone.utc) if llm_extract_health_status == "healthy" else None,
+        counts={
+            "posting_count": llm_extract_posting_count,
+            "success_count": llm_extract_success_count,
+            "parse_failure_count": llm_extract_failure_count,
+            "cache_hit_count": llm_extract_cache_hits,
+            "total_cost_usd": llm_extract_total_cost_usd,
+        },
+    )
+
+    # -----------------------------------------------------------------------
+    # Phase 4: C20 — Embedding (role_summary → text-embedding-3-small)
     # -----------------------------------------------------------------------
     step_label = "Embedding postings (C20)…"
     steps_emitted.append(step_label)
@@ -233,14 +330,23 @@ def run_pipeline(
     embeddings_written = 0
     embedding_cache_hits = 0
     embedding_skipped = 0
+    embed_health_status = "healthy"
+    embed_failure_reason: Optional[str] = None
+    embed_posting_count = 0
+    embed_batch_call_count = 0
+    embed_total_cost_usd = 0.0
+
     try:
         posting_ids = _get_pending_embedding_ids(resolved_db)
+        embed_posting_count = len(posting_ids)
         if posting_ids:
             max_ledger_id_before = _get_max_ledger_id(resolved_db)
             embedded = embed_postings_batch(posting_ids, db_path=resolved_db)
             embeddings_written = len(embedded)
             embedding_cache_hits = _count_cache_hit_rows_since(resolved_db, max_ledger_id_before)
             embedding_skipped = len(posting_ids) - len(embedded)
+            embed_batch_call_count = _count_embedding_api_calls_since(resolved_db, max_ledger_id_before)
+            embed_total_cost_usd = _sum_embedding_cost_since(resolved_db, max_ledger_id_before)
             logger.info(
                 json.dumps({
                     "event": "embedding_phase_complete",
@@ -248,6 +354,7 @@ def run_pipeline(
                     "posted_ids_count": len(posting_ids),
                     "embeddings_written": embeddings_written,
                     "skipped": embedding_skipped,
+                    "cache_hits": embedding_cache_hits,
                 })
             )
         else:
@@ -260,17 +367,36 @@ def run_pipeline(
                 })
             )
     except Exception as exc:
+        embed_health_status = "failed"
+        embed_failure_reason = f"{type(exc).__name__}: {exc}"
         logger.error(
             json.dumps({
                 "event": "embedding_phase_failed",
                 "run_id": run_id,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": embed_failure_reason,
             })
         )
 
+    _write_pipeline_run(
+        resolved_db,
+        run_id=run_id,
+        source="embedding",
+        health_status=embed_health_status,
+        failure_reason=embed_failure_reason,
+        started_at=started_at,
+        finished_at=datetime.now(timezone.utc),
+        last_successful_fetch_at=datetime.now(timezone.utc) if embed_health_status == "healthy" else None,
+        counts={
+            "posting_count": embed_posting_count,
+            "batch_call_count": embed_batch_call_count,
+            "cache_hit_count": embedding_cache_hits,
+            "total_cost_usd": embed_total_cost_usd,
+        },
+    )
+
     # -----------------------------------------------------------------------
-    # Phase 4: C21 — Dedup decision (read-only)
-    # Collects decisions; C29/C30 application happens in Phase 5.
+    # Phase 5: C21 — Dedup decision (read-only)
+    # Collects decisions; C29/C30 application happens in Phase 6.
     # Skips posting_ids that already have a posting_canonical_links row
     # (idempotency — re-running the pipeline doesn't double-link).
     # -----------------------------------------------------------------------
@@ -364,8 +490,8 @@ def run_pipeline(
         )
 
     # -----------------------------------------------------------------------
-    # Phase 5: C30 → C29 — Repost detection + merge application
-    # For each decision collected in Phase 4:
+    # Phase 6: C30 → C29 — Repost detection + merge application
+    # For each decision collected in Phase 5:
     #   1. detect_repost() — may retag merge_kind to 'repost'
     #   2. apply_decision() — writes canonical_postings + posting_canonical_links
     # -----------------------------------------------------------------------
@@ -435,6 +561,45 @@ def run_pipeline(
         logger.error(
             json.dumps({
                 "event": "merge_phase_failed",
+                "run_id": run_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+        )
+
+    # -----------------------------------------------------------------------
+    # Cost-watchdog: emit WARNING if monthly LLM spend exceeds threshold.
+    # Does NOT block the pipeline run — informational only.
+    # -----------------------------------------------------------------------
+    try:
+        llm_cfg = load_llm_config()
+        monthly_threshold = llm_cfg.monthly_cost_warn_usd
+        monthly_cost = _get_monthly_llm_cost(resolved_db)
+        if monthly_cost > monthly_threshold:
+            logger.warning(
+                json.dumps({
+                    "event": "cost_watchdog_triggered",
+                    "run_id": run_id,
+                    "monthly_cost_usd": monthly_cost,
+                    "threshold_usd": monthly_threshold,
+                    "message": (
+                        f"Monthly LLM cost ${monthly_cost:.4f} exceeds "
+                        f"${monthly_threshold:.2f} threshold — review llm.yaml"
+                    ),
+                })
+            )
+        else:
+            logger.info(
+                json.dumps({
+                    "event": "cost_watchdog_ok",
+                    "run_id": run_id,
+                    "monthly_cost_usd": monthly_cost,
+                    "threshold_usd": monthly_threshold,
+                })
+            )
+    except Exception as exc:
+        logger.warning(
+            json.dumps({
+                "event": "cost_watchdog_failed",
                 "run_id": run_id,
                 "error": f"{type(exc).__name__}: {exc}",
             })
@@ -824,15 +989,17 @@ def _write_pipeline_run(
     started_at: datetime,
     finished_at: datetime,
     last_successful_fetch_at: Optional[datetime],
+    counts: Optional[dict] = None,
 ) -> None:
     conn = sqlite3.connect(db_path)
     try:
+        counts_json = json.dumps(counts) if counts else None
         conn.execute(
             """
             INSERT INTO pipeline_runs
                 (run_id, source, health_status, failure_reason,
-                 started_at, finished_at, last_successful_fetch_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 started_at, finished_at, last_successful_fetch_at, counts)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -842,6 +1009,7 @@ def _write_pipeline_run(
                 started_at.isoformat(),
                 finished_at.isoformat(),
                 last_successful_fetch_at.isoformat() if last_successful_fetch_at else None,
+                counts_json,
             ),
         )
         conn.commit()
@@ -1093,6 +1261,150 @@ def _count_cache_hit_rows_since(db_path: Path, before_id: int) -> int:
             (before_id,),
         ).fetchone()
         return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def _count_embedding_api_calls_since(db_path: Path, before_id: int) -> int:
+    """Count non-cache-hit embedding ledger rows written after before_id."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) FROM llm_call_ledger
+            WHERE call_kind = 'embedding'
+              AND status != 'cache_hit'
+              AND id > ?
+            """,
+            (before_id,),
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def _sum_embedding_cost_since(db_path: Path, before_id: int) -> float:
+    """Sum cost_usd for embedding ledger rows written after before_id."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_call_ledger
+            WHERE call_kind = 'embedding'
+              AND id > ?
+            """,
+            (before_id,),
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+    finally:
+        conn.close()
+
+
+def _count_extraction_cache_hits_since(db_path: Path, before_id: int) -> int:
+    """Count cache_hit extraction ledger rows written after before_id."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) FROM llm_call_ledger
+            WHERE call_kind = 'extraction'
+              AND status = 'cache_hit'
+              AND id > ?
+            """,
+            (before_id,),
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def _sum_extraction_cost_since(db_path: Path, before_id: int) -> float:
+    """Sum cost_usd for extraction ledger rows written after before_id."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_call_ledger
+            WHERE call_kind = 'extraction'
+              AND id > ?
+            """,
+            (before_id,),
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+    finally:
+        conn.close()
+
+
+def _get_pending_extraction_ids(db_path: Path) -> list[int]:
+    """Return posting IDs that have full_jd but no extraction_status='success'.
+
+    These are postings that have been hydrated but not yet LLM-extracted.
+    Postings with extraction_status='failed' are included so they can be retried.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        # Check if extraction_status column exists
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(postings)").fetchall()}
+        if "extraction_status" not in cols:
+            # Column doesn't exist yet — all postings with full_jd need extraction
+            rows = conn.execute(
+                """
+                SELECT id FROM postings
+                WHERE full_jd IS NOT NULL AND full_jd != ''
+                ORDER BY id
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id FROM postings
+                WHERE full_jd IS NOT NULL AND full_jd != ''
+                  AND (extraction_status IS NULL OR extraction_status != 'success')
+                ORDER BY id
+                """
+            ).fetchall()
+        return [row[0] for row in rows]
+    finally:
+        conn.close()
+
+
+def _fetch_posting_row(db_path: Path, posting_id: int) -> "PostingRow | None":
+    """Fetch minimal posting data needed for LLM extraction."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT id, full_jd, canonical_title, canonical_company, canonical_location
+            FROM postings
+            WHERE id = ?
+            """,
+            (posting_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return PostingRow(
+            id=row[0],
+            full_jd=row[1] or "",
+            canonical_title=row[2],
+            canonical_company=row[3],
+            canonical_location=row[4],
+        )
+    finally:
+        conn.close()
+
+
+def _get_monthly_llm_cost(db_path: Path) -> float:
+    """Return the sum of cost_usd from llm_call_ledger for the current calendar month."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(cost_usd), 0.0)
+            FROM llm_call_ledger
+            WHERE DATE(called_at) >= DATE('now', 'start of month')
+            """
+        ).fetchone()
+        return float(row[0]) if row else 0.0
     finally:
         conn.close()
 

@@ -114,11 +114,12 @@ class TestMandatoryPersistence:
     def test_three_runs_produce_six_rows(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each of 3 pipeline runs writes exactly 4 rows — 12 total.
+        """Each of 3 pipeline runs writes exactly 6 rows — 18 total.
 
-        PoC sources: gmail_linkedin + hydrator_linkedin + dedup_c21 + dedup_merge_c29.
-        dedup_merge_c29 added M2-009 (C29 merge apply phase).
-        When Indeed is re-activated at MVP-M1, revert counts: 4 sources → 6, 12 rows → 18.
+        PoC sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
+                     + dedup_c21 + dedup_merge_c29.
+        llm_extraction + embedding added M2-010 (C11 orchestrator + C22 state view).
+        When Indeed is re-activated at MVP-M1, revert counts: 6 sources → 8, 18 rows → 24.
         """
         run_ids = []
         for _ in range(3):
@@ -128,8 +129,8 @@ class TestMandatoryPersistence:
         rows = _all_pipeline_runs(test_db)
         # Filter to rows with run_ids from the orchestrator (not sub-run ingester rows)
         orch_rows = [r for r in rows if r[0] in run_ids]
-        assert len(orch_rows) == 12, (
-            f"Expected 12 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
+        assert len(orch_rows) == 18, (
+            f"Expected 18 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
         )
 
     def test_all_rows_have_non_null_health_status(
@@ -149,16 +150,21 @@ class TestMandatoryPersistence:
     def test_two_sources_per_run(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each run produces exactly one row for each of the 4 PoC sources.
+        """Each run produces exactly one row for each of the 6 PoC sources.
 
-        PoC sources: gmail_linkedin + hydrator_linkedin + dedup_c21 + dedup_merge_c29.
-        dedup_merge_c29 added M2-009 (C29/C30 merge-apply phase).
-        When Indeed is re-activated at MVP-M1, expected set reverts to 6 sources.
+        PoC sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
+                     + dedup_c21 + dedup_merge_c29.
+        llm_extraction + embedding added M2-010 (C11 orchestrator + C22 state view).
+        When Indeed is re-activated at MVP-M1, expected set reverts to 8 sources.
         """
         summary = run_pipeline(db_path=test_db)
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         sources_written = {r[0] for r in rows}
-        expected = {"gmail_linkedin", "hydrator_linkedin", "dedup_c21", "dedup_merge_c29"}
+        expected = {
+            "gmail_linkedin", "hydrator_linkedin",
+            "llm_extraction", "embedding",
+            "dedup_c21", "dedup_merge_c29",
+        }
         assert sources_written == expected, (
             f"Sources in pipeline_runs mismatch. Got: {sources_written}"
         )
@@ -187,8 +193,12 @@ class TestPerSourceIsolation:
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         row_by_source = {r[0]: r for r in rows}
 
-        # Confirm all 4 PoC sources have rows (dedup_merge_c29 added M2-009)
-        assert set(row_by_source.keys()) == {"gmail_linkedin", "hydrator_linkedin", "dedup_c21", "dedup_merge_c29"}
+        # Confirm all 6 PoC sources have rows (llm_extraction + embedding added M2-010)
+        assert set(row_by_source.keys()) == {
+            "gmail_linkedin", "hydrator_linkedin",
+            "llm_extraction", "embedding",
+            "dedup_c21", "dedup_merge_c29",
+        }
 
         # hydrator_linkedin: since Fix 2b added per-URL exception handling,
         # individual URL exceptions are caught and skipped (not propagated to the
@@ -526,9 +536,10 @@ class TestPipelineRunSummary:
     def test_summary_has_steps(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """PoC M2: LinkedIn-only + C20 embedding + C21 dedup + C29/C30 merge — expect 5 steps."""
+        """PoC M2-010: LinkedIn-only + C18 extract + C20 embed + C21 dedup + C29/C30 merge — expect 6 steps."""
         summary = run_pipeline(db_path=test_db)
-        assert len(summary.steps) == 5
+        assert len(summary.steps) == 6
+        assert "LLM extraction (C18)…" in summary.steps
         assert "Embedding postings (C20)…" in summary.steps
         assert "Dedup decisions (C21)…" in summary.steps
         assert "Merge apply (C29+C30)…" in summary.steps

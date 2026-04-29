@@ -19,3 +19,7 @@ extraction:
 embedding:
   provider: openai
   model: text-embedding-3-small
+
+# Cost-watchdog: emits a WARNING log at run-end if monthly LLM spend exceeds this.
+# Does NOT block the pipeline run — informational only.
+monthly_cost_warn_usd: 2.00

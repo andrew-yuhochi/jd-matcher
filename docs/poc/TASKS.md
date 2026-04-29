@@ -349,7 +349,7 @@
 
 ##### TASK-M2-010 — Pipeline orchestrator + State Manager extension (C11 + C22)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C11 (Pipeline orchestrator) + C22 (State Manager extension) — TDD §C11, §C22
@@ -364,12 +364,12 @@
 - **Demo Artifact**: `python -m jd_matcher.pipeline` runs full sync; `canonical_postings` + `posting_canonical_links` + `posting_embeddings` + `llm_call_ledger` all populated; `pipeline_runs` shows new sources for filter/llm/embedding phases.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-010.md`
 - **Acceptance Criteria**:
-  - [ ] Pipeline order: fetch → parse → C19 filter → URL-dedup → hydrate → LLM-extract → embed → content-dedup → merge → store (verified by integration test)
-  - [ ] Each new step writes its own `pipeline_runs` row (`title_filter`, `llm_extraction`, `embedding`) with `health_status`; mandatory-persistence invariant from M1-008 holds
-  - [ ] C22 `select_main` returns canonical-level cards (not posting-level) — verified by integration test
-  - [ ] Apply-one-suppress-all invariant: dismissing one merged variant suppresses canonical from Main on next render — verified by 2-source synthetic test
-  - [ ] Persistence across restart: state inheritance works after server restart
-  - [ ] Filtered postings (from C19) short-circuit; do NOT appear in any subsequent stage's `pipeline_runs` counts
+  - [x] Pipeline order: fetch → parse → C19 filter → URL-dedup → hydrate → LLM-extract → embed → content-dedup → merge → store (verified by integration test)
+  - [x] Each new step writes its own `pipeline_runs` row (`llm_extraction`, `embedding`) with `health_status`; mandatory-persistence invariant from M1-008 holds (title_filter count goes into gmail_* row per TDD M2-update)
+  - [x] C22 `select_main` returns canonical-level cards (not posting-level) — verified by integration test
+  - [x] Apply-one-suppress-all invariant: dismissing one merged variant suppresses canonical from Main on next render — verified by 2-source synthetic test
+  - [x] Persistence across restart: state inheritance works after server restart
+  - [x] Filtered postings (from C19) short-circuit; do NOT appear in any subsequent stage's `pipeline_runs` counts
 
 ---
 

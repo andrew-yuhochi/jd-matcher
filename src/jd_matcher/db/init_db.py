@@ -16,6 +16,30 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 
 
+def _ensure_pipeline_runs_counts_column(conn: sqlite3.Connection) -> None:
+    """Add counts column to pipeline_runs if absent (M2-010 migration).
+
+    Stores per-phase stats (e.g. extraction cost, embedding batch counts) as JSON.
+    SQLite lacks ADD COLUMN IF NOT EXISTS — check PRAGMA table_info first.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs);")}
+    if "counts" not in existing:
+        conn.execute("ALTER TABLE pipeline_runs ADD COLUMN counts TEXT NULL;")
+
+
+def _ensure_postings_canonical_seniority_column(conn: sqlite3.Connection) -> None:
+    """Add canonical_seniority column to postings if absent (M2-009/M2-010 migration).
+
+    M2-009 merge.py references canonical_seniority but existing DBs created
+    before M2-009 only have seniority_band.  Adding canonical_seniority as a
+    separate nullable column (rather than renaming) avoids DROP+CREATE complexity
+    and keeps historical seniority_band data intact.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(postings);")}
+    if "canonical_seniority" not in existing:
+        conn.execute("ALTER TABLE postings ADD COLUMN canonical_seniority TEXT NULL;")
+
+
 def _ensure_email_ingest_log_filter_columns(conn: sqlite3.Connection) -> None:
     """Add filter_status / filter_reason columns + their index to email_ingest_log if absent.
 
@@ -65,6 +89,8 @@ def init_db(db_path: Path | None = None) -> None:
         conn.executescript(schema_sql)
         # ALTER TABLE statements cannot use IF NOT EXISTS in SQLite; apply them
         # via a Python helper that checks PRAGMA table_info first.
+        _ensure_pipeline_runs_counts_column(conn)
+        _ensure_postings_canonical_seniority_column(conn)
         _ensure_email_ingest_log_filter_columns(conn)
         # Seed the single 'default' user row — ignored if it already exists.
         conn.execute(
