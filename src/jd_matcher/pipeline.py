@@ -34,6 +34,7 @@ from uuid import uuid4
 from jd_matcher.db.email_ingest_log import increment_hydration, mark_filtered, update_url_counts
 from jd_matcher.filter.title_filter import filter_title
 from jd_matcher.db.init_db import init_db
+from jd_matcher.dedup.engine import DedupDecision, decide as dedup_decide
 from jd_matcher.dedup.url_dedup import register_new
 from jd_matcher.hydrate import compute_source_health
 from jd_matcher.hydrate.indeed import hydrate as indeed_hydrate
@@ -96,6 +97,12 @@ class PipelineRunSummary:
     embeddings_written: int = 0
     embedding_cache_hits: int = 0
     embedding_skipped: int = 0
+    # C21 dedup-decision stats (populated after the dedup phase)
+    dedup_decisions_total: int = 0
+    dedup_action_new: int = 0
+    dedup_action_merge: int = 0
+    dedup_full_jd_skipped: int = 0
+    dedup_block_zero: int = 0
 
     @property
     def failed_sources(self) -> list[str]:
@@ -255,6 +262,85 @@ def run_pipeline(
             })
         )
 
+    # -----------------------------------------------------------------------
+    # Phase 4: C21 — Dedup decision (read-only; apply is C29 in M2-009)
+    # -----------------------------------------------------------------------
+    step_label = "Dedup decisions (C21)…"
+    steps_emitted.append(step_label)
+
+    dedup_total = 0
+    dedup_new = 0
+    dedup_merge = 0
+    dedup_full_jd_skipped = 0
+    dedup_block_zero = 0
+
+    try:
+        embedded_ids = _get_embedded_posting_ids(resolved_db)
+        for pid in embedded_ids:
+            try:
+                decision: DedupDecision = dedup_decide(pid, db_path=resolved_db)
+                dedup_total += 1
+                if decision.action == "merge":
+                    dedup_merge += 1
+                else:
+                    dedup_new += 1
+                if "extraction_failed_full_jd_fallback" in decision.blocked_by:
+                    dedup_full_jd_skipped += 1
+                if decision.stage1_block_size == 0:
+                    dedup_block_zero += 1
+                logger.info(
+                    json.dumps({
+                        "event": "dedup_decision",
+                        "run_id": run_id,
+                        "posting_id": pid,
+                        "action": decision.action,
+                        "merge_kind": decision.merge_kind,
+                        "similarity": decision.similarity,
+                        "stage1_block_size": decision.stage1_block_size,
+                        "stage2_top_match_score": decision.stage2_top_match_score,
+                        "target_canonical_id": decision.target_canonical_id,
+                    })
+                )
+            except Exception as exc:
+                logger.warning(
+                    json.dumps({
+                        "event": "dedup_decision_failed",
+                        "run_id": run_id,
+                        "posting_id": pid,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    })
+                )
+
+        _write_pipeline_run(
+            resolved_db,
+            run_id=run_id,
+            source="dedup_c21",
+            health_status="healthy",
+            failure_reason=None,
+            started_at=started_at,
+            finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=datetime.now(timezone.utc),
+        )
+        logger.info(
+            json.dumps({
+                "event": "dedup_phase_complete",
+                "run_id": run_id,
+                "decisions_total": dedup_total,
+                "action_new": dedup_new,
+                "action_merge": dedup_merge,
+                "full_jd_skipped": dedup_full_jd_skipped,
+                "block_zero_short_circuit": dedup_block_zero,
+            })
+        )
+    except Exception as exc:
+        logger.error(
+            json.dumps({
+                "event": "dedup_phase_failed",
+                "run_id": run_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+        )
+
     finished_at = datetime.now(timezone.utc)
     total_new = sum(r.new_postings for r in source_results)
 
@@ -268,6 +354,11 @@ def run_pipeline(
         embeddings_written=embeddings_written,
         embedding_cache_hits=embedding_cache_hits,
         embedding_skipped=embedding_skipped,
+        dedup_decisions_total=dedup_total,
+        dedup_action_new=dedup_new,
+        dedup_action_merge=dedup_merge,
+        dedup_full_jd_skipped=dedup_full_jd_skipped,
+        dedup_block_zero=dedup_block_zero,
     )
 
     logger.info(
@@ -855,6 +946,18 @@ def _get_max_ledger_id(db_path: Path) -> int:
             "SELECT COALESCE(MAX(id), 0) FROM llm_call_ledger"
         ).fetchone()
         return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def _get_embedded_posting_ids(db_path: Path) -> list[int]:
+    """Return posting IDs that have an embedding row (candidates for dedup decision)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT CAST(posting_id AS INTEGER) FROM posting_embeddings ORDER BY posting_id"
+        ).fetchall()
+        return [row[0] for row in rows]
     finally:
         conn.close()
 

@@ -1,7 +1,7 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-27
+> **Last Updated**: 2026-04-29
 
 ---
 
@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 8 | 22 |
+| Done | 9 | 23 |
 | In Progress | 0 | 0 |
-| To Do | 7 | 7 |
+| To Do | 6 | 6 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -291,7 +291,7 @@
 
 ##### TASK-M2-008 — Two-Stage Dedup Engine (C21) — BLOCK + FUSE
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C21 (Two-Stage Dedup Engine) — TDD §C21
@@ -307,14 +307,14 @@
 - **Demo Artifact**: `python -m jd_matcher.dedup decide --posting-id 91` outputs `DedupDecision` JSON.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-008.md`
 - **Acceptance Criteria**:
-  - [ ] `decide(posting)` returns `DedupDecision {action: 'merge'|'new', target_canonical_id, similarity, merge_kind, telemetry}`
-  - [ ] BLOCK: SQL uses `idx_canonical_user_block` (verified by `EXPLAIN QUERY PLAN` — no full table scan)
-  - [ ] FUSE formula: `0.4×emb_cosine + 0.3×skills_jaccard + 0.2×title_cosine + 0.1×seniority_match` (verified by 5 test cases with known inputs/outputs)
-  - [ ] Auto-merge threshold 0.90 (configurable via `config.yaml`)
-  - [ ] Inactive/Expired bypass: canonicals in those states are excluded from BLOCK candidates (no-op at M2 since neither status exists yet — placeholder for MVP-M1)
-  - [ ] Synthetic test fixtures cover all 4 user scenarios (cross-team / same-team-different-role / cross-source / different-location)
-  - [ ] ZERO false-merges on 10 different-team synthetic pairs (regression-blocking)
-  - [ ] `DedupDecision` serialization works (Pydantic JSON)
+  - [x] `decide(posting)` returns `DedupDecision {action: 'merge'|'new', target_canonical_id, similarity, merge_kind, telemetry}`
+  - [x] BLOCK: SQL uses `idx_canonical_user_block` (verified by `EXPLAIN QUERY PLAN` — no full table scan)
+  - [x] FUSE formula: `0.4×emb_cosine + 0.3×skills_jaccard + 0.2×title_cosine + 0.1×seniority_match` (verified by 5 test cases with known inputs/outputs)
+  - [x] Auto-merge threshold 0.90 (configurable via `config/dedup.yaml`)
+  - [x] Inactive/Expired bypass: canonicals in those states are excluded from BLOCK candidates (no-op at M2 since neither status exists yet — placeholder for MVP-M1)
+  - [x] Synthetic test fixtures cover all 4 user scenarios (cross-team / same-team-different-role / cross-source / different-location)
+  - [x] ZERO false-merges on 10 different-team synthetic pairs (regression-blocking)
+  - [x] `DedupDecision` serialization works (Pydantic JSON)
 
 ---
 

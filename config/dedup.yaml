@@ -1,0 +1,18 @@
+# Dedup configuration for jd-matcher (C21 — Two-Stage Dedup Engine)
+#
+# auto_merge_threshold: postings with fused similarity >= this value are
+#   automatically merged to the matching canonical. Default: 0.90.
+#   Tuned against the 30-pair labelled set at M2-end calibration task (M2-012).
+#
+# Fuse weights must sum to 1.0. The four weights map to:
+#   fuse_weight_embedding   — embedding cosine of role_summary vectors (0.4)
+#   fuse_weight_skills      — Jaccard similarity of top_skills sets (0.3)
+#   fuse_weight_title       — cosine of canonical_title embeddings (0.2)
+#   fuse_weight_seniority   — exact match of canonical_seniority values (0.1)
+
+dedup:
+  auto_merge_threshold: 0.90
+  fuse_weight_embedding: 0.4
+  fuse_weight_skills: 0.3
+  fuse_weight_title: 0.2
+  fuse_weight_seniority: 0.1

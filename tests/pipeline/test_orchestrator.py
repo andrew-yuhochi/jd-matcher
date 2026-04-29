@@ -114,7 +114,11 @@ class TestMandatoryPersistence:
     def test_three_runs_produce_six_rows(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each of 3 pipeline runs writes exactly 2 rows — 6 total."""
+        """Each of 3 pipeline runs writes exactly 3 rows — 9 total.
+
+        PoC sources: gmail_linkedin + hydrator_linkedin + dedup_c21 (C21 added M2-008).
+        When Indeed is re-activated at MVP-M1, revert counts: 3 sources → 5, 9 rows → 15.
+        """
         run_ids = []
         for _ in range(3):
             summary = run_pipeline(db_path=test_db)
@@ -123,8 +127,8 @@ class TestMandatoryPersistence:
         rows = _all_pipeline_runs(test_db)
         # Filter to rows with run_ids from the orchestrator (not sub-run ingester rows)
         orch_rows = [r for r in rows if r[0] in run_ids]
-        assert len(orch_rows) == 6, (
-            f"Expected 6 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
+        assert len(orch_rows) == 9, (
+            f"Expected 9 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
         )
 
     def test_all_rows_have_non_null_health_status(
@@ -144,15 +148,15 @@ class TestMandatoryPersistence:
     def test_two_sources_per_run(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each run produces exactly one row for each of the 2 PoC sources.
+        """Each run produces exactly one row for each of the 3 PoC sources.
 
-        PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 (Indeed deferred to MVP-M1).
-        When Indeed is re-activated at MVP-M1, expected set reverts to 4 sources.
+        PoC sources: gmail_linkedin + hydrator_linkedin + dedup_c21 (C21 added M2-008).
+        When Indeed is re-activated at MVP-M1, expected set reverts to 5 sources.
         """
         summary = run_pipeline(db_path=test_db)
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         sources_written = {r[0] for r in rows}
-        expected = {"gmail_linkedin", "hydrator_linkedin"}
+        expected = {"gmail_linkedin", "hydrator_linkedin", "dedup_c21"}
         assert sources_written == expected, (
             f"Sources in pipeline_runs mismatch. Got: {sources_written}"
         )
@@ -181,8 +185,8 @@ class TestPerSourceIsolation:
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         row_by_source = {r[0]: r for r in rows}
 
-        # Confirm both PoC sources have rows
-        assert set(row_by_source.keys()) == {"gmail_linkedin", "hydrator_linkedin"}
+        # Confirm all 3 PoC sources have rows (dedup_c21 added M2-008)
+        assert set(row_by_source.keys()) == {"gmail_linkedin", "hydrator_linkedin", "dedup_c21"}
 
         # hydrator_linkedin: since Fix 2b added per-URL exception handling,
         # individual URL exceptions are caught and skipped (not propagated to the
@@ -520,10 +524,11 @@ class TestPipelineRunSummary:
     def test_summary_has_steps(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """PoC M2: LinkedIn-only + C20 embedding — expect 3 steps (gmail, hydrate, embed)."""
+        """PoC M2: LinkedIn-only + C20 embedding + C21 dedup — expect 4 steps."""
         summary = run_pipeline(db_path=test_db)
-        assert len(summary.steps) == 3
+        assert len(summary.steps) == 4
         assert "Embedding postings (C20)…" in summary.steps
+        assert "Dedup decisions (C21)…" in summary.steps
 
 
 # ---------------------------------------------------------------------------
