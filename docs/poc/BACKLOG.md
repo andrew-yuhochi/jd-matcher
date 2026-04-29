@@ -15,37 +15,48 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 ---
 
-## Conditional — re-evaluate at TASK-M2-012 calibration
+## Promoted to TASK-M2-012 scope — LLM gatekeeper for all merges
 
-### LLM-fallback dedup classifier for borderline FUSE scores
+### LLM dedup gatekeeper using full job descriptions
 
 **Surfaced**: 2026-04-29 — TASK-M2-008 edge-case validation
-**BA verdict**: DRIFTING (logged in ALIGNMENT-LOG.md 2026-04-29 entry)
-**User decision**: A — defer decision to TASK-M2-012; re-evaluate based on fuzzy-zone hit rate
+**BA verdict (initial)**: DRIFTING (logged in ALIGNMENT-LOG.md 2026-04-29 entry — original "fallback for borderline" framing)
+**User decision (initial)**: 2026-04-29 — accepted BA Option A: defer to TASK-M2-012, re-evaluate based on fuzzy-zone hit rate
+**User decision (refined, 2026-04-29 same-session)**: sharpened design + promoted to TASK-M2-012 scope unconditionally. No re-evaluation gate — build the gatekeeper as part of TASK-M2-012 calibration work.
 
-**Description**: Add an LLM-based classifier as a fallback when FUSE total similarity falls in the 0.85–0.95 fuzzy zone around the 0.90 auto-merge threshold. Instead of strictly applying the threshold, send both full job descriptions to an LLM (`gpt-4o-mini`) and ask: "Are these the same role at the same employer?" The LLM verdict overrides the threshold for that pair.
+**Two-tier merge decision rule**:
+- **Tier 1**: FUSE total ≥ 0.75 → LLM gatekeeper required (reading FULL JDs); merge only if LLM confirms "same role at same employer"
+- **Tier 2**: FUSE total < 0.75 → no merge (default)
 
-**Why proposed**: TASK-M2-008 edge-case validation surfaced 3–4 borderline pairs (Galent 5↔6 merged at 0.925, Alquemy 133↔148 NEW at 0.899, plus boundary cases CCL QET 21↔94 at 0.801) where deterministic FUSE math is genuinely uncertain. Staffing-firm postings (Alquemy, Jobright.ai, Jobs Ai, Crossing Hurdles) are the dominant pattern — same template across clients inflates similarity, OR different polish levels for the same client deflate it. A full-JD LLM read could likely tell the difference where pure embedding+jaccard math cannot.
+**Why this design (vs the original "fallback for borderline 0.85–0.95")**:
 
-**Conditional re-evaluation at TASK-M2-012**:
-- Build the 30-pair hand-labeled calibration set as planned per TDD §C21
-- Count pairs that land in the 0.85–0.95 fuzzy zone
-  - **If ≥3 of 30 (material)**: promote to M2 addition. Build the LLM-fallback classifier with calibration data in hand (bounded scope, evidence-based weights). Estimated cost ~$0.001/borderline pair, ~6 pairs/run → ~$0.006/run. Latency +1–2s/pair (acceptable for nightly batch).
-  - **If 0–2 of 30**: threshold tuning alone is sufficient. Move this entry to "Deferred to PoC M3 — Smart layer" (full-JD LLM calls already in scope there; marginal cost of dedup classifier prompt is minimal).
+1. **Asymmetric cost recognition** — for a job-search tool, under-merge (apply twice = wasted ~10 min, recoverable) is dramatically cheaper than over-merge (silently hide a real opportunity = unrecoverable). Conservative bias toward keeping-both is correct.
 
-**Implementation sketch (if promoted to M2)**:
-- New component: `LLMDedupClassifier` (C28-style provider-abstracted)
-- New prompt: `prompts/dedup_classifier_v1.txt` — pair of JDs + titles + skills in, yes/no + reasoning out
-- C21 integration: in `decide()`, when `0.85 ≤ total_similarity ≤ 0.95`, dispatch to classifier; verdict overrides threshold
-- Gate 4 implication: dedup decision becomes probabilistic for borderline pairs only
+2. **Full JD as ground truth** — `role_summary` is an LLM compression that introduces noise. Saw this concretely in Alignerr 66↔67 (TASK-M2-008 edge-case validation): same Alignerr contract role posted under "Engineer" vs "Expert" titles produced inconsistent role_summary phrasings AND inconsistent skill extractions (2 vs 5 skills), depressing FUSE total to 0.714. A full-JD LLM read bypasses this compression-loss issue.
 
-**Why DRIFTING (per BA)**:
-- PRD §5 M2 scope confines LLM to normalisation; classification is M3
-- PRD §10 Open Question #4 prescribes calibration as the answer to threshold ambiguity, not LLM delegation
-- TDD §1.0 makes FUSE+threshold the final authority at M2; adding fallback changes the component contract
-- Adding an LLM into C21 converts dedup from deterministic → probabilistic, triggering Gate 4 per-pair user approval overhead
+3. **Gatekeeper semantics match the cost model** — LLM must actively say "yes, same role" to permit merge. Silence or uncertainty defaults to no-merge. This operationalizes "under-merge > over-merge" cleanly.
 
-**Pattern note**: Third M2 proposal to expand the LLM layer beyond normalisation (after `role_orientation` deferred to M3 + the full_jd-fallback safety check added to M2-008). The containment valve the PRD designed is TASK-M2-012 calibration.
+4. **No auto-merge bypass even for byte-identical pairs** — every merge requires LLM approval. Defense against degenerate edge cases (e.g., a future bug producing zero-vector embeddings or hash collisions silently scoring 1.000). Trivial cost saved by bypassing the obvious dups (~$0.007/week) isn't worth the special-case branching complexity.
+
+**Trade-off explicitly accepted by user**: pairs scoring 0.70–0.749 (e.g., **Alignerr 66↔67 at 0.714**, our strongest example of an under-merge in the corpus) will NOT trigger the LLM gatekeeper and will stay separate. This is the user's accepted under-merge cost in exchange for a clean two-tier rule.
+
+**Implementation (now in TASK-M2-012 scope, see TASKS.md TASK-M2-012 ACs)**:
+- New component: `LLMDedupClassifier` (C28-style provider-abstracted, parallel to existing extraction provider)
+- New prompt: `prompts/dedup_classifier_v1.txt` — pair of FULL JDs + titles + companies in, yes/no + brief reasoning out
+- C21 integration: in `decide()`, when `total_similarity ≥ 0.75`, dispatch to classifier; classifier verdict is the final merge gate (overrides the FUSE-derived candidate decision)
+- Gate 4 implication: dedup decision is probabilistic for Tier-1 pairs (~25% of all decisions in current corpus). Per-merge LLM verdict + reasoning logged for user audit.
+
+**Cost estimate (validated against current corpus)**: ~11 of 44 within-block pairs (25%) score ≥ 0.75 → ~$0.001/call × 11 = **~$0.011 per pipeline run**. Negligible.
+
+**Latency**: +1-2 seconds per gatekeeper-eligible pair. Acceptable for nightly batch; does not impact interactive UX (dedup runs in pipeline, not at view-time).
+
+**Why DRIFTING was the right initial verdict but the refined design is defensible to ship**:
+- PRD §5 M2 confines C18 LLM to normalisation; this proposal adds a SECOND LLM call (classification) to C21
+- The refined design honors the BA's recommendation that calibration is the right gate — building the gatekeeper as part of TASK-M2-012 means it ships with empirical justification (the calibration data shows where the FUSE math falls short)
+- The two-tier rule is bounded and auditable (single threshold, single LLM call per Tier-1 pair)
+- M3 already opens the LLM scope to full classification per PRD; this is a small early step in that direction, contained inside one component (C21)
+
+**Pattern note**: Third M2 proposal to expand the LLM layer beyond normalisation (after `role_orientation` deferred to M3 + the full_jd-fallback safety check added defensively at M2-008). User's repeated direction that LLM enrichment in M2 is acceptable when the use case justifies it is now an established pattern — worth checking against PRD §5 boundaries explicitly at /milestone-complete.
 
 ---
 

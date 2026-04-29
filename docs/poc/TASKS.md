@@ -406,7 +406,7 @@
 - **Blocked reason**:
 - **Agent**: data-pipeline + user
 - **Component**: C21 (calibration) + C29 (validation) — TDD §C21, §C29
-- **Description**: Generate 30 synthetic test pairs (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios. Run M2 pipeline against existing 91+ postings. User labels 10-15 real pairs. Calibration script computes precision/recall at multiple thresholds; final threshold finalized in config.
+- **Description**: Generate 30 synthetic test pairs (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios. Run M2 pipeline against existing 91+ postings. User labels 10-15 real pairs. Calibration script computes precision/recall at multiple thresholds; final threshold finalized in config. **Plus**: build the LLM dedup gatekeeper (per BACKLOG "Promoted to TASK-M2-012 scope — LLM gatekeeper for all merges", refined 2026-04-29) — two-tier rule where FUSE total ≥ 0.75 dispatches to an LLM that reads BOTH FULL JDs and confirms "same role at same employer?" Merge requires LLM approval; FUSE < 0.75 defaults to no-merge.
 - **Dependencies**: TASK-M2-011
 - **Implementation Checklist**:
   - Schema: reads `posting_canonical_links` + `canonical_postings`
@@ -425,8 +425,13 @@
   - [ ] ZERO false-merges on 10 different-team synthetic cases (regression-blocking — must pass at chosen threshold)
   - [ ] Final threshold committed in `config.yaml` (could remain 0.90 or adjust)
   - [ ] Calibration report committed as a quality artifact
-  - [ ] **LLM-fallback re-evaluation** (added 2026-04-29 per BACKLOG conditional): count pairs in 0.85–0.95 fuzzy zone across the 30-pair calibration set. If ≥3/30 → flag to user with recommendation to add LLM-fallback dedup classifier as M2 addition (see BACKLOG.md "Conditional — re-evaluate at TASK-M2-012"). If 0–2/30 → mark BACKLOG entry as "deferred to M3" and proceed.
-  - [ ] **Galent-pattern title-cosine review** (added 2026-04-29): for any borderline pair (0.85–0.95) where skills_jaccard=1.0 and seniority_match=1.0 but title_cosine drags the score down (e.g., "AI/ML Engineer" vs "Artificial Intelligence Engineer"), assess whether the title weight (0.2) should be reduced or whether title pre-normalization (canonical-form mapping) is needed before embedding.
+  - [ ] **LLM dedup gatekeeper component** (`LLMDedupClassifier`): C28-style provider-abstracted; new module `src/jd_matcher/dedup/classifier.py`; exposes `classify(posting_a, posting_b) -> {is_same_role: bool, reasoning: str}`
+  - [ ] **Gatekeeper prompt** (`prompts/dedup_classifier_v1.txt`): accepts pair of FULL JDs + canonical_title + canonical_company for both; asks "Are these the same role at the same employer?"; returns yes/no + 1–2 sentence reasoning. Strict JSON output validated against Pydantic.
+  - [ ] **C21 integration**: `decide()` extended — when `total_similarity ≥ 0.75`, dispatch to gatekeeper; gatekeeper verdict overrides FUSE merge candidate (LLM "no" → action='new', LLM "yes" → action='merge'). When `total_similarity < 0.75`, no gatekeeper call (default no-merge). Configurable via `config/dedup.yaml: dedup.gatekeeper_threshold=0.75`.
+  - [ ] **Cost & telemetry**: each gatekeeper call writes `llm_call_ledger` row (`call_kind='dedup_gatekeeper'`); per-pair LLM verdict + reasoning logged for user audit (DEBUG level).
+  - [ ] **Calibration with gatekeeper**: precision/recall computed for both raw-FUSE and gatekeeper-augmented decisions on the 30-pair labeled set. Gatekeeper-augmented precision should be ≥ raw-FUSE precision (the gatekeeper's job is to catch over-merges).
+  - [ ] **Acceptance**: ZERO false-merges on 10 different-team synthetic cases must hold under gatekeeper-augmented decisions; gatekeeper verdict for each pair logged in calibration report.
+  - [ ] **Galent-pattern title-cosine review** (added 2026-04-29): for any borderline pair (0.75–0.95) where skills_jaccard=1.0 and seniority_match=1.0 but title_cosine drags the FUSE score down (e.g., "AI/ML Engineer" vs "Artificial Intelligence Engineer"), assess whether the title weight (0.2) should be reduced or whether title pre-normalization (canonical-form mapping) is needed before embedding. The LLM gatekeeper will catch these cases regardless, but the FUSE math is still worth tuning.
 
 ---
 
