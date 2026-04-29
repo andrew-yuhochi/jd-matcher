@@ -425,6 +425,8 @@
   - [ ] ZERO false-merges on 10 different-team synthetic cases (regression-blocking — must pass at chosen threshold)
   - [ ] Final threshold committed in `config.yaml` (could remain 0.90 or adjust)
   - [ ] Calibration report committed as a quality artifact
+  - [ ] **LLM-fallback re-evaluation** (added 2026-04-29 per BACKLOG conditional): count pairs in 0.85–0.95 fuzzy zone across the 30-pair calibration set. If ≥3/30 → flag to user with recommendation to add LLM-fallback dedup classifier as M2 addition (see BACKLOG.md "Conditional — re-evaluate at TASK-M2-012"). If 0–2/30 → mark BACKLOG entry as "deferred to M3" and proceed.
+  - [ ] **Galent-pattern title-cosine review** (added 2026-04-29): for any borderline pair (0.85–0.95) where skills_jaccard=1.0 and seniority_match=1.0 but title_cosine drags the score down (e.g., "AI/ML Engineer" vs "Artificial Intelligence Engineer"), assess whether the title weight (0.2) should be reduced or whether title pre-normalization (canonical-form mapping) is needed before embedding.
 
 ---
 

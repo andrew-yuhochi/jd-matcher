@@ -274,3 +274,52 @@ Preferred framing if user parks: add to BACKLOG.md as "M3-candidate — `role_or
 - Mapping-miss count in `docs/poc/quality-logs/TASK-M2-006b.md` says "12 mentions / <1%"; actual is 13 / 1.08%
 
 User chose Option A (approve as-is) over Option C (approve + fix Minors); these are documentation/marker hygiene items deferred to a future cleanup pass if surfaced again.
+
+---
+
+## 2026-04-29 — LLM-based dedup fallback for borderline similarity scores (fuzzy zone 0.85–0.95)
+
+**Verdict**: DRIFTING
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN M2: "Two-stage dedup: block by `(canonical_company, canonical_seniority, canonical_location)`; fuse cosine + structured similarity at 50/50" — the dedup engine is defined as a deterministic two-stage mechanism with a fixed threshold
+- PRD §5 Scope IN M2: "LLM extraction call producing `canonical_company / canonical_seniority / canonical_location / team_or_department / top_skills / role_summary` (used here for normalisation only — full classification deferred to M3)"
+- PRD §10 Open Question #4: "Auto-merge similarity threshold — default 0.90 from DISCOVERY-NOTES.md §10; calibrated against hand-labeled 30 pairs at M2" — threshold calibration is the M2 answer to borderline ambiguity; the PRD's explicit mechanism is calibration, not LLM fallback
+- TDD §1.0 M2 scope note: "steps 6 (LLM extraction — normalisation only, full classification still deferred to M3)" — M2's LLM budget is scoped to normalisation; a dedup classifier is a new classification task, not normalisation
+- TDD §1.0 FUSE formula: "`0.4 × embedding_cosine(role_summary) + 0.3 × jaccard(top_skills) + 0.2 × title_cosine + 0.1 × seniority_match`; auto-merge at strict threshold 0.90" — the TDD defines the FUSE result as the final authority at M2
+- CLAUDE.md Gate 4: "Real data — probabilistic: no fixed threshold. Always flag to user for approval before task can be marked Done" — an LLM classifier in the dedup path converts a deterministic step into a probabilistic one, triggering Gate 4's user-approval requirement on every pair in the fuzzy zone
+
+**Analysis**: DRIFTING, not VIOLATES, for two reasons. First, the LLM-fallback does not contradict any PRD §6 Scope OUT clause — it is not auto-apply, CV rewriting, auth, billing, or any listed deferred category. Second, it is conceptually consistent with PRD §4 Phase Objective 2 ("content-aware deduplication") — using full JD text is literally the richest content signal. What makes it DRIFTING rather than ALIGNED: PRD §5 M2 defines the dedup engine with a fixed threshold calibrated at M2-end (Open Question #4) as the resolution mechanism for borderline cases. An LLM fallback is an entirely different resolution strategy that (a) changes the M2 dedup engine from deterministic to probabilistic, triggering Gate 4 user-approval on every fuzzy-zone pair; (b) introduces a new LLM task (dedup classification) beyond the normalisation-only M2 LLM scope; and (c) supersedes the calibration task (TASK-M2-012) as the primary answer to PRD §10 Open Question #4 without that calibration data yet existing. The Galent/Alquemy edge cases motivating the proposal are genuine, but the right M2 answer per PRD §10 is: run the calibration (M2-012), observe the distribution, and decide then whether the threshold alone is sufficient. On Gate 4: even at low cost (~$0.006/corpus), the LLM's binary yes/no verdict is non-deterministic — test-validator cannot produce a pass/fail against a fixed standard without user approval on every borderline pair. This is a process overhead that inflates M2 closure complexity.
+
+Pattern note: this is the third proposal in M2 to add LLM capability beyond the normalisation-only boundary defined in PRD §5 M2 (role_orientation was the second; both were DRIFTING). The pressure is consistently in the same direction — enriching the M2 extraction/decision layer toward M3-class intelligence. The pattern is understandable (edge cases surface real gaps), but it bears watching across M2-end. The right containment is TASK-M2-012 calibration first.
+
+No LLM-fallback precedent exists in TDD or PRD. The closest thing is TDD §1.0's note that local Ollama is config-swappable — but that is a provider swap, not a decision-delegation pattern.
+
+**Recommendation**: DRIFTING. Recommended landing zone: **defer to TASK-M2-012 (M2 calibration)**. Specifically: run the 30-pair hand-label, measure the threshold, and explicitly count how many pairs fall in 0.85–0.95. If the count is material (e.g., >3 out of 30), present the LLM-fallback then as a scoped M2 addition with calibration data in hand. If the count is 0–1, the threshold alone is sufficient and the LLM-fallback moves to BACKLOG targeting M3.
+
+Alternative landing zones in decreasing preference:
+1. TASK-M2-012 decision point (recommended above) — preserves calibration-first intent of PRD §10 Open Question #4
+2. BACKLOG as explicit PoC-M3 candidate — bundles with the M3 classification layer, which already uses full-JD LLM calls; adding a dedup-classifier prompt in M3 is lower marginal cost and the staffing-firm pattern will be better characterized by then
+3. New in-place TASK-M2-008b (NOT recommended) — bypasses the calibration evidence that PRD §10 prescribes and makes M2 close with a probabilistic Gate 4 component before the threshold is even tuned
+
+**User decision**: Accepted BA Recommendation A — defer to TASK-M2-012 calibration (conditional re-evaluation based on fuzzy-zone hit rate)
+**Outcome**: BACKLOG updated (new "Conditional — re-evaluate at TASK-M2-012" section); TASKS.md TASK-M2-012 gains 2 new ACs; TASK-M2-008 ships unchanged
+
+---
+
+## 2026-04-29 — User decision follow-up: LLM-fallback dedup classifier deferred to TASK-M2-012 conditional re-evaluation
+
+- **Triggered by**: BA verdict DRIFTING on LLM-fallback dedup classifier proposal (same date, see entry above)
+- **Mode**: follow-up (no new BA analysis required)
+- **References**: BA entry immediately above (DRIFTING verdict + recommendation), `docs/poc/BACKLOG.md` "Conditional — re-evaluate at TASK-M2-012", `docs/poc/TASKS.md` TASK-M2-012 (added two new ACs: fuzzy-zone count + Galent-pattern title-cosine review)
+
+**User decision**: Accepted BA Recommendation A — defer the decision to TASK-M2-012 calibration. Re-evaluate based on fuzzy-zone hit rate from the 30-pair hand-labeled calibration set:
+- If ≥3 of 30 pairs land in the 0.85–0.95 fuzzy zone (material): promote LLM-fallback to M2 addition with calibration data in hand
+- If 0–2 of 30: threshold tuning is sufficient; move BACKLOG entry to "Deferred to PoC M3" (Smart layer expansion already covers full-JD LLM calls)
+
+**Action taken**:
+- BACKLOG.md: new "Conditional — re-evaluate at TASK-M2-012" section added with full implementation sketch + conditional re-evaluation rules
+- TASKS.md TASK-M2-012: two new acceptance criteria added — (1) count fuzzy-zone pairs and decide promote/defer; (2) Galent-pattern title-cosine review for borderline cases where skills_jaccard=1.0 + seniority_match=1.0 but title drags score down
+- TASK-M2-008 (commit `45d9196`) is unchanged — the dedup engine ships as-is for M2 with the deterministic FUSE math + threshold
+
+**Pattern note**: This is the third M2 proposal to expand the LLM layer beyond normalisation that has been DRIFTING-deferred (after `role_orientation` to M3, plus the full_jd-fallback safety check that WAS added defensively at M2-008). The PRD's prescribed containment valve (TASK-M2-012 calibration) is being honored.

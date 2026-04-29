@@ -1,7 +1,7 @@
 # Backlog — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-24
+> **Last Updated**: 2026-04-29
 
 Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4), to MVP, or to Beta. Each entry includes the deferral rationale so a future reader can audit the decision.
 
@@ -12,6 +12,40 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 - **Cross-source content-aware dedup** (LLM-extracted-fields + JD-embedding fusion). Requires C5 hydrator + LLM extraction (M3) — but content-only dedup using JD embeddings can land in M2 without LLM extraction.
 - **Repost detection** (same JD reposted under new jobId after 30+ days).
 - **Block-key composition refinement** (`canonical_company`, `canonical_seniority`, `canonical_location`) — depends on either rule-based normalization (M2) or LLM-extracted fields (M3, preferred).
+
+---
+
+## Conditional — re-evaluate at TASK-M2-012 calibration
+
+### LLM-fallback dedup classifier for borderline FUSE scores
+
+**Surfaced**: 2026-04-29 — TASK-M2-008 edge-case validation
+**BA verdict**: DRIFTING (logged in ALIGNMENT-LOG.md 2026-04-29 entry)
+**User decision**: A — defer decision to TASK-M2-012; re-evaluate based on fuzzy-zone hit rate
+
+**Description**: Add an LLM-based classifier as a fallback when FUSE total similarity falls in the 0.85–0.95 fuzzy zone around the 0.90 auto-merge threshold. Instead of strictly applying the threshold, send both full job descriptions to an LLM (`gpt-4o-mini`) and ask: "Are these the same role at the same employer?" The LLM verdict overrides the threshold for that pair.
+
+**Why proposed**: TASK-M2-008 edge-case validation surfaced 3–4 borderline pairs (Galent 5↔6 merged at 0.925, Alquemy 133↔148 NEW at 0.899, plus boundary cases CCL QET 21↔94 at 0.801) where deterministic FUSE math is genuinely uncertain. Staffing-firm postings (Alquemy, Jobright.ai, Jobs Ai, Crossing Hurdles) are the dominant pattern — same template across clients inflates similarity, OR different polish levels for the same client deflate it. A full-JD LLM read could likely tell the difference where pure embedding+jaccard math cannot.
+
+**Conditional re-evaluation at TASK-M2-012**:
+- Build the 30-pair hand-labeled calibration set as planned per TDD §C21
+- Count pairs that land in the 0.85–0.95 fuzzy zone
+  - **If ≥3 of 30 (material)**: promote to M2 addition. Build the LLM-fallback classifier with calibration data in hand (bounded scope, evidence-based weights). Estimated cost ~$0.001/borderline pair, ~6 pairs/run → ~$0.006/run. Latency +1–2s/pair (acceptable for nightly batch).
+  - **If 0–2 of 30**: threshold tuning alone is sufficient. Move this entry to "Deferred to PoC M3 — Smart layer" (full-JD LLM calls already in scope there; marginal cost of dedup classifier prompt is minimal).
+
+**Implementation sketch (if promoted to M2)**:
+- New component: `LLMDedupClassifier` (C28-style provider-abstracted)
+- New prompt: `prompts/dedup_classifier_v1.txt` — pair of JDs + titles + skills in, yes/no + reasoning out
+- C21 integration: in `decide()`, when `0.85 ≤ total_similarity ≤ 0.95`, dispatch to classifier; verdict overrides threshold
+- Gate 4 implication: dedup decision becomes probabilistic for borderline pairs only
+
+**Why DRIFTING (per BA)**:
+- PRD §5 M2 scope confines LLM to normalisation; classification is M3
+- PRD §10 Open Question #4 prescribes calibration as the answer to threshold ambiguity, not LLM delegation
+- TDD §1.0 makes FUSE+threshold the final authority at M2; adding fallback changes the component contract
+- Adding an LLM into C21 converts dedup from deterministic → probabilistic, triggering Gate 4 per-pair user approval overhead
+
+**Pattern note**: Third M2 proposal to expand the LLM layer beyond normalisation (after `role_orientation` deferred to M3 + the full_jd-fallback safety check added to M2-008). The containment valve the PRD designed is TASK-M2-012 calibration.
 
 ---
 
