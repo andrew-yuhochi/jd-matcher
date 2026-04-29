@@ -255,3 +255,22 @@ Preferred framing if user parks: add to BACKLOG.md as "M3-candidate — `role_or
 **User decision**: Accepted BA Recommendation B (defer `role_orientation` to M3). No override.
 **Action taken**: BACKLOG entry created (per Gate 2 step 3, user said defer). TASK-M2-006b Phase C–E proceeds without `role_orientation`. ALIGNMENT-LOG updated.
 **Outcome**: Logged per Gate 2 protocol. No ALIGNMENT-LOG amendment required — BA verdict stands as DRIFTING with user deferral, no override.
+
+---
+
+## 2026-04-29 — Gate 4 user approval: TASK-M2-006b probabilistic result (75.3% canonical match rate)
+
+- **Triggered by**: TASK-M2-006b Phase E completion — AC "≥80% canonical match rate" landed at 75.3% (910/1209 mentions). Per Gate 4 (CLAUDE.md), probabilistic-tier results require explicit user approval before a task can be marked Done.
+- **Mode**: Gate 4 user approval (no BA dispatch needed — quality decision, not scope decision)
+- **Independent verification**: test-validator confirmed the 75.3% rate via direct SQL query against `extraction_cache` (910/1209 mentions match a canonical taxonomy entry). LLM mapping compliance verified at ~99% (13 mentions / 1.08% are mapping misses; remaining ~23% are legitimate technical tail skills outside the 43-entry DS/ML-core taxonomy — Docker, dbt, R, Tableau, Snowflake, Kafka, Java, etc.). M2-006 baselines independently verified to hold (company 100%, seniority 100%, location 100% on a different 30-posting sample).
+
+**User decision**: Approved 75.3% as Done. The AC threshold (≥80%) was set before the natural skill distribution was known; the 75.3% reflects taxonomy coverage scope, not LLM compliance defect (~99% compliance on in-taxonomy skills, which is what FUSE Jaccard quality actually depends on). Tail skills appearing in their natural form is acceptable — Jaccard still matches across postings using the same surface form.
+
+**Outcome**: TASK-M2-006b is genuinely Done. Task closure stands at commit `f907431`. BACKLOG already carries the M3 taxonomy expansion candidate (with concrete tail-skill proposals: dbt, Docker, Tableau, R, Airflow, Snowflake, Kafka, LangChain) for re-evaluation when the M3 full-classification prompt overhaul lands. Pipeline advances to TASK-M2-007 (Embedding Pipeline C20).
+
+**Minor process gaps noted (not addressed under Option A approval)**:
+- Stale "Awaiting user taxonomy review" header in `docs/poc/quality-logs/TASK-M2-006b-skills-analysis.md` (Phase A header not updated for Phase E)
+- Test marker mismatch: `tests/llm/test_canonical_skills_regression.py` uses `@pytest.mark.skipif(SKIP_LIVE,...)` instead of `@pytest.mark.live` — `pytest -m live` returns 0 tests (functional behavior is correct under `SKIP_LIVE=0`)
+- Mapping-miss count in `docs/poc/quality-logs/TASK-M2-006b.md` says "12 mentions / <1%"; actual is 13 / 1.08%
+
+User chose Option A (approve as-is) over Option C (approve + fix Minors); these are documentation/marker hygiene items deferred to a future cleanup pass if surfaced again.
