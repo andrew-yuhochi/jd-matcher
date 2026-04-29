@@ -299,10 +299,11 @@ class TestPipelineIngestLogIntegration:
             f"Found {ingest_row_count} pipeline_runs rows with '_ingest_' in run_id. "
             "GmailIngester must not write its own row when canonical_run_id is provided."
         )
-        # Orchestrator writes exactly 3 canonical rows: gmail_linkedin, hydrator_linkedin, dedup_c21.
-        # dedup_c21 row added M2-008 (C21 Two-Stage Dedup Engine).
-        assert total_row_count == 3, (
-            f"Expected exactly 3 pipeline_runs rows (one per canonical source), got {total_row_count}. "
+        # Orchestrator writes exactly 4 canonical rows:
+        #   gmail_linkedin, hydrator_linkedin, dedup_c21, dedup_merge_c29.
+        # dedup_c21 row added M2-008; dedup_merge_c29 row added M2-009 (C29/C30 merge-apply phase).
+        assert total_row_count == 4, (
+            f"Expected exactly 4 pipeline_runs rows (one per canonical source), got {total_row_count}. "
             "Double-write or missing orchestrator rows detected."
         )
 

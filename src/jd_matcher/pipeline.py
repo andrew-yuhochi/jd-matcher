@@ -35,6 +35,8 @@ from jd_matcher.db.email_ingest_log import increment_hydration, mark_filtered, u
 from jd_matcher.filter.title_filter import filter_title
 from jd_matcher.db.init_db import init_db
 from jd_matcher.dedup.engine import DedupDecision, decide as dedup_decide
+from jd_matcher.dedup.merge import MergeResult, apply_decision as dedup_apply
+from jd_matcher.dedup.repost import detect_repost
 from jd_matcher.dedup.url_dedup import register_new
 from jd_matcher.hydrate import compute_source_health
 from jd_matcher.hydrate.indeed import hydrate as indeed_hydrate
@@ -103,6 +105,10 @@ class PipelineRunSummary:
     dedup_action_merge: int = 0
     dedup_full_jd_skipped: int = 0
     dedup_block_zero: int = 0
+    # C29/C30 merge-apply stats (populated after the merge phase)
+    merges_applied: int = 0
+    new_canonicals_created: int = 0
+    reposts_detected: int = 0
 
     @property
     def failed_sources(self) -> list[str]:
@@ -263,7 +269,10 @@ def run_pipeline(
         )
 
     # -----------------------------------------------------------------------
-    # Phase 4: C21 — Dedup decision (read-only; apply is C29 in M2-009)
+    # Phase 4: C21 — Dedup decision (read-only)
+    # Collects decisions; C29/C30 application happens in Phase 5.
+    # Skips posting_ids that already have a posting_canonical_links row
+    # (idempotency — re-running the pipeline doesn't double-link).
     # -----------------------------------------------------------------------
     step_label = "Dedup decisions (C21)…"
     steps_emitted.append(step_label)
@@ -273,10 +282,22 @@ def run_pipeline(
     dedup_merge = 0
     dedup_full_jd_skipped = 0
     dedup_block_zero = 0
+    # List of (posting_id, DedupDecision) pairs for Phase 5 to apply
+    pending_decisions: list[tuple[int, DedupDecision]] = []
 
     try:
         embedded_ids = _get_embedded_posting_ids(resolved_db)
+        already_linked = _get_already_linked_posting_ids(resolved_db)
         for pid in embedded_ids:
+            if pid in already_linked:
+                logger.debug(
+                    json.dumps({
+                        "event": "dedup_skip_already_linked",
+                        "run_id": run_id,
+                        "posting_id": pid,
+                    })
+                )
+                continue
             try:
                 decision: DedupDecision = dedup_decide(pid, db_path=resolved_db)
                 dedup_total += 1
@@ -288,6 +309,7 @@ def run_pipeline(
                     dedup_full_jd_skipped += 1
                 if decision.stage1_block_size == 0:
                     dedup_block_zero += 1
+                pending_decisions.append((pid, decision))
                 logger.info(
                     json.dumps({
                         "event": "dedup_decision",
@@ -341,6 +363,83 @@ def run_pipeline(
             })
         )
 
+    # -----------------------------------------------------------------------
+    # Phase 5: C30 → C29 — Repost detection + merge application
+    # For each decision collected in Phase 4:
+    #   1. detect_repost() — may retag merge_kind to 'repost'
+    #   2. apply_decision() — writes canonical_postings + posting_canonical_links
+    # -----------------------------------------------------------------------
+    step_label = "Merge apply (C29+C30)…"
+    steps_emitted.append(step_label)
+
+    merges_applied = 0
+    new_canonicals_created = 0
+    reposts_detected = 0
+
+    try:
+        for pid, raw_decision in pending_decisions:
+            try:
+                # C30: check for repost (no-op if action='new')
+                repost_decision = detect_repost(raw_decision, pid, db_path=resolved_db)
+                if repost_decision.merge_kind == "repost":
+                    reposts_detected += 1
+
+                # C29: apply the (possibly-retagged) decision
+                merge_result: MergeResult = dedup_apply(repost_decision, pid, db_path=resolved_db)
+                if merge_result.was_new:
+                    new_canonicals_created += 1
+                else:
+                    merges_applied += 1
+
+                logger.info(
+                    json.dumps({
+                        "event": "merge_applied",
+                        "run_id": run_id,
+                        "posting_id": pid,
+                        "canonical_id": merge_result.canonical_id,
+                        "was_new": merge_result.was_new,
+                        "merge_kind": merge_result.merge_kind,
+                        "fields_updated": merge_result.fields_updated,
+                    })
+                )
+            except Exception as exc:
+                logger.warning(
+                    json.dumps({
+                        "event": "merge_apply_failed",
+                        "run_id": run_id,
+                        "posting_id": pid,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    })
+                )
+
+        _write_pipeline_run(
+            resolved_db,
+            run_id=run_id,
+            source="dedup_merge_c29",
+            health_status="healthy",
+            failure_reason=None,
+            started_at=started_at,
+            finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=datetime.now(timezone.utc),
+        )
+        logger.info(
+            json.dumps({
+                "event": "merge_phase_complete",
+                "run_id": run_id,
+                "merges_applied": merges_applied,
+                "new_canonicals_created": new_canonicals_created,
+                "reposts_detected": reposts_detected,
+            })
+        )
+    except Exception as exc:
+        logger.error(
+            json.dumps({
+                "event": "merge_phase_failed",
+                "run_id": run_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+        )
+
     finished_at = datetime.now(timezone.utc)
     total_new = sum(r.new_postings for r in source_results)
 
@@ -359,6 +458,9 @@ def run_pipeline(
         dedup_action_merge=dedup_merge,
         dedup_full_jd_skipped=dedup_full_jd_skipped,
         dedup_block_zero=dedup_block_zero,
+        merges_applied=merges_applied,
+        new_canonicals_created=new_canonicals_created,
+        reposts_detected=reposts_detected,
     )
 
     logger.info(
@@ -958,6 +1060,21 @@ def _get_embedded_posting_ids(db_path: Path) -> list[int]:
             "SELECT CAST(posting_id AS INTEGER) FROM posting_embeddings ORDER BY posting_id"
         ).fetchall()
         return [row[0] for row in rows]
+    finally:
+        conn.close()
+
+
+def _get_already_linked_posting_ids(db_path: Path) -> set[int]:
+    """Return posting IDs that already have a posting_canonical_links row.
+
+    Used by Phase 4 to skip re-processing postings on idempotent pipeline runs.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT CAST(posting_id AS INTEGER) FROM posting_canonical_links"
+        ).fetchall()
+        return {row[0] for row in rows}
     finally:
         conn.close()
 

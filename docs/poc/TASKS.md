@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 9 | 23 |
+| Done | 10 | 24 |
 | In Progress | 0 | 0 |
-| To Do | 6 | 6 |
+| To Do | 5 | 5 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -320,7 +320,7 @@
 
 ##### TASK-M2-009 — Canonical Merge + Repost Detector (C29 + C30)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C29 (Canonical Record Merge Logic) + C30 (Repost Detector) — TDD §C29, §C30
@@ -335,15 +335,15 @@
 - **Demo Artifact**: integration test merges 2 synthetic postings; verifies `canonical_postings` has 1 row, `posting_canonical_links` has 2 rows, `postings` still has both originals + `first_seen` MIN preserved.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-009.md`
 - **Acceptance Criteria**:
-  - [ ] On `action="new"`: INSERT `canonical_postings` + INSERT `posting_canonical_links` (`merge_kind='new'`)
-  - [ ] On `action="merge"`: INSERT `posting_canonical_links` (`merge_kind='content_dedup'`); UPDATE `canonical_postings` (MIN `first_seen` preserved, MAX `last_seen`, longer-by-10% `full_jd` swap with provenance)
-  - [ ] `postings` table NEVER modified on merge (verified by test that captures `postings.*` before+after)
-  - [ ] `sources_summary` correctly appends source values (e.g., `["linkedin_email", "indeed_email"]`)
-  - [ ] Transactional — partial failure rolls back (verified by mock of UPDATE failure)
-  - [ ] Repost detection: `candidate.first_seen ≥ MAX(prior link merged_at) + 30 days` → retag `merge_kind='repost'` (verified)
-  - [ ] On repost: emit `posting_reposted` event via C10 (write to `events` table; verified)
-  - [ ] Inactive/Expired bypass: never reaches C30 (already filtered at C21 — verified by mock of canonical with Inactive status)
-  - [ ] 8 invariant tests for merge correctness; 5 invariant tests for repost detection
+  - [x] On `action="new"`: INSERT `canonical_postings` + INSERT `posting_canonical_links` (`merge_kind='new_canonical'`)
+  - [x] On `action="merge"`: INSERT `posting_canonical_links` (`merge_kind='content_dedup'`); UPDATE `canonical_postings` (MIN `first_seen` preserved, MAX `last_seen`, longer-by-10% `full_jd` swap with provenance)
+  - [x] `postings` table NEVER modified on merge (verified by test that captures `postings.*` before+after)
+  - [x] `sources_summary` correctly appends source values (e.g., `["linkedin", "indeed"]`)
+  - [x] Transactional — partial failure rolls back (verified by mock of link INSERT failure)
+  - [x] Repost detection: `candidate.first_seen ≥ MAX(prior link merged_at) + 30 days` → retag `merge_kind='repost'` (verified)
+  - [x] On repost: emit `posting_reposted` event via C10 (write to `events` table; verified)
+  - [x] Inactive/Expired bypass: never reaches C30 (already filtered at C21 — verified by action='new' passthrough)
+  - [x] 8 invariant tests for merge correctness; 5 invariant tests for repost detection
 
 ---
 

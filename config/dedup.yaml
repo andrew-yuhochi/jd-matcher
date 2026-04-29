@@ -16,3 +16,6 @@ dedup:
   fuse_weight_skills: 0.3
   fuse_weight_title: 0.2
   fuse_weight_seniority: 0.1
+  # C30 repost detection: days since the last prior link's merged_at.
+  # A candidate first_seen >= MAX(prior merged_at) + this value is tagged 'repost'.
+  repost_threshold_days: 30
