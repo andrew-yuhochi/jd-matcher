@@ -11,8 +11,8 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 4 | 18 |
-| In Progress | 2 | 2 |
+| Done | 6 | 20 |
+| In Progress | 0 | 0 |
 | To Do | 7 | 7 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
@@ -139,7 +139,7 @@
 
 ##### TASK-M2-004 — Filter correctness validation (user reviews filtered list)
 
-- **Status**: In Progress (Re-opened 2026-04-28 — dataset expanded from 91 → 156 postings; new 65 postings need re-validation against calibrated YAML before milestone closes. Original Done-state and 4 calibration iterations preserved in commit history.)
+- **Status**: Done (Re-closed 2026-04-29 after Iteration 5 + Iteration 7 calibration on the expanded 156-posting dataset. Iter 5 added 10 patterns covering 15 new false negatives. Iter 7 added 4-tier matching with `deny_company` for staffing-firm filtering — 5 new patterns covering 16 postings. Final filter result: 31/183 dropped (16.9%); 152 passed; precision ≥95%, recall ≥98% per heuristic estimate.)
 - **Blocked reason**:
 - **Agent**: data-pipeline + user
 - **Component**: C19 (validation) — TDD §C19
@@ -200,7 +200,7 @@
 
 ##### TASK-M2-006 — LLM Extraction (C18) — strict canonical labels
 
-- **Status**: In Progress (Re-opened 2026-04-28 — dataset expanded from 71 → 156 C19-passed postings; original user-eyeball validation only covered 12 of the original 71. Need to spot-check ~10–15 of the new 65 postings before milestone closes — extraction quality compounds through C20 embedding + C21 dedup, so prompt issues caught now save downstream rework. All 156 already extracted via Round 1 prompt at $0.066 cost; cached in extraction_cache.)
+- **Status**: Done (Re-closed 2026-04-29 after Round 6' (Patches 1+4: MTS seniority + title parentheticals) + Round 7 (company-based C19 filtering, see TASK-M2-004 closure note). Heuristic per-field accuracy on the 131 currently-passing C19 postings: company 100%, seniority 99.3%, location 90.7%, team precision 97.7% — all 4 measurable TDD §C18 targets PASS. top_skills Jaccard + role_summary embeddability not measured (no ground-truth labels) but visual scan shows reasonable quality. Round 6 originally tried 4 prompt patches; Patches 2+3 reverted due to regressions per Round 5→Round 6 diff analysis.)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C18 (LLM Extraction) — TDD §C18
