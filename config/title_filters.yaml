@@ -62,6 +62,12 @@ pre_deny:
   - { pattern: "(?i)\\bEntry[- ]?Level\\b", kind: regex,
       note: "Entry-Level" }
 
+  # Iteration 5 (2026-04-28) — explicit "Early Career" — same semantic as Junior/Intern
+  # Per user direction: drop unconditionally (no allow override). Use explicit text only,
+  # NOT level-suffix detection (I/II are ambiguous — some companies use them for senior IC).
+  - { pattern: "(?i)\\bEarly Career\\b", kind: regex,
+      note: "Entry-level — same policy as Junior/Intern (calibrated #36, #37, #99, #103)" }
+
 allow:
   # --- Calibration overrides (added 2026-04-27, Iteration 2) ---
   - pattern: "(?i)\\b(AI|ML|Machine Learning|Data|Generative|Deep Learning)\\b.{0,30}\\bEngineer\\b"
@@ -263,3 +269,27 @@ deny:
   - pattern: "\\bPenetration Tester\\b"
     kind: regex
     note: "PenTester"
+
+  # Iteration 5 calibration (2026-04-28) — additional FN coverage on 156-posting expanded dataset
+  # Non-DS/ML role categories surfaced from random sample
+  - { pattern: "(?i)\\bEvent Representative\\b", kind: regex,
+      note: "Event marketing rep — not DS/ML (calibrated #163 Web Summit)" }
+  - { pattern: "(?i)\\bEmail Operations\\b", kind: regex,
+      note: "Email marketing ops — not DS/ML (calibrated #172 Klaviyo)" }
+  - { pattern: "(?i)\\bCreative Lead\\b", kind: regex,
+      note: "Marketing/creative role — not DS/ML (calibrated #179)" }
+  - { pattern: "(?i)\\bPartner Alliance\\b", kind: regex,
+      note: "Business development — not DS/ML (calibrated #109)" }
+  - { pattern: "(?i)\\bFinance.{0,5}(&|and)\\s*Strategy\\b", kind: regex,
+      note: "Finance ops manager — not DS/ML (calibrated #29 Hopper)" }
+  # AI gig/contractor annotation work (low-skill data labeling, not engineering)
+  - { pattern: "(?i)\\b(AI Trainer|AI Data Trainer|Data Annotator|Data Contributor)\\b", kind: regex,
+      note: "Annotation gig work — not DS/ML engineering (calibrated #171, #182, #183)" }
+  # Pharma/biotech wet-lab (drop on domain qualifier, NOT level suffix per user direction —
+  # I/II suffixes are ambiguous because some companies use them for senior IC levels)
+  - { pattern: "(?i)\\bGMP\\s+Media\\b", kind: regex,
+      note: "Pharma Good Manufacturing Practice — not DS/ML (calibrated #47)" }
+  - { pattern: "(?i)\\bAnalytical Development\\b", kind: regex,
+      note: "Pharma analytical chemistry — not DS/ML (calibrated #32)" }
+  - { pattern: "(?i)\\bNovel Ingredients\\b", kind: regex,
+      note: "Food/cosmetics R&D — not DS/ML (calibrated #34)" }

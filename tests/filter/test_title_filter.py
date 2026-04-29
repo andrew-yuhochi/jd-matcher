@@ -348,6 +348,61 @@ def test_iteration_4_calibration(title: str, expected_action: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Iteration 5 calibration cases (2026-04-28)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title,expected_action", [
+    # Iteration 5 — new drops (15 specific titles flagged from 156-posting review)
+    ("Startup Event Representative (Tech / Web Summit Vancouver)", "drop"),
+    ("Email Operations Specialist (Klaviyo/AI/Figma/Claude)", "drop"),
+    ("Creative Lead, Growth & Storytelling", "drop"),
+    ("Partner Alliance Analyst", "drop"),
+    ("Finance & Strategy Manager, Hopper/HTS (100% Remote - Canada)", "drop"),
+    ("Finance and Strategy Manager", "drop"),  # variant: "and" not "&"
+    ("AI Trainer - Freelance Data Annotator", "drop"),
+    ("Ai Trainer / Ai Data Trainer - Remote", "drop"),
+    ("French Canada - AI Data Contributor", "drop"),
+    ("R&D Scientist, Novel Ingredients", "drop"),
+    ("Process Development Scientist, GMP Media", "drop"),
+    ("Scientist II, Analytical Development", "drop"),  # drops on Analytical Development, NOT the "II"
+    ("Data Scientist, Early Career (Canada)", "drop"),
+    ("Machine Learning Engineer - Early Career (Canada)", "drop"),
+    # Critical regression checks — KEEP per user explicit direction
+    ("Associate Data Scientist - User Fraud", "pass"),  # Associate is not entry-level
+    ("Programmer Analyst I", "pass"),                    # "I" suffix NOT a drop signal
+    ("Intermediate II Software Developer - Artificial Intelligence", "pass"),  # "II" suffix NOT a drop signal
+    # Note: "Software Engineer II" / "Software Engineer III" still DROP on the
+    # base \bSoftware Engineer\b deny (no ML context); II/III don't change that.
+    # User's policy is "don't ADD deny patterns for I/II/III", not "always keep
+    # titles with those suffixes". Base denies still apply when no ML keyword
+    # is present. Not tested here — covered by the existing base SWE deny tests.
+    ("Senior Data Analyst II", "pass"),                  # same: II is ambiguous
+    ("Data Scientist III", "pass"),                      # same: III is ambiguous
+    ("Research And Development Specialist", "pass"),     # too generic — let LLM see JD
+    ("Senior Web Developer", "pass"),                    # might be ML platform, let LLM decide
+    ("Lead Platform Engineer", "pass"),                  # might be ML platform
+    ("Quantitative Researcher, Fixed Income", "pass"),   # quant finance kept
+    ("Bioinformatics Scientist (Remote)", "pass"),       # computational biology = DS-adjacent
+])
+def test_iteration_5_calibration(title: str, expected_action: str) -> None:
+    """Iteration 5 calibration: 14 new drops + 11 critical regression checks.
+
+    Per user direction 2026-04-28:
+    - Drop on domain qualifiers (Event/Email/Creative/Finance/Annotator/Pharma/Early Career)
+    - DO NOT drop on level suffixes (I/II/III) — those are ambiguous between
+      junior and senior at different companies. Use explicit "Junior"/"Intern"/
+      "Early Career" or look at JD content for level detection.
+    """
+    from jd_matcher.filter.title_filter import filter_title
+    decision = filter_title(title)
+    assert decision.action == expected_action, (
+        f"{title!r}: expected {expected_action}, got {decision.action} "
+        f"(matched {decision.matched_pattern!r})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 
