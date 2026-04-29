@@ -195,3 +195,98 @@ Seeds 2 postings with identical BLOCK keys + identical embedding vectors (cosine
 |-------|--------|---------|--------|
 | Post-fix total | 853 | 10 | 0 |
 | New tests added | +1 (regression guard) | — | — |
+
+---
+
+## Post-Fix Re-Run #2 (follow-up commit #2 — 2026-04-29)
+
+**Correction**: The previous quality log conclusion that "the 5 non-merged pairs reflect correct algorithm behavior" was WRONG. A second bug caused those misses, described below.
+
+### Second Bug — Column-Name Mismatch in `_fetch_posting()`
+
+**Root cause** (commit f8bc69d):
+- `postings.seniority_band` is populated by LLM extraction (C18) with values like 'Mid', 'Senior', 'Manager'.
+- `postings.canonical_seniority` was added as a nullable column by the auto-migration during TASK-M2-010. It is never populated — LLM extraction writes only to `seniority_band`.
+- `src/jd_matcher/dedup/merge.py::_fetch_posting()` (line 60 pre-fix) selected `postings.canonical_seniority` → always returned `''` for every posting.
+- `_insert_new_canonical()` wrote that empty string into `canonical_postings.canonical_seniority`.
+- `src/jd_matcher/dedup/engine.py::seniority_match()` compares candidate `seniority_band` ('Mid') against canonical's `canonical_seniority` ('') → always returns 0.0.
+- With `seniority_match = 0.0` universally: max achievable FUSE total = 0.4 + 0.3 + 0.2 + 0.0 = 0.90 exactly. Float32 rounding decided which pairs crossed ≥ 0.90:
+  - Coalition and Turing had FP embeddings > 1.0 (cosine artifact) → FUSE total 0.9000000357 → MERGED (lucky rounding)
+  - Clio, Joveo, Bird Construction, Lumenalta, TELUS Digital landed at 0.8999999... → NEW (unlucky rounding)
+
+This was NOT calibration — it was a code defect.
+
+### Fix
+
+`src/jd_matcher/dedup/merge.py::_fetch_posting()` SQL changed from:
+```sql
+SELECT id, user_id, canonical_title, canonical_company, canonical_seniority, ...
+```
+to:
+```sql
+SELECT id, user_id, canonical_title, canonical_company, seniority_band AS canonical_seniority, ...
+```
+
+The downstream code (which reads `canonical_seniority` from the returned dict) is unchanged. The column `postings.canonical_seniority` remains in the schema as a vestige (nullable, always NULL) — a future cleanup can drop it. `engine.py::seniority_match()` is unchanged — it reads `canonical_seniority` from `canonical_postings`, which is now correctly populated.
+
+**Forensic snapshot**: `~/.jd-matcher/snapshots/20260429-1625-post-m2-010-attempt1-bug.db` (43MB — second-bug state preserved for audit)
+
+### Pre-Fix DB State (from second-bug commit f8bc69d)
+- `canonical_postings`: 154 (WRONG — should be ~149)
+- `posting_canonical_links`: 156
+- `merge_kind breakdown`: new_canonical=154, content_dedup=2 (only Coalition + Turing via lucky FP rounding)
+
+### Post-Fix Re-Run #2 (2026-04-29)
+
+After `canonical_postings` + `posting_canonical_links` cleared and pipeline re-run:
+
+| Metric | Before (second bug) | After Fix |
+|--------|---------------------|-----------|
+| canonical_postings | 154 | **148** |
+| posting_canonical_links | 156 | 156 |
+| merge_kind: new_canonical | 154 | 148 |
+| merge_kind: content_dedup | 2 | **8** |
+| merge_kind: repost | 0 | 0 |
+
+The 8 content_dedup merges = 7 expected pairs + 1 additional true positive discovered.
+
+### All 7 Expected Dup Pairs — Post-Fix #2 Verification
+
+| Pair | Posting IDs | canonical_id | Result |
+|------|------------|-------------|--------|
+| Coalition | 9, 10 | 312 | MERGED |
+| Turing | 112, 113 | 326 | MERGED |
+| TELUS Digital | 118, 119 | 331 | MERGED |
+| Bird Construction | 77, 150 | 366 | MERGED |
+| Lumenalta | 2, 4 | 377 | MERGED |
+| Clio | 27, 44 | 385 | MERGED |
+| Joveo | 55, 97 | 414 | MERGED |
+
+All 7 pairs confirmed merged. Each pair shares exactly one canonical_id. Zero false negatives among expected pairs.
+
+### canonical_seniority Spot-Check (5 rows)
+
+| canonical_id | Company | canonical_seniority | canonical_title |
+|-------------|---------|---------------------|-----------------|
+| 311 | Datatonic | Senior | Machine Learning Engineer |
+| 312 | Coalition | Mid | Applied Scientist II |
+| 313 | Cohere | Senior | Member of Technical Staff, MLE |
+| 314 | Thumbtack | Mid | Applied Scientist, Customer Growth |
+| 315 | Rockwell Automation | Senior | Senior Data Scientist - Agentic AI Products |
+
+`canonical_seniority` is properly populated — no empty strings from the bug path.
+
+### New Regression Test
+
+`tests/dedup/test_merge.py::test_canonical_seniority_populated_from_posting_seniority_band`
+
+Inserts a posting with `seniority_band='Senior'` (and `canonical_seniority` deliberately omitted — NULL — replicating the real schema state). Calls `apply_decision(action='new')`. Asserts `canonical_postings.canonical_seniority == 'Senior'`.
+
+This test would have FAILED on commit f8bc69d (where `_fetch_posting()` read the wrong column). It PASSES on the fixed code.
+
+### Updated Test Counts
+
+| Suite | Passed | Skipped | Failed |
+|-------|--------|---------|--------|
+| Post-fix #2 total | 854 | 10 | 0 |
+| New tests added | +1 (`test_canonical_seniority_populated_from_posting_seniority_band`) | — | — |

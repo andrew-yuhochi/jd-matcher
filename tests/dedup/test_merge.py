@@ -724,3 +724,61 @@ class TestDemoIntegration:
         assert "2024-01-15" in canonical_first_seen, (
             f"canonical.first_seen should be 2024-01-15 (MIN), got {canonical_first_seen}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression test: canonical_seniority must be populated from seniority_band
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_seniority_populated_from_posting_seniority_band(tmp_path: Path) -> None:
+    """_fetch_posting() must read postings.seniority_band (not canonical_seniority).
+
+    Before the fix, merge.py selected postings.canonical_seniority which is always NULL
+    (LLM extractor writes to seniority_band; canonical_seniority is a vestigial column).
+    The result: every canonical_postings row had empty canonical_seniority, so
+    seniority_match() returned 0.0 for all pairs, and the max achievable FUSE score
+    was 0.90 — causing 5 of 7 expected merges to miss based on float32 rounding.
+    """
+    db = _make_db(tmp_path)
+
+    # Insert posting with seniority_band='Senior' (canonical_seniority left NULL/empty
+    # to replicate the real schema state where LLM never writes to that column).
+    conn = sqlite3.connect(str(db))
+    cur = conn.execute(
+        """
+        INSERT INTO postings
+            (user_id, canonical_company, canonical_title, canonical_location,
+             seniority_band, team_or_department, top_skills,
+             role_summary, full_jd, hydration_status, first_seen, last_seen)
+        VALUES ('default', 'Acme Corp', 'Data Scientist', 'Vancouver',
+                'Senior', NULL, '["python"]',
+                'Role summary.', 'Full JD.', 'complete',
+                '2024-03-01T00:00:00+00:00', '2024-03-01T00:00:00+00:00')
+        """,
+    )
+    posting_id = cur.lastrowid
+    conn.execute(
+        """
+        INSERT INTO posting_sources (posting_id, user_id, source, source_url, source_first_seen)
+        VALUES (?, 'default', 'linkedin', 'https://example.com/job/999', '2024-03-01T00:00:00+00:00')
+        """,
+        (posting_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    decision = _make_new_decision()
+    apply_decision(decision, posting_id, db_path=db)
+
+    conn = sqlite3.connect(str(db))
+    row = conn.execute(
+        "SELECT canonical_seniority FROM canonical_postings LIMIT 1"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None, "canonical_postings should have exactly one row after action='new'"
+    assert row[0] == "Senior", (
+        f"canonical_postings.canonical_seniority should be 'Senior' (from seniority_band), "
+        f"got {row[0]!r}. This means _fetch_posting() is still reading the wrong column."
+    )
