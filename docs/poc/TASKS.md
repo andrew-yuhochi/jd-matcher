@@ -13,7 +13,7 @@
 |--------|------------------|---------------|
 | Done | 6 | 20 |
 | In Progress | 0 | 0 |
-| To Do | 7 | 7 |
+| To Do | 8 | 8 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -227,6 +227,35 @@
   - [x] Retry on transient OpenAI errors (3 attempts with exponential backoff)
   - [x] 10 hand-crafted synthetic test JDs all extract within enum constraints (deterministic part)
   - [x] Live test (one real posting): all canonical fields populated and valid against enum
+
+---
+
+##### TASK-M2-006b — top_skills canonicalization (C18 polish for FUSE Jaccard)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user (taxonomy review)
+- **Component**: C18 (LLM Extraction — top_skills consistency) — TDD §C18 polish
+- **Description**: Currently the LLM produces free-text skills like "ML" / "Machine Learning" / "machine learning" — same skill, three strings. C21 FUSE uses `0.3 × jaccard(top_skills)` for similarity; inconsistent skill names directly degrade dedup accuracy (true duplicates score lower because their skill sets don't overlap). This task analyzes the current `top_skills` distribution across all C19-passed extractions, identifies equivalence clusters, and patches the C18 prompt to enforce canonical skill names.
+- **Dependencies**: TASK-M2-006 (provides extraction data to analyze; Done)
+- **Why before TASK-M2-007**: prevents wasted M2-007 embedding work on noisy skill data; cheap to do once with extraction infrastructure already warm; user direction 2026-04-29.
+- **Implementation Checklist**:
+  - Phase A — analysis: script reads `extraction_cache`, flattens all `top_skills` entries (~13 skills × 131 postings = ~1700 raw skill strings), groups by case-insensitive normalized form, surfaces clusters with ≥2 variants
+  - Phase A output: `docs/poc/quality-logs/TASK-M2-006b-skills-analysis.md` listing clusters + proposed canonical form per cluster
+  - Phase B — taxonomy review: user confirms canonical forms (esp. for ambiguous cases — e.g., is "GenAI" the same as "Generative AI" as "LLM"?)
+  - Phase C — prompt patch: append a `=== CANONICAL SKILL NAMES ===` section to `prompts/canonical_extraction_v1.txt` listing the seed canonical taxonomy (~30-50 most common skills) + few-shot mapping examples. Tail skills (low-frequency) remain free-form.
+  - Phase D — re-extract all 131 C19-passed postings (~$0.06)
+  - Phase E — verify: re-run analysis script; canonical-form rate should jump (target ≥80% of skill mentions hit the canonical form, not a variant)
+- **Demo Artifact**: `docs/poc/quality-logs/TASK-M2-006b-skills-analysis.md` with before/after analysis showing cluster collapse (e.g., {ML, Machine Learning, machine learning, ML/AI} → 1 canonical "Machine Learning")
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-006b.md`
+- **Acceptance Criteria**:
+  - [ ] Analysis script outputs clustered skill report (≥2 variants per cluster) with frequency counts
+  - [ ] User reviews and approves the proposed canonical taxonomy (≥30 seed canonical skills)
+  - [ ] Prompt patched with canonical taxonomy + few-shot mapping examples
+  - [ ] Re-extraction completes; cost <$0.10
+  - [ ] Post-extraction analysis: ≥80% of skill mentions match a canonical form
+  - [ ] Synthetic regression test: 5 hand-crafted JDs with known equivalent-skill variants all map to canonical form
+  - [ ] No regressions in M2-006 measurable TDD targets (company / seniority / location / team)
 
 ---
 
