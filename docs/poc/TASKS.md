@@ -11,7 +11,7 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 7 | 21 |
+| Done | 8 | 22 |
 | In Progress | 0 | 0 |
 | To Do | 7 | 7 |
 | Blocked | 0 | 0 |
@@ -261,7 +261,7 @@
 
 ##### TASK-M2-007 — Embedding Pipeline (C20)
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C20 (Embedding Pipeline) — TDD §C20
@@ -278,14 +278,14 @@
 - **Demo Artifact**: `python -m jd_matcher.llm.embed --posting-id 91` embeds `role_summary`; `sqlite3 ... "SELECT length(embedding), model_name FROM posting_embeddings WHERE posting_id=91"` shows ~6KB blob (1536 × 4 bytes).
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-007.md`
 - **Acceptance Criteria**:
-  - [ ] `embed_posting(posting_id)` takes posting; calls `EmbeddingProvider.embed(role_summary)`; stores in `posting_embeddings`
-  - [ ] Vector dimension is 1536 (`text-embedding-3-small` spec)
-  - [ ] Cache by `SHA256(text)` hit on second `embed_posting` call (verified)
-  - [ ] `llm_call_ledger` row written per call
-  - [ ] Cosine sanity check: 5 synthetic dup pairs all have cosine ≥0.85 between their embeddings
-  - [ ] Anti-test: 5 different-role pairs have cosine ≤0.7
-  - [ ] Live test (one real posting): vector dim 1536 + non-zero
-  - [ ] Helper `cosine(v1, v2) -> float` exposed for downstream use
+  - [x] `embed_posting(posting_id)` takes posting; calls `EmbeddingProvider.embed(role_summary)`; stores in `posting_embeddings`
+  - [x] Vector dimension is 1536 (`text-embedding-3-small` spec)
+  - [x] Cache by `SHA256(text)` hit on second `embed_posting` call (verified)
+  - [x] `llm_call_ledger` row written per call
+  - [x] Cosine sanity check: 5 synthetic dup pairs all have cosine ≥0.85 between their embeddings
+  - [x] Anti-test: 5 different-role pairs have cosine ≤0.7
+  - [x] Live test (one real posting): vector dim 1536 + non-zero
+  - [x] Helper `cosine(v1, v2) -> float` exposed for downstream use
 
 ---
 

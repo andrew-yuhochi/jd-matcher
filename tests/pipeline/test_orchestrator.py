@@ -520,9 +520,10 @@ class TestPipelineRunSummary:
     def test_summary_has_steps(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """PoC: LinkedIn-only per ALIGNMENT-LOG 2026-04-28 — expect 2 steps, not 4."""
+        """PoC M2: LinkedIn-only + C20 embedding — expect 3 steps (gmail, hydrate, embed)."""
         summary = run_pipeline(db_path=test_db)
-        assert len(summary.steps) == 2
+        assert len(summary.steps) == 3
+        assert "Embedding postings (C20)…" in summary.steps
 
 
 # ---------------------------------------------------------------------------

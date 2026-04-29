@@ -39,6 +39,7 @@ from jd_matcher.hydrate import compute_source_health
 from jd_matcher.hydrate.indeed import hydrate as indeed_hydrate
 from jd_matcher.hydrate.linkedin import hydrate as linkedin_hydrate
 from jd_matcher.ingest.gmail import GmailIngester
+from jd_matcher.llm.embed import embed_postings_batch
 from jd_matcher.parse.indeed_email import parse as parse_indeed
 from jd_matcher.parse.linkedin_email import ParsedPosting, parse as parse_linkedin
 
@@ -91,6 +92,10 @@ class PipelineRunSummary:
     sources: list[SourceResult]
     steps: list[str]
     total_new_postings: int
+    # C20 embedding stats (populated after the embedding phase)
+    embeddings_written: int = 0
+    embedding_cache_hits: int = 0
+    embedding_skipped: int = 0
 
     @property
     def failed_sources(self) -> list[str]:
@@ -206,6 +211,50 @@ def run_pipeline(
             })
         )
 
+    # -----------------------------------------------------------------------
+    # Phase 3: C20 — Embedding (role_summary → text-embedding-3-small)
+    # -----------------------------------------------------------------------
+    step_label = "Embedding postings (C20)…"
+    steps_emitted.append(step_label)
+
+    embeddings_written = 0
+    embedding_cache_hits = 0
+    embedding_skipped = 0
+    try:
+        posting_ids = _get_pending_embedding_ids(resolved_db)
+        if posting_ids:
+            max_ledger_id_before = _get_max_ledger_id(resolved_db)
+            embedded = embed_postings_batch(posting_ids, db_path=resolved_db)
+            embeddings_written = len(embedded)
+            embedding_cache_hits = _count_cache_hit_rows_since(resolved_db, max_ledger_id_before)
+            embedding_skipped = len(posting_ids) - len(embedded)
+            logger.info(
+                json.dumps({
+                    "event": "embedding_phase_complete",
+                    "run_id": run_id,
+                    "posted_ids_count": len(posting_ids),
+                    "embeddings_written": embeddings_written,
+                    "skipped": embedding_skipped,
+                })
+            )
+        else:
+            logger.info(
+                json.dumps({
+                    "event": "embedding_phase_complete",
+                    "run_id": run_id,
+                    "posted_ids_count": 0,
+                    "note": "no postings pending embedding",
+                })
+            )
+    except Exception as exc:
+        logger.error(
+            json.dumps({
+                "event": "embedding_phase_failed",
+                "run_id": run_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+        )
+
     finished_at = datetime.now(timezone.utc)
     total_new = sum(r.new_postings for r in source_results)
 
@@ -216,6 +265,9 @@ def run_pipeline(
         sources=source_results,
         steps=steps_emitted,
         total_new_postings=total_new,
+        embeddings_written=embeddings_written,
+        embedding_cache_hits=embedding_cache_hits,
+        embedding_skipped=embedding_skipped,
     )
 
     logger.info(
@@ -765,6 +817,62 @@ def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
             (posting_id, source_label, url, now, raw_html_str),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def _get_pending_embedding_ids(db_path: Path) -> list[int]:
+    """Return posting IDs that have not yet been embedded with the default model.
+
+    Postings without role_summary AND full_jd are intentionally included — the
+    embed step will log a WARNING and skip them; the pipeline does not pre-filter.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT p.id
+            FROM postings p
+            WHERE p.id NOT IN (
+                SELECT CAST(pe.posting_id AS INTEGER)
+                FROM posting_embeddings pe
+                WHERE pe.model_name = 'text-embedding-3-small'
+            )
+              AND (p.role_summary IS NOT NULL OR p.full_jd IS NOT NULL)
+            ORDER BY p.id
+            """
+        ).fetchall()
+        return [row[0] for row in rows]
+    finally:
+        conn.close()
+
+
+def _get_max_ledger_id(db_path: Path) -> int:
+    """Return the current maximum ledger id (used as a before-snapshot for cache-hit counting)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM llm_call_ledger"
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def _count_cache_hit_rows_since(db_path: Path, before_id: int) -> int:
+    """Count cache_hit embedding ledger rows written after before_id."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) FROM llm_call_ledger
+            WHERE call_kind = 'embedding'
+              AND status = 'cache_hit'
+              AND id > ?
+            """,
+            (before_id,),
+        ).fetchone()
+        return row[0] if row else 0
     finally:
         conn.close()
 
