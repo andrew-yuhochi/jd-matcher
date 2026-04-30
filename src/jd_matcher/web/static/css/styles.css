@@ -249,6 +249,16 @@ kbd {
   vertical-align: middle;
 }
 
+/* Canonical-id chip — always visible next to title for PoC triage/dev reference */
+.card-id-chip {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: #888;
+  font-family: ui-monospace, monospace;
+  margin-left: 0.35rem;
+  vertical-align: baseline;
+}
+
 /* Source-count badge shown next to title when canonical has >1 source */
 .badge-source-count {
   display: inline-block;

@@ -18,11 +18,12 @@
          data-url="{{ posting.sources[0].source_url if posting.sources else '' }}">
   <div class="card-line1">
     <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
+    <span class="card-id-chip">#{{ posting.canonical_id }}</span>
     {% if posting.canonical_company %}
       — <strong>{{ posting.canonical_company }}</strong>
     {% endif %}
     {% if posting.sources | length > 1 %}
-      <span class="badge-source-count" title="{{ posting.sources | length }} source(s)">{{ posting.sources | length }} sources</span>
+      <span class="badge-source-count" title="{{ posting.sources | length }} variant(s)">{{ posting.sources | length }} variants</span>
     {% endif %}
     {% if posting.is_reposted %}
       {%- set days_ago = "" -%}

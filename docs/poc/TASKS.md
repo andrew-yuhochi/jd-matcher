@@ -397,6 +397,7 @@
   - [x] Card-viewed (`e` key) and card-greying (opacity 0.6) work correctly with canonical-id (one card per canonical, not per posting)
   - [x] DOM tests for new template elements (multi-source list, Reposted badge) — 17 new tests in test_m2_ui.py
   - [x] No regression in M1 UI tests (854 → 871 passing, 0 failures)
+- 2026-04-29: follow-up fix — source dedup by (posting_id, display_name) with hydrator-over-email preference; `#canonical_id` chip added to card title; badge wording changed from "N sources" to "N variants"; 5 new tests added (871 → 876 passing). Live DB: 140 single-button + 8 two-button canonicals, 0 with >2 buttons.
 
 ---
 

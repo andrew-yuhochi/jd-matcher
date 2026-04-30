@@ -312,7 +312,7 @@ def test_source_count_badge_shown_for_multi_source(client: TestClient, db: Path)
     assert "badge-source-count" in fragment, (
         "badge-source-count missing — multi-source card must show source count badge"
     )
-    assert "2 sources" in fragment, "Source count '2 sources' text missing"
+    assert "2 variants" in fragment, "Source count '2 variants' text missing"
 
 
 def test_source_count_badge_absent_for_single_source(client: TestClient, db: Path) -> None:
@@ -522,3 +522,152 @@ def test_failed_hydration_canonical_still_shows_warning(
     assert 'class="warning"' in fragment, (
         "Failed-hydration canonical missing .warning element — no-filter invariant violated"
     )
+
+
+# ---------------------------------------------------------------------------
+# Follow-up fix (2026-04-29): source dedup by display_name + canonical_id chip
+# ---------------------------------------------------------------------------
+
+
+def test_email_and_hydrator_for_same_posting_collapse_to_one_button(
+    client: TestClient, db: Path
+) -> None:
+    """When a posting has both linkedin_email and linkedin_hydrator rows in
+    posting_sources, only ONE Apply on LinkedIn button must render, using
+    the hydrator (clean) URL — not the tracking-laden email URL."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid, cid = _seed_canonical(conn, "Email+Hydrator Collapse Test")
+    # Two rows for the same posting_id: email (tracking params) and hydrator (clean)
+    _add_source(
+        conn, pid, "linkedin_email",
+        "https://www.linkedin.com/comm/jobs/view/9999?alertAction=viewjob&trackingId=abc123"
+    )
+    _add_source(
+        conn, pid, "linkedin_hydrator",
+        "https://www.linkedin.com/jobs/view/9999"
+    )
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    apply_count = fragment.count("Apply on LinkedIn")
+    assert apply_count == 1, (
+        f"Expected 1 Apply on LinkedIn button, got {apply_count} — "
+        "email+hydrator rows for the same posting must collapse to one button"
+    )
+    # Hydrator URL must be used, not the tracking-laden email URL
+    assert "trackingId" not in fragment, (
+        "Hydrator URL should be preferred over email URL (no trackingId in rendered link)"
+    )
+    assert "https://www.linkedin.com/jobs/view/9999" in fragment, (
+        "Clean hydrator URL must be rendered, not the email URL"
+    )
+
+
+def test_two_merged_postings_same_source_render_two_buttons(
+    client: TestClient, db: Path
+) -> None:
+    """Two distinct postings (different job IDs) merged into one canonical,
+    both LinkedIn, must render TWO Apply on LinkedIn buttons — one per posting."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, cid = _seed_canonical(conn, "Two LinkedIn Variants Test")
+    _add_source(conn, pid1, "linkedin_hydrator", "https://www.linkedin.com/jobs/view/11111")
+
+    # Second posting merged into the same canonical
+    cur_p2 = conn.execute(
+        "INSERT INTO postings (user_id, canonical_title, hydration_status, first_seen, last_seen) "
+        "VALUES ('default', 'Two LinkedIn Variants Test v2', 'complete', ?, ?)",
+        (TS, TS),
+    )
+    pid2 = cur_p2.lastrowid
+    conn.execute(
+        "INSERT OR IGNORE INTO posting_canonical_links "
+        "(user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 0.96, 'content_dedup', ?)",
+        (pid2, cid, TS),
+    )
+    _add_source(conn, pid2, "linkedin_hydrator", "https://www.linkedin.com/jobs/view/22222")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    apply_count = fragment.count("Apply on LinkedIn")
+    assert apply_count == 2, (
+        f"Expected 2 Apply on LinkedIn buttons (one per merged posting), got {apply_count}"
+    )
+    assert "https://www.linkedin.com/jobs/view/11111" in fragment
+    assert "https://www.linkedin.com/jobs/view/22222" in fragment
+
+
+def test_canonical_id_chip_renders_on_card(client: TestClient, db: Path) -> None:
+    """Each card must render a #canonical_id chip for triage/dev reference."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical(conn, "Chip Render Test")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert f"#{cid}" in fragment, (
+        f"canonical_id chip '#{cid}' not found in card fragment"
+    )
+    assert "card-id-chip" in fragment, ".card-id-chip element missing from card"
+
+
+def test_card_id_chip_css_rule_exists() -> None:
+    """styles.css must define the .card-id-chip rule."""
+    css_path = (
+        Path(__file__).parents[2]
+        / "src" / "jd_matcher" / "web" / "static" / "css" / "styles.css"
+    )
+    css = css_path.read_text()
+    assert ".card-id-chip" in css, ".card-id-chip CSS rule missing from styles.css"
+
+
+def test_badge_wording_is_variants_not_sources(client: TestClient, db: Path) -> None:
+    """Badge wording for multi-variant canonical must say 'variants', not 'sources'."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, cid = _seed_canonical(conn, "Badge Wording Test")
+    _add_source(conn, pid1, "linkedin_hydrator", "https://www.linkedin.com/jobs/view/77777")
+
+    cur_p2 = conn.execute(
+        "INSERT INTO postings (user_id, canonical_title, hydration_status, first_seen, last_seen) "
+        "VALUES ('default', 'Badge Wording Test v2', 'complete', ?, ?)",
+        (TS, TS),
+    )
+    pid2 = cur_p2.lastrowid
+    conn.execute(
+        "INSERT OR IGNORE INTO posting_canonical_links "
+        "(user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 0.96, 'repost', ?)",
+        (pid2, cid, TS),
+    )
+    _add_source(conn, pid2, "linkedin_hydrator", "https://www.linkedin.com/jobs/view/88888")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "variants" in fragment, "Badge must use 'variants' wording"
+    assert "2 sources" not in fragment, "Badge must not use old '2 sources' wording"

@@ -344,7 +344,11 @@ def _aggregate_link_info(
 
     sources_summary: distinct source labels (legacy field — kept for CanonicalCard compat).
     merge_kind_history: distinct merge_kind values from posting_canonical_links.
-    sources: SourceLink list ordered by _SOURCE_PRECEDENCE, one entry per distinct source+URL.
+    sources: SourceLink list — one entry per (posting_id, display_name) tuple.
+             When multiple raw source rows share the same posting_id + display_name
+             (e.g. linkedin_email + linkedin_hydrator for the same posting), prefer
+             the hydrator URL (clean, no tracking params) over the email URL.
+             Ordered by _SOURCE_PRECEDENCE then posting_id ascending.
     is_reposted: True if any posting_canonical_links row has merge_kind='repost'.
     primary_posting_id: the oldest-linked posting_id for this canonical (seed posting).
     """
@@ -364,12 +368,15 @@ def _aggregate_link_info(
 
     seen_sources: set[str] = set()
     seen_kinds: set[str] = set()
-    seen_urls: set[str] = set()
     sources_summary: list[str] = []
     merge_kinds: list[str] = []
-    source_links_raw: list[tuple[str, str]] = []  # (source_label, url)
     is_reposted = False
     primary_posting_id: Optional[int] = None
+
+    # Dedupe per (posting_id, display_name): prefer hydrator source over email source.
+    # Key: (posting_id, display_name) → (best_source_label, best_url)
+    # "Best" = lowest _SOURCE_PRECEDENCE index among rows that share the same key.
+    best_per_key: dict[tuple[int, str], tuple[str, str]] = {}
 
     for pid_raw, merge_kind, source_label, source_url, _merged_at in link_rows:
         pid = int(pid_raw) if pid_raw is not None else None
@@ -389,21 +396,35 @@ def _aggregate_link_info(
         if merge_kind == "repost":
             is_reposted = True
 
-        # Collect distinct (source_label, url) pairs for the sources[] row
-        key = f"{source_label}|{source_url}"
-        if source_url and key not in seen_urls:
-            source_links_raw.append((source_label, source_url))
-            seen_urls.add(key)
+        if not source_url or pid is None:
+            continue
 
-    # Sort by precedence list
-    source_links_raw.sort(key=lambda t: _source_sort_key(t[0]))
+        display = _source_display_name(source_label)
+        key = (pid, display)
+        if key not in best_per_key:
+            best_per_key[key] = (source_label, source_url)
+        else:
+            # Within the same (posting_id, display_name) group, prefer the hydrator
+            # source over the email source — hydrator URLs are clean (no tracking params).
+            # Hydrator label ends with '_hydrator'; email label ends with '_email'.
+            current_label, _current_url = best_per_key[key]
+            incoming_is_hydrator = source_label.endswith("_hydrator")
+            current_is_hydrator = current_label.endswith("_hydrator")
+            if incoming_is_hydrator and not current_is_hydrator:
+                best_per_key[key] = (source_label, source_url)
+
+    # Sort: primary sort by source precedence of the winner, secondary by posting_id asc
+    sorted_items = sorted(
+        best_per_key.items(),
+        key=lambda kv: (_source_sort_key(kv[1][0])[0], kv[0][0]),
+    )
     sources: list[SourceLink] = [
         SourceLink(
             source=sl,
             source_url=url,
             display_name=_source_display_name(sl),
         )
-        for sl, url in source_links_raw
+        for (_pid, _display), (sl, url) in sorted_items
     ]
 
     return sources_summary, merge_kinds, sources, is_reposted, primary_posting_id
