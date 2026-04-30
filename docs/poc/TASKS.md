@@ -492,14 +492,47 @@
 
 ---
 
+##### TASK-M2-016 — Skills tiering: match-against-stack + category color + ordering
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C9 (Web UI: frontend) — TDD §C9
+- **Description**: Skills strip composite redesign per BA verdict 2026-04-29 (ALIGNMENT-LOG.md, ALIGNED for M2). Three layered improvements applied to the skills strip ONLY: (1) **match-against-user-stack** — skills present in `config/user_profile.yaml::core_skills` render as filled colored chips; non-matching skills lump into a single muted gray "Others" treatment; (2) **category color** within a single strip — 4 buckets via `config/skill_categories.yaml` (DS/ML purple, Languages blue, Platforms/Tools green, Other gray); (3) **ordering rule** — matching skills first in category priority (DS/ML → Languages → Platforms → Other), non-matching last. Footer signal: `Skills match: X/Y` count for at-a-glance fit. Aliases (`GenAI` ↔ `Generative AI`, `Scikit-Learn` ↔ `scikit-learn`) handled in `skill_categories.yaml` with case-insensitive matching.
+- **Dependencies**: TASK-M2-015
+- **Implementation Checklist**:
+  - Schema: N/A (no DB changes — pure render layer over existing `top_skills`)
+  - New configs: `config/user_profile.yaml` (core_skills list — 31 entries finalized 2026-04-29) + `config/skill_categories.yaml` (universal skill→category map + alias map)
+  - Wire: extend `canonical_view.py` with `_classify_and_sort_skills(top_skills, user_profile, skill_categories)` returning ordered `[{skill, category, is_match}]` payloads + match count; `CanonicalCard` model gains `classified_skills` + `skills_match_count` + `skills_total_count`; `_card.html` skills strip renders structured payload with category color classes + match treatment + footer
+  - CSS: 4 category color classes (purple/blue/green/gray) × match/non-match states (8-ish rules), accessible color choices; footer `Skills match: X/Y` styling
+  - Imports affected: `canonical_view.py`, `_card.html`, `styles.css`, new `config/*.yaml`
+  - Runtime files: configs read once at module load, cached
+- **Demo Artifact**: Browser shows the tiered skills strip on the live 148-canonical DB — matching skills visually distinct by category color, non-matching lumped as gray, ordered DS/ML → Languages → Platforms → Other → non-matching, footer shows `Skills match: X/Y` per card.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-016.md`
+- **Acceptance Criteria**:
+  - [ ] `config/user_profile.yaml` created with the 31-entry core_skills list
+  - [ ] `config/skill_categories.yaml` created with all canonical skills mapped to one of 4 categories + alias map (`GenAI` ↔ `Generative AI`, `Scikit-Learn` ↔ `scikit-learn`)
+  - [ ] Match against user_profile is case-insensitive AND alias-aware
+  - [ ] Skills not in any category fallback to "Other" (gray)
+  - [ ] Empty/missing `user_profile.yaml` gracefully degrades — all skills render as gray non-match (no crash)
+  - [ ] Ordering: matching skills first (DS/ML → Languages → Platforms → Other), then non-matching
+  - [ ] Cap at 10 chips total (overflow handled gracefully)
+  - [ ] Each chip has category color CSS class (`.skill-chip-ds`, `.skill-chip-lang`, `.skill-chip-platform`, `.skill-chip-other`) + match state (`.skill-chip-match` / `.skill-chip-nomatch`)
+  - [ ] Match count footer renders: `Skills match: X/Y` (or absent if Y=0)
+  - [ ] DOM tests for: category coloring, match treatment, ordering, alias matching (e.g., card has `GenAI` matches user's `Generative AI`), empty user_profile fallback, footer count accuracy
+  - [ ] No regression in existing 893 tests
+  - [ ] TDD §C9 M2 update note appended for the skills tiering
+
+---
+
 ##### TASK-M2-013 — M2 demo + user approval
 
 - **Status**: To Do
 - **Blocked reason**:
 - **Agent**: manual (user)
 - **Component**: M2 milestone deliverable acceptance — references all M2 C-components
-- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list + enriched LLM fields in the reshuffled card layout; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
-- **Dependencies**: TASK-M2-012, TASK-M2-014, TASK-M2-015
+- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list + enriched LLM fields + reshuffled layout + tiered skills strip; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
+- **Dependencies**: TASK-M2-012, TASK-M2-014, TASK-M2-015, TASK-M2-016
 - **Implementation Checklist**:
   - Schema: N/A
   - Wire: N/A (demo task)

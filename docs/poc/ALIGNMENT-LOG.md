@@ -323,3 +323,89 @@ Alternative landing zones in decreasing preference:
 - TASK-M2-008 (commit `45d9196`) is unchanged — the dedup engine ships as-is for M2 with the deterministic FUSE math + threshold
 
 **Pattern note**: This is the third M2 proposal to expand the LLM layer beyond normalisation that has been DRIFTING-deferred (after `role_orientation` to M3, plus the full_jd-fallback safety check that WAS added defensively at M2-008). The PRD's prescribed containment valve (TASK-M2-012 calibration) is being honored.
+
+---
+
+## 2026-04-29 — Surface M2-available LLM fields in collapsed card (post-TASK-M2-011 UI validation)
+
+**Verdict**: ALIGNED
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN M2: "LLM extraction call producing `canonical_company / canonical_seniority / canonical_location / team_or_department / top_skills / role_summary` (used here for normalisation only — full classification deferred to M3)"
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- UX-SPEC.md §1 M2 end-state: "No new UI controls at M2. The merge and repost indicators are read-only signals."
+- ALIGNMENT-LOG 2026-04-29 (role_orientation deferral): salary and `role_orientation`/DS-fit already explicitly deferred to M3 per prior BA verdict; this proposal does not revisit those.
+
+**Analysis**: The user has decided to surface LLM output on cards; the alignment question is which M2-available fields are safe to display now vs. which require M3 companion logic. Four fields pass the user's criterion ("user can act on / interpret standalone"): `canonical_seniority` (readable fit signal, no downstream logic), `team_or_department` (org unit context, null-safe render), `top_skills` (skill chip strip; Jaccard already runs inside FUSE dedup, display is additive only), and `role_summary` first-sentence teaser (role-at-a-glance before expand). All four already exist in `canonical_postings` — zero new extraction, zero new schema columns, zero probabilistic components. Salary is correctly excluded (not in M2 schema; M3 extraction adds it). `role_orientation`/DS-fit is correctly excluded (explicitly deferred to M3 per prior BA log entry). No PRD §6 Scope OUT clause is touched. The additions are read-only display signals, consistent with the UX-SPEC M2 pattern.
+
+**Recommendation**: ALIGNED — ask user: "Add as TASK-M2-014 (card UI enrichment) or park for now?"
+
+**User decision**: Approved (TASK-M2-014 added to M2 scope — completed 2026-04-29, commit 7ea5674)
+**Outcome**: TASK-M2-014 implemented: seniority chip, team line, role_summary teaser, skills strip in expanded view. 886 tests pass. Committed and pushed.
+
+---
+
+## 2026-04-29 — Six UX proposals raised during live M2 re-validation (post-TASK-M2-014)
+
+**Verdict**: A: ALIGNED | B: ALIGNED | C: DRIFTING | D: ALIGNED (user-deferred) | E: ALIGNED (user-deferred) | F: ALIGNED (user-deferred)
+**Mode**: B
+**Anchors**:
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- PRD §5 Scope IN M2: card UI is the deliverable surface; "No new UI controls at M2" was the pre-M2-014 constraint; TASK-M2-014 (ALIGNED) established that field-reordering and skill-strip display are within scope as long as no new schema/extraction/probabilistic component is introduced.
+- UX-SPEC.md §1 M1/M2 end-state: card layout defined in §1; keyboard shortcuts in §6 include `e` (toggle expand/collapse focused card) and `j/k` navigate — both depend on a single-column card list.
+- UX-SPEC.md §7 "What the PoC UI Explicitly Does NOT Have": no pagination, no search/filter in PoC (absence is implicit; no explicit deferral clause exists for search/filter, but PRD §6 Scope OUT does not mandate them for M2 either).
+- PRD §6 Scope OUT (Deferred to MVP): "Soft-rank weight UI sliders, fit-score threshold slider, tag taxonomy editor" — filter-by-metadata is in the same spirit, not explicitly listed but consistent with the MVP-level interactive UI refinement framing.
+- TDD §1.0 Solution Approach: "Surface — FastAPI serves a single HTML page on `localhost:PORT` with three tabs (Main / Applied / Dismissed). Keyboard-first triage; cards expand in place." — "expand in place" is the contractual interaction model for the card list. Two-pane layout replaces this model.
+- TDD §1.2 Component Inventory, Web UI: "FastAPI app + HTML/JS — three tabs, card list, expand-in-place, keyboard shortcuts, Settings, Analytics" — "expand-in-place" is embedded in the TDD component contract for C9.
+- UX-SPEC.md §6 Keyboard Shortcuts: "`e` | Toggle expand / collapse focused card" — this shortcut is only meaningful in a single-column expand-in-place model; two-pane replaces the need for it and breaks the handler.
+- ROADMAP.md (CLAUDE.md document path): MVP-M1 is the reliability/UX hardening phase; UX architecture changes are correctly placed there per the three-phase framework (CLAUDE.md: "MVP phase: Harden the proved prototype… UX refinement").
+
+**Analysis — A (layout reshuffle)**: Reordering fields already in `canonical_postings` onto the collapsed card is purely template + CSS. Zero new schema columns, zero new extraction calls, zero probabilistic components. The change is tighter than TASK-M2-014 (which added fields from expanded-only into collapsed view and was ALIGNED). No PRD anchor is violated; the M2 deliverable (user-observable card UI on real data) is directly improved. ALIGNED.
+
+**Analysis — B (skills move collapsed → expanded is now reversed to collapsed-always)**: `top_skills` was placed in expanded-only by TASK-M2-014. Moving it to the collapsed card is a one-line template change — the data already lives in `canonical_postings.top_skills` and the chip strip component already exists. No new extraction, no schema change. This is exactly the kind of display-policy decision TASK-M2-014 established as in-scope. ALIGNED.
+
+**Analysis — C (two-pane master-detail)**: DRIFTING. The current TDD §1.0 and UX-SPEC §1/§6 define the interaction model as "expand-in-place" with keyboard shortcuts `e` (expand/collapse), `j/k` (navigate card list). Two-pane master-detail replaces this model wholesale: `e` becomes meaningless (or must be redefined), the HTMX strategy shifts from in-place card swap to right-pane content load, and C9 (Web UI component) must be substantially reworked. The right pane is a new DOM region with its own state (which card is "focused"), its own loading behaviour, and its own scroll context. This is not a CSS/template change — it is a frontend architecture change. Additionally, two-pane is a natural companion to pagination, search, and filter (D/E/F), all of which the user has self-triaged to MVP-M1. Implementing the pane structure in M2 without its companions (pagination/search) creates a half-finished master-detail that the user would revisit immediately in MVP-M1 anyway. Per the three-phase framework (CLAUDE.md), "UX refinement" is explicitly an MVP-M1 concern; PoC UX is validated, not polished. The DRIFTING verdict (not VIOLATES) reflects that two-pane does not contradict any PRD §6 Scope OUT clause — it simply isn't in TDD §1.0 / C9 contract, and shipping it now without D/E/F creates premature architectural commitment before those companions are planned.
+
+**Analysis — D (pagination)**: User has explicitly deferred to MVP. No M2 success criterion (SC-6, SC-7, SC-8 — all dedup quality) requires pagination. The M2 user-observable deliverable (validated dedup + repost indicators on card UI) is fully achievable without pagination. ALIGNED with MVP-M1 deferral.
+
+**Analysis — E (search by title)**: User has explicitly deferred to MVP. No M2 SC requires search. UX-SPEC §6 lists `/` to focus the search input as a keyboard shortcut, but the search box is scoped to the Dismissed tab in §2 ("Search dismissed postings…") not the Main tab card list — search-by-title on Main is a new affordance, appropriately MVP-level. ALIGNED with MVP-M1 deferral.
+
+**Analysis — F (filter by metadata)**: User has explicitly deferred to MVP. PRD §6 Scope OUT names "Soft-rank weight UI sliders, fit-score threshold slider, tag taxonomy editor" as MVP-deferred interactive controls; filter-by-seniority/location/skills is in the same family of interactive query controls. No M2 SC requires it. ALIGNED with MVP-M1 deferral.
+
+**Pattern note**: This is the fourth M2 session in which the user has pushed toward richer UX (role_orientation, LLM-fallback dedup, skills-in-collapsed, now two-pane). Items A+B are low-cost and correctly stay in M2; C is the first architectural UX proposal. No VIOLATES verdict has been issued in M2 — the project is tracking DRIFTING or lower on every boundary test. The user's self-triage on D/E/F demonstrates good scope discipline.
+
+**Recommendation**:
+- **A + B**: ALIGNED — add as TASK-M2-015 (template + CSS only, ~half-day). Execute now before M2 closes. A and B are bundled: they constitute a single card layout pass.
+- **C**: DRIFTING — recommended landing zone is BACKLOG MVP-M1, bundled with D/E/F. Two-pane, pagination, search, and filter are natural companions in a master-detail layout — plan them together in MVP-M1 where the TDD C9 contract can be revised with full scope. If user overrides: architect must update TDD §1.0 and UX-SPEC §1/§6 before TASK-M2-016 is drafted (keyboard scheme changes, HTMX strategy changes, C9 contract rewrite). Recommend against override — the M2 closure risk is non-trivial and the companion features (D/E/F) make MVP-M1 the cleaner home.
+- **D, E, F**: ALIGNED with MVP-M1 deferral (user-confirmed). Add to BACKLOG.md as MVP-M1 items, bundled with C if C is also deferred.
+
+**User decision**: [Pending]
+**Outcome**: [To be filled after user decides]
+
+---
+
+## 2026-04-29 — Composite skills-strip redesign: match-against-user-stack + category color + ordering rule + match count footer (TASK-M2-016 proposal)
+
+**Verdict**: ALIGNED
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN M2: "LLM extraction call producing `canonical_company / canonical_seniority / canonical_location / team_or_department / top_skills / role_summary` (used here for normalisation only — full classification deferred to M3)" — `top_skills` already exists in `canonical_postings`; this proposal renders it differently, it does not add new extraction fields.
+- PRD §4 Phase Objectives: "Each milestone ends with a user-observable web-UI deliverable on real data."
+- PRD §5 Scope IN M2 (M2 end-state deliverable): the card UI is the M2 user-observable surface; TASK-M2-014 (ALIGNED, 2026-04-29) and TASK-M2-015 (Done, `4cb7a36`) established that display-policy decisions over already-extracted fields are M2-in-scope as long as no new schema columns, extraction calls, or probabilistic components are introduced.
+- ALIGNMENT-LOG 2026-04-29 — "Surface M2-available LLM fields in collapsed card" (ALIGNED): "All four already exist in `canonical_postings` — zero new extraction, zero new schema columns, zero probabilistic components."
+- PRD §3 Commercial Thesis — Hedge 4 (Taxonomy portability): "Classification prompt and tag taxonomy written in role-family-generic language." — `config/skill_categories.yaml` (a universal skill→category mapping) is a portable config artifact in the same family as the tag taxonomy. It strengthens, not weakens, the canonical taxonomy as differentiator.
+- ROADMAP.md M3 scope: "Single LLM extraction prompt... producing all of: canonical fields + salary + tags + `primary_focus` + `fit_score` + `fit_reasoning` + `requires_pr_or_citizenship`" — CV-driven role-fit scoring is M3's job. `config/user_profile.yaml` + match-against-user-stack is NOT this: it is a static config lookup (list membership check), not an LLM scoring call, not a vector similarity computation, and not a CV-embedding-based recommender (which is M4).
+- PRD §5 Scope IN M4: "CV text extraction... cosine rank against `role_summary + top_skills` embedding" — the M4 CV recommender is embedding-based cosine similarity against extracted CV text. Match-against-user-stack is a set-intersection on a manually curated YAML list. These are categorically different mechanisms.
+- ROADMAP.md M3 deliverable: "Cards arrive pre-classified, pre-scored, pre-filtered." The composite design produces no score and no filter — it is a read-only rendering decision on data already in the DB.
+- PRD §6 Scope OUT: no clause prohibits a config file listing the user's known skills, category-color chip rendering, or a chip-count footer.
+
+**Analysis**: The composite design touches three artifacts — two new config files (`user_profile.yaml`, `skill_categories.yaml`) and a rendering update to `_card.html`/CSS/`canonical_view.py`. None of these introduce a new database column, a new LLM call, a new embedding computation, or a new probabilistic component. The match-against-user-stack logic is a set-intersection between `top_skills` (already extracted and stored) and a static YAML list; it is structurally identical to a config-driven filter and has no dependency on M3's LLM classification pass or M4's CV-embedding pipeline. The M3 CV-fit boundary is clear: M3 adds LLM-extracted `fit_score`/`fit_reasoning`/`primary_focus` via a cloud prompt call — none of that is present here. M4 adds cosine similarity against CV embeddings — also absent here. Match-against-user-stack is a presentational heuristic, not a fit-scoring engine; it makes existing `top_skills` data more readable without computing anything that M3/M4 would compute differently. The `user_profile.yaml` file does not couple to M3 work — it is not consumed by the M3 LLM prompt, it is not an input to M4's CV recommender, and its presence does not foreclose any M3/M4 design decision. If anything, shipping it early validates whether a curated static list is useful, which is useful signal before M3's richer scoring arrives. Commercial signal: `skill_categories.yaml` is an extension of Hedge 4 (taxonomy portability) — a reusable, role-family-generic skill taxonomy is exactly the kind of differentiated config asset the commercial thesis names as portable to other technical personas at Beta. The composite design strengthens it.
+
+Pattern note from prior log: three M2 proposals expanded the LLM layer beyond normalisation (role_orientation DRIFTING/deferred; LLM dedup gatekeeper DRIFTING/promoted to TASK-M2-012; six UX proposals batch had two-pane DRIFTING/deferred). This proposal does NOT expand the LLM layer at all — it is a pure rendering change on existing data. The pattern of enrichment pressure in M2 is real, but this specific proposal is qualitatively different: no new LLM scope, no new schema, no probabilistic component. Scope-creep risk: approving TASK-M2-016 does not open the door to additional UX polish — it is a bounded, well-specified task (two config files + template + CSS + ~10-12 tests). The "add more UX polish" risk is contained by the fact that M2's remaining open task is TASK-M2-012 (real-data validation + threshold calibration), which is functional validation work. Any further UX proposal after M2-016 should go through BA before entering M2 scope.
+
+**Recommendation**: ALIGNED — add as TASK-M2-016. Ask user: "Proceed now or park for after TASK-M2-012?"
+
+**M3 CV-fit boundary note** (specific answer to the concern raised): Match-against-user-stack ends at the chip-rendering layer. It reads `top_skills` from `canonical_postings`, intersects with a static YAML list, and emits a render-payload. It produces no score column, no DB write beyond the existing schema, and no input to the M3 LLM prompt. M3 CV-fit begins when the LLM prompt receives a job description and outputs `fit_score`/`fit_reasoning` — a generative scoring step that reasons over the full JD. M4 CV-fit begins when CV embeddings are compared to role_summary+top_skills via cosine similarity. The three mechanisms are non-overlapping and non-competing: `user_profile.yaml` does not anchor, constrain, or conflict with the M3 or M4 implementation. There is no coupling risk.
+
+**User decision**: [Pending]
+**Outcome**: [To be filled after user decides]
