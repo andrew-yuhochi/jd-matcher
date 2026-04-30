@@ -489,6 +489,7 @@
   - [x] DOM tests for new layout (line ordering, metadata-row null-handling, skills-in-collapsed presence, expanded-view skills absence)
   - [x] No regression in existing 886 tests (893 pass after adding 7 new tests)
   - [x] TDD §C9 M2 update note appended/amended for the new layout
+- **Follow-up 2026-04-29**: Role summary now renders in full (truncate filter removed) per user UI re-validation feedback. Class renamed `.card-role-summary-teaser` → `.card-role-summary`; `white-space: nowrap` / `text-overflow: ellipsis` removed from CSS. TDD §C9 follow-up note added. Commit: <SHA>.
 
 ---
 

@@ -6,7 +6,7 @@
        canonical_title, canonical_company, canonical_location
        canonical_seniority — str | None; LLM-extracted seniority tier
        team_or_department  — str | None; LLM-extracted team/dept; absent when null
-       role_summary        — str | None; ~3-4 sentence neutral summary; teaser from first sentence
+       role_summary        — str | None; ~3-4 sentence neutral summary; rendered in full
        top_skills          — list[str]; up to 10 shown in collapsed view
        hydration_status — 'complete' | 'partial' | 'failed'
        first_seen       — ISO timestamp string or None
@@ -74,9 +74,9 @@
   <div class="card-skills-footer">Skills match: {{ posting.skills_match_count }}/{{ posting.skills_total_count }}</div>
   {% endif %}
   {% endif %}
-  {# Line 4: role_summary first-sentence teaser (truncated ~120 chars) #}
+  {# Line 4: role_summary — full text #}
   {% if posting.role_summary %}
-  <div class="card-role-summary-teaser">{{ posting.role_summary | truncate(120, true, '…') }}</div>
+  <div class="card-role-summary">{{ posting.role_summary }}</div>
   {% endif %}
   {# Line 5: Sources apply links (left) | First seen date (right) #}
   <div class="card-line5-footer">

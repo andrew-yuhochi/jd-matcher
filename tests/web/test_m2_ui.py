@@ -836,15 +836,16 @@ def test_team_or_department_absent_when_null(client: TestClient, db: Path) -> No
         )
 
 
-def test_role_summary_teaser_renders_truncated(client: TestClient, db: Path) -> None:
-    """Card must render .card-role-summary-teaser, truncated to ~120 chars, when role_summary set."""
-    long_summary = (
-        "This is a very long role summary that definitely exceeds one hundred and twenty characters "
-        "and should be truncated before being rendered in the card teaser line."
+def test_role_summary_renders_in_full(client: TestClient, db: Path) -> None:
+    """Card must render .card-role-summary with the full role_summary text — no truncation."""
+    full_summary = (
+        "This is a detailed role summary that exceeds two hundred characters and must be shown "
+        "completely without any truncation or ellipsis, so the candidate understands the role "
+        "before deciding to apply."
     )
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    _pid, cid = _seed_canonical_enriched(conn, "Long Summary", role_summary=long_summary)
+    _pid, cid = _seed_canonical_enriched(conn, "Long Summary", role_summary=full_summary)
     conn.commit()
     conn.close()
 
@@ -854,15 +855,15 @@ def test_role_summary_teaser_renders_truncated(client: TestClient, db: Path) -> 
     card_end = html.find("</article>", card_start)
     fragment = html[card_start:card_end]
 
-    assert "card-role-summary-teaser" in fragment, ".card-role-summary-teaser missing"
-    # Truncation ellipsis should appear
-    assert "…" in fragment or "..." in fragment, "Truncation ellipsis missing from teaser"
-    # The rendered teaser must not contain the full long summary verbatim
-    assert long_summary not in fragment, "Full untruncated summary rendered — truncation not applied"
+    assert "card-role-summary" in fragment, ".card-role-summary missing"
+    # Full text must be present verbatim — no truncation applied
+    assert full_summary in fragment, "Full role_summary text missing from card"
+    # No ellipsis added by the template
+    assert "…" not in fragment, "Unexpected truncation ellipsis found — truncate filter not removed"
 
 
-def test_role_summary_teaser_absent_when_null(client: TestClient, db: Path) -> None:
-    """Card must NOT render .card-role-summary-teaser when role_summary is empty/null."""
+def test_role_summary_absent_when_null(client: TestClient, db: Path) -> None:
+    """Card must NOT render .card-role-summary when role_summary is empty/null."""
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
     _pid, cid = _seed_canonical_enriched(conn, "Empty Summary", role_summary="")
@@ -875,8 +876,8 @@ def test_role_summary_teaser_absent_when_null(client: TestClient, db: Path) -> N
     card_end = html.find("</article>", card_start)
     fragment = html[card_start:card_end]
 
-    assert "card-role-summary-teaser" not in fragment, (
-        ".card-role-summary-teaser must be absent when role_summary is empty"
+    assert "card-role-summary" not in fragment, (
+        ".card-role-summary must be absent when role_summary is empty"
     )
 
 
@@ -979,7 +980,7 @@ def test_card_css_rules_for_new_elements_exist() -> None:
     for rule in [
         ".card-seniority-chip",
         ".card-team-line",
-        ".card-role-summary-teaser",
+        ".card-role-summary",
         ".card-skills-strip",
         ".card-skill-chip",
     ]:
@@ -993,7 +994,7 @@ def test_card_css_rules_for_new_elements_exist() -> None:
 
 def test_card_line_order(client: TestClient, db: Path) -> None:
     """Card DOM must have: line1 (title+company+id) before line2-meta before
-    skills strip before summary teaser before line5 footer — in that order."""
+    skills strip before role summary before line5 footer — in that order."""
     skills = ["Python", "SQL"]
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -1017,19 +1018,19 @@ def test_card_line_order(client: TestClient, db: Path) -> None:
     pos_line1 = fragment.find("card-line1")
     pos_line2 = fragment.find("card-line2-meta")
     pos_skills = fragment.find("card-skills-strip")
-    pos_summary = fragment.find("card-role-summary-teaser")
+    pos_summary = fragment.find("card-role-summary")
     pos_footer = fragment.find("card-line5-footer")
 
     assert pos_line1 != -1, "card-line1 not found"
     assert pos_line2 != -1, "card-line2-meta not found"
     assert pos_skills != -1, "card-skills-strip not found"
-    assert pos_summary != -1, "card-role-summary-teaser not found"
+    assert pos_summary != -1, "card-role-summary not found"
     assert pos_footer != -1, "card-line5-footer not found"
 
     assert pos_line1 < pos_line2, "card-line1 must precede card-line2-meta"
     assert pos_line2 < pos_skills, "card-line2-meta must precede card-skills-strip"
-    assert pos_skills < pos_summary, "card-skills-strip must precede card-role-summary-teaser"
-    assert pos_summary < pos_footer, "card-role-summary-teaser must precede card-line5-footer"
+    assert pos_skills < pos_summary, "card-skills-strip must precede card-role-summary"
+    assert pos_summary < pos_footer, "card-role-summary must precede card-line5-footer"
 
 
 def test_metadata_row_all_three_fields_present(client: TestClient, db: Path) -> None:

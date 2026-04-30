@@ -342,14 +342,12 @@ kbd {
   margin-bottom: 0.15rem;
 }
 
-/* Role summary teaser — single-line truncated teaser below location row */
-.card-role-summary-teaser {
+/* Role summary — full text, multi-line, below skills strip */
+.card-role-summary {
   font-size: 0.83rem;
   color: #555;
   margin-bottom: 0.15rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 /* Skills chip strip in expanded view */
