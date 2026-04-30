@@ -9,9 +9,9 @@
 <body>
   <header>
     <nav class="tabs">
-      <a href="/" class="tab {% block tab_main %}{% endblock %}" data-tab="main">Main {% block main_badge %}{% endblock %}</a>
-      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}" data-tab="applied">Applied {% block applied_badge %}{% endblock %}</a>
-      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}" data-tab="dismissed">Dismissed {% block dismissed_badge %}{% endblock %}</a>
+      <a href="/" class="tab {% block tab_main %}{% endblock %}" data-tab="main">Main <span class="badge">{{ main_count | default(0) }}</span></a>
+      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}" data-tab="applied">Applied <span class="badge">{{ applied_count | default(0) }}</span></a>
+      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}" data-tab="dismissed">Dismissed <span class="badge">{{ dismissed_count | default(0) }}</span></a>
     </nav>
 
     <div class="sub-bar" id="sub-bar">

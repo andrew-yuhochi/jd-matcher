@@ -280,6 +280,37 @@ def _main_view_canonical_list(
 
 
 # ---------------------------------------------------------------------------
+# Tab count helper — called by every HTML route so all 3 badges always render
+# ---------------------------------------------------------------------------
+
+
+def _compute_all_tab_counts(db_path: Path, user_id: str = "default") -> dict[str, int]:
+    """Return counts for all three nav badges in a single DB round-trip.
+
+    main_count    — number of canonical cards visible in the main view
+                    (apply-one-suppress-all semantics already baked into select_main)
+    applied_count — distinct postings in the applied table
+    dismissed_count — distinct postings in the dismissed table
+    """
+    main_count = len(select_main(user_id=user_id, db_path=db_path))
+    conn = _open_conn(db_path)
+    try:
+        applied_count = conn.execute(
+            "SELECT COUNT(*) FROM applied WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        dismissed_count = conn.execute(
+            "SELECT COUNT(*) FROM dismissed WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return {
+        "main_count": main_count,
+        "applied_count": applied_count,
+        "dismissed_count": dismissed_count,
+    }
+
+
+# ---------------------------------------------------------------------------
 # HTML tab endpoints
 # ---------------------------------------------------------------------------
 
@@ -289,12 +320,12 @@ async def main_tab(request: Request) -> HTMLResponse:
     db_path = _get_db_path()
     _ensure_db(db_path)
     postings = _main_view_canonical_list(db_path)
-    count = len(postings)
+    tab_counts = _compute_all_tab_counts(db_path)
 
     return templates.TemplateResponse(
         request,
         "main.html",
-        {"postings": postings, "count": count},
+        {"postings": postings, **tab_counts},
     )
 
 
@@ -307,12 +338,12 @@ async def applied_tab(request: Request) -> HTMLResponse:
         postings = _get_applied_postings(conn)
     finally:
         conn.close()
-    count = len(postings)
+    tab_counts = _compute_all_tab_counts(db_path)
 
     return templates.TemplateResponse(
         request,
         "applied.html",
-        {"postings": postings, "count": count},
+        {"postings": postings, **tab_counts},
     )
 
 
@@ -325,12 +356,12 @@ async def dismissed_tab(request: Request) -> HTMLResponse:
         postings = _get_dismissed_postings(conn)
     finally:
         conn.close()
-    count = len(postings)
+    tab_counts = _compute_all_tab_counts(db_path)
 
     return templates.TemplateResponse(
         request,
         "dismissed.html",
-        {"postings": postings, "count": count},
+        {"postings": postings, **tab_counts},
     )
 
 

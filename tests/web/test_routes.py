@@ -1209,8 +1209,192 @@ def _dismiss_posting(conn: sqlite3.Connection, posting_id: int) -> None:
     conn.commit()
 
 
+def _assert_all_three_badges(html: str, main_n: int, applied_n: int, dismissed_n: int) -> None:
+    """Assert that all three nav tab badges render with the given values."""
+    import re
+
+    main_match = re.search(
+        r'data-tab="main"[^>]*>Main\s*<span class="badge">(\d+)</span>', html
+    )
+    applied_match = re.search(
+        r'data-tab="applied"[^>]*>Applied\s*<span class="badge">(\d+)</span>', html
+    )
+    dismissed_match = re.search(
+        r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">(\d+)</span>', html
+    )
+    assert main_match is not None, "Main badge span not found in nav"
+    assert applied_match is not None, "Applied badge span not found in nav"
+    assert dismissed_match is not None, "Dismissed badge span not found in nav"
+    assert int(main_match.group(1)) == main_n, (
+        f"Main badge: expected {main_n}, got {main_match.group(1)}"
+    )
+    assert int(applied_match.group(1)) == applied_n, (
+        f"Applied badge: expected {applied_n}, got {applied_match.group(1)}"
+    )
+    assert int(dismissed_match.group(1)) == dismissed_n, (
+        f"Dismissed badge: expected {dismissed_n}, got {dismissed_match.group(1)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 9-cell matrix: every page × every badge renders correctly
+# ---------------------------------------------------------------------------
+
+
+def test_main_page_renders_all_three_tab_badges(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """GET / must render all three badges (Bug 1 regression: Applied/Dismissed were absent)."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid_a, _ = _insert_posting_with_canonical(conn, "Badge Matrix Applied")
+    pid_d, _ = _insert_posting_with_canonical(conn, "Badge Matrix Dismissed")
+    _apply_posting(conn, pid_a)
+    _dismiss_posting(conn, pid_d)
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+    # seeded_db has 20 canonicals; we applied 1 and dismissed 1 — 20 still visible
+    # (applied/dismissed postings have their OWN canonicals, so 18 remain from original 20
+    # plus 0 new from the applied/dismissed ones).
+    # The exact main count will be whatever select_main returns; we just assert the badge exists.
+    import re
+    assert re.search(r'data-tab="main"[^>]*>Main\s*<span class="badge">\d+</span>', html), \
+        "Main badge missing on Main page"
+    assert re.search(r'data-tab="applied"[^>]*>Applied\s*<span class="badge">1</span>', html), \
+        "Applied badge (expected 1) missing on Main page"
+    assert re.search(r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">1</span>', html), \
+        "Dismissed badge (expected 1) missing on Main page"
+
+
+def test_applied_page_renders_all_three_tab_badges(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """GET /applied must render all three badges (Bug 2 regression: Applied badge was empty)."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, _ = _insert_posting_with_canonical(conn, "Applied Badge Matrix 1")
+    pid2, _ = _insert_posting_with_canonical(conn, "Applied Badge Matrix 2")
+    pid3, _ = _insert_posting_with_canonical(conn, "Applied Badge Matrix 3")
+    _apply_posting(conn, pid1)
+    _apply_posting(conn, pid2)
+    _apply_posting(conn, pid3)
+    conn.close()
+
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    html = resp.text
+    import re
+    assert re.search(r'data-tab="main"[^>]*>Main\s*<span class="badge">\d+</span>', html), \
+        "Main badge missing on Applied page"
+    assert re.search(r'data-tab="applied"[^>]*>Applied\s*<span class="badge">3</span>', html), \
+        "Applied badge (expected 3) missing or empty on Applied page"
+    assert re.search(r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">0</span>', html), \
+        "Dismissed badge (expected 0) missing on Applied page"
+
+
+def test_dismissed_page_renders_all_three_tab_badges(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """GET /dismissed must render all three badges."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, _ = _insert_posting_with_canonical(conn, "Dismissed Badge Matrix 1")
+    pid2, _ = _insert_posting_with_canonical(conn, "Dismissed Badge Matrix 2")
+    _dismiss_posting(conn, pid1)
+    _dismiss_posting(conn, pid2)
+    conn.close()
+
+    resp = client.get("/dismissed")
+    assert resp.status_code == 200
+    html = resp.text
+    import re
+    assert re.search(r'data-tab="main"[^>]*>Main\s*<span class="badge">\d+</span>', html), \
+        "Main badge missing on Dismissed page"
+    assert re.search(r'data-tab="applied"[^>]*>Applied\s*<span class="badge">0</span>', html), \
+        "Applied badge (expected 0) missing on Dismissed page"
+    assert re.search(r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">2</span>', html), \
+        "Dismissed badge (expected 2) missing or wrong on Dismissed page"
+
+
+def test_applied_count_badge_value_correct_when_on_main(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """Bug 1 regression: Applied badge on the Main page must show the actual applied count."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    for i in range(4):
+        pid, _ = _insert_posting_with_canonical(conn, f"Applied Regression {i}")
+        _apply_posting(conn, pid)
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="applied"[^>]*>Applied\s*<span class="badge">(\d+)</span>', resp.text
+    )
+    assert match is not None, "Applied badge missing on Main page"
+    assert int(match.group(1)) == 4, (
+        f"Applied badge on Main page: expected 4, got {match.group(1)}"
+    )
+
+
+def test_dismissed_count_badge_value_correct_when_on_main(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """Bug 1 regression: Dismissed badge on the Main page must show the actual dismissed count."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    for i in range(5):
+        pid, _ = _insert_posting_with_canonical(conn, f"Dismissed Regression {i}")
+        _dismiss_posting(conn, pid)
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">(\d+)</span>', resp.text
+    )
+    assert match is not None, "Dismissed badge missing on Main page"
+    assert int(match.group(1)) == 5, (
+        f"Dismissed badge on Main page: expected 5, got {match.group(1)}"
+    )
+
+
+def test_zero_applied_badge_renders_zero_not_empty_on_main(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """When no postings are applied, Applied badge on Main page must show 0 (not empty)."""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="applied"[^>]*>Applied\s*<span class="badge">(\d+)</span>', resp.text
+    )
+    assert match is not None, "Applied badge missing on Main page with zero applied"
+    assert int(match.group(1)) == 0
+
+
+def test_zero_dismissed_badge_renders_zero_not_empty_on_main(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """When no postings are dismissed, Dismissed badge on Main page must show 0 (not empty)."""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">(\d+)</span>', resp.text
+    )
+    assert match is not None, "Dismissed badge missing on Main page with zero dismissed"
+    assert int(match.group(1)) == 0
+
+
 def test_applied_tab_renders_count_badge(client: TestClient, seeded_db: Path) -> None:
-    """GET /applied must render a badge with the count of applied postings."""
+    """Applied badge is correct on GET /applied (existing test — now all-pages coverage)."""
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
     pid1, _ = _insert_posting_with_canonical(conn, "Applied Job 1")
@@ -1221,17 +1405,25 @@ def test_applied_tab_renders_count_badge(client: TestClient, seeded_db: Path) ->
     _apply_posting(conn, pid3)
     conn.close()
 
+    # Verify the badge appears on the Main page too (Bug 1 regression)
+    resp_main = client.get("/")
+    assert resp_main.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="applied"[^>]*>Applied\s*<span class="badge">(\d+)</span>', resp_main.text
+    )
+    assert match is not None, "Applied badge missing on Main page"
+    assert int(match.group(1)) == 3
+
+    # And the Applied page itself
     resp = client.get("/applied")
     assert resp.status_code == 200
-    # Applied tab nav anchor must carry a badge with text "3"
     assert 'data-tab="applied"' in resp.text
-    # Find badge in applied tab anchor — simple substring check is sufficient
-    # The badge renders as: Applied <span class="badge">3</span>
     assert '<span class="badge">3</span>' in resp.text
 
 
 def test_dismissed_tab_renders_count_badge(client: TestClient, seeded_db: Path) -> None:
-    """GET /dismissed must render a badge with the count of dismissed postings."""
+    """Dismissed badge is correct on GET /dismissed (existing test — now all-pages coverage)."""
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
     pid1, _ = _insert_posting_with_canonical(conn, "Dismissed Job 1")
@@ -1240,6 +1432,17 @@ def test_dismissed_tab_renders_count_badge(client: TestClient, seeded_db: Path) 
     _dismiss_posting(conn, pid2)
     conn.close()
 
+    # Verify the badge appears on the Main page too (Bug 1 regression)
+    resp_main = client.get("/")
+    assert resp_main.status_code == 200
+    import re
+    match = re.search(
+        r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">(\d+)</span>', resp_main.text
+    )
+    assert match is not None, "Dismissed badge missing on Main page"
+    assert int(match.group(1)) == 2
+
+    # And the Dismissed page itself
     resp = client.get("/dismissed")
     assert resp.status_code == 200
     assert 'data-tab="dismissed"' in resp.text
@@ -1250,14 +1453,20 @@ def test_empty_applied_tab_renders_zero_badge(client: TestClient, seeded_db: Pat
     """GET /applied with no applied postings must render badge with 0."""
     resp = client.get("/applied")
     assert resp.status_code == 200
-    assert '<span class="badge">0</span>' in resp.text
+    import re
+    assert re.search(
+        r'data-tab="applied"[^>]*>Applied\s*<span class="badge">0</span>', resp.text
+    ), "Applied badge with value 0 not found on Applied page"
 
 
 def test_empty_dismissed_tab_renders_zero_badge(client: TestClient, seeded_db: Path) -> None:
     """GET /dismissed with no dismissed postings must render badge with 0."""
     resp = client.get("/dismissed")
     assert resp.status_code == 200
-    assert '<span class="badge">0</span>' in resp.text
+    import re
+    assert re.search(
+        r'data-tab="dismissed"[^>]*>Dismissed\s*<span class="badge">0</span>', resp.text
+    ), "Dismissed badge with value 0 not found on Dismissed page"
 
 
 def test_main_tab_badge_reflects_canonical_count_not_posting_count(
