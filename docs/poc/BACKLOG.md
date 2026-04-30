@@ -158,6 +158,7 @@ Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
 - **`scheduler` for `auto_remove_stale_applied`** — cron-like trigger to remove applied entries unchanged for 3 months.
 - **Coverage expansion based on PoC gaps** — additional LinkedIn search keywords (`AI Engineer`, `Applied AI Research`, `Quant Research`); Greenhouse ATS curated employer list (if PoC coverage audit reveals gap).
 - **Per-user namespace utilization** — schema is namespace-aware from M1 (hedge 3) but `user_id='default'` is the only value through MVP.
+- **Mute deferred-source badges in PoC** — sub-bar currently renders 4 badges (`gmail_linkedin`, `gmail_indeed`, `hydrator_linkedin`, `hydrator_indeed`) per the M1 spec. In PoC scope (LinkedIn-only per ALIGNMENT-LOG 2026-04-28), the Indeed badges carry no actionable signal: `gmail_indeed` polls Gmail and returns 0 (marked healthy — misleading); `hydrator_indeed` returns `http_403` from Indeed bot detection (red — but expected, not actionable until MVP-M1 reactivates Indeed). Add a `config.yaml` flag to mute deferred-source badges, OR derive the active source list from a single config so the UI only shows badges for sources actually wired in the current scope. Defer to MVP-M1 when Indeed comes back online.
 
 ---
 
