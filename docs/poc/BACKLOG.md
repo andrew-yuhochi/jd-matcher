@@ -7,6 +7,42 @@ Items here are explicitly deferred — either to a later PoC milestone (M2/M3/M4
 
 ---
 
+## Process — for next milestone planning (post-M2)
+
+**Architecture + test-suite review (user directive, 2026-04-29 at M2 close)**
+
+When `/milestone-plan` runs for the next milestone, **architect must perform an architecture review pass BEFORE drafting tasks**. Subagents (test-validator, data-pipeline) should be involved in their respective surfaces.
+
+**Trigger**: 982 passing tests at M2 close. User flagged this as a sign that refactoring opportunities may exist.
+
+**Scope of the review**:
+
+1. **Source-code architecture (architect)**:
+   - Module boundaries and coupling — any module grown unwieldy? (e.g., `canonical_view.py`, `engine.py`, `pipeline.py`)
+   - Component boundaries vs TDD Part 2 — has any component drifted from its spec?
+   - Cross-cutting concerns that emerged organically during M2 (e.g., the `_compute_all_tab_counts` helper added late in M2-013) — should they be promoted to first-class abstractions?
+   - Configuration sprawl — `dedup.yaml`, `llm.yaml`, `user_profile.yaml`, `skill_categories.yaml`, etc. — is the config layer coherent?
+   - Database schema — any vestigial columns (e.g., the `postings.canonical_seniority` cleanup item logged earlier from M2-010 migration)?
+
+2. **Test suite (test-validator)**:
+   - 982 tests is high for PoC scope. Identify:
+     - **Outdated tests** that assert behavior since refactored away (e.g., role_summary truncation tests after M2-015 follow-up renamed/removed them; should be a clean cut)
+     - **Duplicate fixture setup** across test files — candidate for shared fixtures or factory helpers
+     - **Slow vs fast tests** — should they be categorized (`pytest -m unit` vs `-m integration`)?
+     - **Mocking patterns** — consistent across files? Any tests that mock too much / too little?
+   - Recommend specific consolidation targets (e.g., "20-30 tests in test_X could be parametrized into 5")
+
+3. **Documentation drift (architect)**:
+   - TDD §C* component entries — accurate vs current implementation? Several got "M2 update" footnotes during the milestone — worth a consolidation pass?
+   - PRD scope vs delivered work — any drift to flag for next milestone?
+   - DATA-SOURCES.md — Indeed reactivation deferred to MVP-M1 per ALIGNMENT-LOG; is the doc consistent with that?
+
+**Deliverable**: a one-page architecture review at `docs/poc/ARCHITECTURE-REVIEW-<date>.md` with prioritized refactor recommendations BEFORE tasks are drafted for the next milestone. Recommendations get triaged (do now / defer / skip) by the user before milestone-plan continues.
+
+**Why this matters**: PoC velocity has been intentionally fast and additive. M2 added 5 new components (C21/C28/C29/C30/C32) plus the LLM gatekeeper plus 4-feature exact-match plus the entire skills tiering UX. A consolidation pass before M3/MVP is healthy hygiene — catches drift while it's still cheap to fix.
+
+---
+
 ## Deferred to PoC M2 — Content-aware dedup
 
 - **Cross-source content-aware dedup** (LLM-extracted-fields + JD-embedding fusion). Requires C5 hydrator + LLM extraction (M3) — but content-only dedup using JD embeddings can land in M2 without LLM extraction.
