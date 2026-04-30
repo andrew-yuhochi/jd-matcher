@@ -463,14 +463,43 @@
 
 ---
 
+##### TASK-M2-015 — Collapsed-card layout reshuffle + skills moved to collapsed view
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C9 (Web UI: frontend) — TDD §C9
+- **Description**: Restructure the collapsed-card layout per user's directive (UI re-validation 2026-04-29) and BA verdict (ALIGNMENT-LOG.md, ALIGNED — TASK-M2-015). Move `top_skills` chip strip from expanded view into collapsed view as an always-visible row. New collapsed-card layout: (1) `Title — Company Name` left, `#canonical_id` rightmost (variants/Reposted badges stay grouped right with the id chip); (2) metadata row `Seniority · Team/department · Location` (dot-separated, single line, conditional null-safe per field); (3) `top_skills` chip strip (NEW position — always visible); (4) `role_summary` first-sentence teaser (truncated ~120 chars); (5) `Sources URL` left, `First seen` rightmost. Expanded view (`_card_jd_body.html`) drops the skills strip — expanded shows JD body only (skills already visible above).
+- **Dependencies**: TASK-M2-014
+- **Implementation Checklist**:
+  - Schema: N/A (no new fields — pure reorder + position move)
+  - Wire: rewrite `_card.html` line ordering; remove skills strip from `_card_jd_body.html`; CSS adjustments for the new metadata row + skills-in-collapsed styling; ensure `#id` chip is rightmost on title row (variants/Reposted badges sit alongside)
+  - CSS: new/updated `.card-line2-meta` (dot-separated metadata row), `.card-line5-footer` (sources left + date right), reposition `.card-skills-strip` for collapsed-view density
+  - Imports affected: `_card.html`, `_card_jd_body.html`, `styles.css`
+  - Runtime files: existing assets
+- **Demo Artifact**: Browser shows the reshuffled card layout on the live 148-canonical DB matching the user's spec exactly. Skills visible without expanding. No regression in apply/dismiss/keyboard flows.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-015.md`
+- **Acceptance Criteria**:
+  - [ ] Line 1 renders `Title — Company Name` (left) + `#canonical_id` chip + variants/Reposted badges grouped at rightmost
+  - [ ] Line 2 renders dot-separated `Seniority · Team/department · Location` (each field conditionally rendered if non-null; separator handled cleanly when fields are absent)
+  - [ ] Line 3 renders `top_skills` chip strip in collapsed view (capped at 10, absent when empty)
+  - [ ] Line 4 renders `role_summary` truncated teaser (absent when null)
+  - [ ] Line 5 renders sources URL row left + first-seen date rightmost
+  - [ ] Expanded view (`_card_jd_body.html`) NO LONGER renders the skills strip (moved to collapsed)
+  - [ ] DOM tests for new layout (line ordering, metadata-row null-handling, skills-in-collapsed presence, expanded-view skills absence)
+  - [ ] No regression in existing 886 tests
+  - [ ] TDD §C9 M2 update note appended/amended for the new layout
+
+---
+
 ##### TASK-M2-013 — M2 demo + user approval
 
 - **Status**: To Do
 - **Blocked reason**:
 - **Agent**: manual (user)
 - **Component**: M2 milestone deliverable acceptance — references all M2 C-components
-- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list + enriched LLM fields; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
-- **Dependencies**: TASK-M2-012, TASK-M2-014
+- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list + enriched LLM fields in the reshuffled card layout; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
+- **Dependencies**: TASK-M2-012, TASK-M2-014, TASK-M2-015
 - **Implementation Checklist**:
   - Schema: N/A
   - Wire: N/A (demo task)

@@ -162,6 +162,42 @@ Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
 
 ---
 
+### MVP-M1 — Master-detail two-pane UI + companion controls (pagination, search, filter)
+
+**Decision date**: 2026-04-29
+**Approved by**: User (Path 1 — BA-recommended deferral; user originally wanted master-detail in M2 but accepted BA verdict)
+**Alignment verdict**: DRIFTING for master-detail in M2 scope; ALIGNED for MVP-M1 deferral (see ALIGNMENT-LOG.md 2026-04-29 entry, item C/D/E/F)
+
+**What** (bundled — these four items are natural companions, plan together):
+
+1. **Two-pane master-detail layout** — replaces the current single-column expand-in-place model. LEFT pane: scrollable list of collapsed cards. RIGHT pane: focused expanded card details. Click a card in LEFT → loads into RIGHT. The `e` keyboard shortcut becomes obsolete or repurposed (e.g., `Enter` to focus a card into the right pane).
+2. **Pagination** — display limit + page selector. Today the user must scroll through all 148 canonicals to locate any specific post. Need a configurable page size (e.g., 20–50 cards per page) + page navigation.
+3. **Search** — by title (case-insensitive substring match minimum; fuzzy match a stretch goal).
+4. **Filter** — by extracted card metadata: `canonical_seniority`, `canonical_location`, `top_skills` (chip-multiselect), `team_or_department`, `hydration_status`. Combinable filters (AND semantics across fields, OR semantics within multi-value fields like skills).
+
+**Why bundle**:
+- Master-detail without search/filter/pagination is a half-finished pattern — left pane still requires scrolling forever to find any specific post.
+- Companion features change the LEFT-pane data model (paginated query + filter state in URL/cookies), so designing them together avoids redo work.
+- Keyboard model needs a single re-design pass (J/K navigate left, Enter focus right, /  focus search, F filter chord, etc.) — UX-SPEC §6 revised once.
+
+**Why not in M2 PoC**:
+- M2 scope is content-aware dedup + repost detection (PRD §6 Scope IN). UI is incidental.
+- Two-pane breaks TDD §1.0 "cards expand in place" contract and UX-SPEC §1/§6 keyboard model. Substantial frontend rewrite, not a template pass.
+- M2 closing should focus on dedup quality validation (TASK-M2-012/013), not UX architecture migration.
+
+**Pre-implementation work** (do at MVP-M1 start, before any code):
+- Update TDD §1.0 (interaction-model contract) and §C9 (frontend component) to reflect two-pane.
+- Update UX-SPEC §1 (collapsed-card layout in left pane) and §6 (revised keyboard shortcuts).
+- ux-designer drafts a Claude Design brief for the two-pane layout (per CLAUDE.md Claude Design Integration — MVP scope allows on-demand briefs).
+- Decide HTMX vs vanilla JS for right-pane content swap (TDD §1.3 currently defaults to vanilla).
+
+**Open questions for MVP planning**:
+- Pagination on the server (SQL `LIMIT/OFFSET`) or client (full result set + JS slicing)? Server-side scales better but adds endpoint complexity.
+- Search server-side (SQLite `LIKE` or FTS5) or client-side (JS over the rendered DOM)? FTS5 is overkill for 100s-1000s of cards; `LIKE` probably sufficient through MVP.
+- Filter state persistence — URL query params (shareable, browser-back works) or session cookie (cleaner URLs)? URL params recommended per standard web patterns.
+
+---
+
 ### MVP-M1 — Inactive AND Expired state lifecycle (supersedes auto-remove model)
 
 **Decision date**: 2026-04-25 (Inactive); 2026-04-26 (Expired sibling concept added)
