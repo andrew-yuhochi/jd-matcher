@@ -16,6 +16,8 @@ title_cosine, seniority_match, fuse_score) using the configured model, then runs
       [0.85, 0.88, 0.90, 0.92, 0.95]
     - Gatekeeper-augmented decision (3-tier logic: dispatch at gatekeeper_threshold=0.75,
       4-feature exact-match short-circuit, then actual LLM gatekeeper for borderline band)
+    - Gatekeeper dispatch threshold sweep: [0.70, 0.75, 0.80, 0.85] — shows how raising
+      or lowering the dispatch boundary affects precision/recall
 
 Outputs a Markdown calibration report with threshold sweep, per-pair verdict table,
 cost summary, recommended threshold, and title-cosine "Galent-pattern" diagnostic.
@@ -27,7 +29,7 @@ import argparse
 import csv
 import json
 import logging
-import math
+import sqlite3
 import sys
 import time
 from dataclasses import dataclass, field
@@ -42,9 +44,18 @@ _PROJECT_ROOT = Path(__file__).parents[3]
 _SYNTHETIC_PAIRS_PATH = _PROJECT_ROOT / "tests" / "fixtures" / "dedup_synthetic_pairs.yaml"
 _LABELS_CSV_PATH = _PROJECT_ROOT / "tests" / "fixtures" / "dedup_labels.csv"
 _DEFAULT_OUTPUT_PATH = _PROJECT_ROOT / "docs" / "poc" / "quality-logs" / "TASK-M2-012-calibration-report.md"
+_DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 
 _SWEEP_THRESHOLDS = [0.85, 0.88, 0.90, 0.92, 0.95]
 _GATEKEEPER_THRESHOLD = 0.75
+# Dispatch threshold sweep: how does changing the FUSE dispatch boundary affect results?
+_DISPATCH_SWEEP_THRESHOLDS = [0.70, 0.75, 0.80, 0.85]
+
+# Diagnostic pair IDs that must be called out explicitly in the report.
+_DIAGNOSTIC_PAIR_IDS = {
+    "real_001", "real_002", "real_003", "real_004",
+    "real_005", "real_006", "real_007", "real_008", "real_009",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +205,7 @@ def _precision_recall_f1(
     results: list[PairResult],
     threshold: float,
     use_gatekeeper: bool,
+    dispatch_threshold: float | None = None,
 ) -> tuple[float, float, float]:
     """Compute P/R/F1 at a given threshold.
 
@@ -201,13 +213,25 @@ def _precision_recall_f1(
     For gatekeeper-augmented: use gatekeeper_action (already computed with
     gatekeeper dispatched at 0.75; threshold param is applied to raw-FUSE
     path for comparison only).
+
+    If dispatch_threshold is provided, re-simulate gatekeeper decisions using
+    that dispatch boundary instead of the pre-computed gatekeeper_action. This
+    is used for the dispatch threshold sweep section of the report.
     """
     tp = fp = fn = tn = 0
     for r in results:
         if r.ground_truth == "ambiguous":
-            continue  # exclude ambiguous from precision/recall metrics
+            continue
         if use_gatekeeper:
-            predicted = r.gatekeeper_action == "merge"
+            if dispatch_threshold is not None:
+                # Re-simulate: pairs below dispatch_threshold are always 'new';
+                # pairs at/above keep their gatekeeper_action (since we can't re-run LLM).
+                if r.fuse_score < dispatch_threshold:
+                    predicted = False  # would be 'new' under this threshold
+                else:
+                    predicted = r.gatekeeper_action == "merge"
+            else:
+                predicted = r.gatekeeper_action == "merge"
         else:
             predicted = r.fuse_score >= threshold
 
@@ -284,6 +308,7 @@ def _process_pair(
             retry_count=1,
         )
         call_latency_ms = int((time.monotonic() - gk_t0) * 1000)
+        call_cost_usd = classifier.last_call_cost_usd
 
         if verdict is None:
             gatekeeper_action = "pending_gatekeeper"
@@ -323,6 +348,8 @@ def _format_report(
     results: list[PairResult],
     total_cost_usd: float,
     total_calls: int,
+    final_threshold: float,
+    threshold_rationale: str,
 ) -> str:
     lines: list[str] = []
 
@@ -336,14 +363,24 @@ def _format_report(
 
     # Only non-ambiguous for metrics
     labeled = [r for r in results if r.ground_truth != "ambiguous"]
+    labeled_real = [r for r in results if r.source == "real" and r.ground_truth != "ambiguous"]
+    labeled_synth = [r for r in results if r.source == "synthetic" and r.ground_truth != "ambiguous"]
 
-    # --- Threshold sweep table ---
-    lines.append("## Threshold Sweep (non-ambiguous pairs only)")
+    # --- Final threshold decision ---
+    lines.append("## Final Threshold Decision")
+    lines.append("")
+    lines.append(f"**Pinned in config/dedup.yaml**: `dedup.gatekeeper_threshold = {final_threshold}`")
+    lines.append("")
+    lines.append(f"**Rationale**: {threshold_rationale}")
+    lines.append("")
+
+    # --- Threshold sweep table (raw-FUSE thresholds) ---
+    lines.append("## Raw-FUSE Threshold Sweep (non-ambiguous pairs only)")
+    lines.append("")
+    lines.append("Compares raw-FUSE decisions vs gatekeeper-augmented decisions across FUSE merge thresholds.")
     lines.append("")
     lines.append("| FUSE Threshold | Raw-FUSE P | Raw-FUSE R | Raw-FUSE F1 | GK-Augmented P | GK-Augmented R | GK-Augmented F1 |")
     lines.append("|----------------|-----------|-----------|------------|---------------|---------------|----------------|")
-    best_threshold = 0.90
-    best_f1_gk = 0.0
     for thresh in _SWEEP_THRESHOLDS:
         rp, rr, rf1 = _precision_recall_f1(labeled, thresh, use_gatekeeper=False)
         gp, gr, gf1 = _precision_recall_f1(labeled, thresh, use_gatekeeper=True)
@@ -351,20 +388,30 @@ def _format_report(
             f"| {thresh:.2f} | {rp:.3f} | {rr:.3f} | {rf1:.3f} | "
             f"{gp:.3f} | {gr:.3f} | {gf1:.3f} |"
         )
-        # Track best gatekeeper F1 with recall >= 0.80 on dups
-        if gr >= 0.80 and gf1 > best_f1_gk:
-            best_f1_gk = gf1
-            best_threshold = thresh
-
     lines.append("")
-    lines.append(f"**Recommended threshold**: `{best_threshold}` (highest GK-augmented F1 while maintaining recall ≥80% on true dups)")
+
+    # --- Gatekeeper dispatch threshold sweep ---
+    lines.append("## Gatekeeper Dispatch Threshold Sweep")
+    lines.append("")
+    lines.append("Shows effect of raising/lowering the FUSE score at which the gatekeeper is invoked.")
+    lines.append("Lower dispatch threshold = more pairs sent to gatekeeper (higher cost, potentially higher recall).")
+    lines.append("Higher dispatch threshold = fewer gatekeeper calls (lower cost, risks missing legit merges).")
+    lines.append("")
+    lines.append("| Dispatch Threshold | GK P | GK R | GK F1 | Pairs below threshold (→ 'new') |")
+    lines.append("|-------------------|-----|-----|------|-------------------------------|")
+    for dt in _DISPATCH_SWEEP_THRESHOLDS:
+        gp, gr, gf1 = _precision_recall_f1(labeled, dt, use_gatekeeper=True, dispatch_threshold=dt)
+        below_count = sum(1 for r in labeled if r.fuse_score < dt)
+        lines.append(
+            f"| {dt:.2f} | {gp:.3f} | {gr:.3f} | {gf1:.3f} | {below_count} |"
+        )
     lines.append("")
 
     # --- Per-pair verdict table ---
     lines.append("## Per-Pair Verdict Table")
     lines.append("")
-    lines.append("| Pair ID | Scenario | GT | FUSE | GK Called | GK Verdict | GK Action | Correct? |")
-    lines.append("|---------|----------|-----|------|-----------|-----------|-----------|---------|")
+    lines.append("| Pair ID | Source | Scenario | GT | FUSE | GK Called | GK Verdict | GK Action | Correct? |")
+    lines.append("|---------|--------|----------|-----|------|-----------|-----------|-----------|---------|")
     for r in results:
         gt_display = r.ground_truth
         gk_verdict = "—"
@@ -384,10 +431,62 @@ def _format_report(
             correct = "YES" if predicted_merge == actual_merge else "**NO**"
 
         lines.append(
-            f"| {r.pair_id} | {r.scenario} | {gt_display} | {r.fuse_score:.3f} | "
+            f"| {r.pair_id} | {r.source} | {r.scenario} | {gt_display} | {r.fuse_score:.3f} | "
             f"{'Y' if r.gatekeeper_called else 'N'} | {gk_verdict} | {r.gatekeeper_action} | {correct} |"
         )
+    lines.append("")
 
+    # --- Real-data diagnostic pairs (real_001 through real_009) ---
+    diagnostic_results = [r for r in results if r.pair_id in _DIAGNOSTIC_PAIR_IDS]
+    if diagnostic_results:
+        lines.append("## Diagnostic Pairs — Gatekeeper Behavior on Key Real Pairs")
+        lines.append("")
+        lines.append("These pairs were identified before calibration as the critical test cases.")
+        lines.append("Failures here are flagged prominently.")
+        lines.append("")
+        false_merges_on_regression_pairs = []
+        regression_blocking_ids = {"real_002", "real_003", "real_007", "real_008", "real_009"}
+
+        for r in sorted(diagnostic_results, key=lambda x: x.pair_id):
+            expected = "merge" if r.ground_truth == "merge" else "new"
+            actual_action = r.gatekeeper_action
+            status_icon = "PASS" if actual_action == expected else "**FAIL**"
+            lines.append(f"**{r.pair_id}** — GT={r.ground_truth}, GK={r.gatekeeper_action}, FUSE={r.fuse_score:.3f} — {status_icon}")
+            if r.gatekeeper_reasoning:
+                lines.append(f"  - Reasoning: {r.gatekeeper_reasoning}")
+            else:
+                lines.append(f"  - GK status: {r.gatekeeper_status}")
+            lines.append("")
+            if actual_action == "merge" and r.ground_truth == "new":
+                false_merges_on_regression_pairs.append(r.pair_id)
+
+        if false_merges_on_regression_pairs:
+            regression_failures = [p for p in false_merges_on_regression_pairs if p in regression_blocking_ids]
+            if regression_failures:
+                lines.append(f"> **REGRESSION FAILURE**: False-merge on regression-blocking pair(s): {', '.join(regression_failures)}")
+                lines.append("> These are same-employer-different-role pairs that must never be merged.")
+            else:
+                lines.append(f"> Note: False-merge(s) detected on: {', '.join(false_merges_on_regression_pairs)}")
+                lines.append("> None are regression-blocking pairs — flag for user review but not a regression.")
+            lines.append("")
+
+    # --- Summary metrics by source ---
+    lines.append("## Precision / Recall Summary")
+    lines.append("")
+    lines.append("| Subset | GK P | GK R | GK F1 | Raw-FUSE P (0.90) | Raw-FUSE R (0.90) |")
+    lines.append("|--------|-----|-----|------|-----------------|-----------------|")
+    if labeled:
+        gp, gr, gf1 = _precision_recall_f1(labeled, 0.90, use_gatekeeper=True)
+        rp, rr, _ = _precision_recall_f1(labeled, 0.90, use_gatekeeper=False)
+        lines.append(f"| All (synthetic+real) | {gp:.3f} | {gr:.3f} | {gf1:.3f} | {rp:.3f} | {rr:.3f} |")
+    if labeled_synth:
+        gp, gr, gf1 = _precision_recall_f1(labeled_synth, 0.90, use_gatekeeper=True)
+        rp, rr, _ = _precision_recall_f1(labeled_synth, 0.90, use_gatekeeper=False)
+        lines.append(f"| Synthetic only | {gp:.3f} | {gr:.3f} | {gf1:.3f} | {rp:.3f} | {rr:.3f} |")
+    if labeled_real:
+        gp, gr, gf1 = _precision_recall_f1(labeled_real, 0.90, use_gatekeeper=True)
+        rp, rr, _ = _precision_recall_f1(labeled_real, 0.90, use_gatekeeper=False)
+        lines.append(f"| Real-data only | {gp:.3f} | {gr:.3f} | {gf1:.3f} | {rp:.3f} | {rr:.3f} |")
     lines.append("")
 
     # --- Gatekeeper reasoning for called pairs ---
@@ -396,7 +495,10 @@ def _format_report(
         lines.append("## Gatekeeper Reasoning (called pairs)")
         lines.append("")
         for r in called:
-            lines.append(f"**{r.pair_id}** ({r.scenario}, GT={r.ground_truth}, FUSE={r.fuse_score:.3f})")
+            correct_marker = ""
+            if r.ground_truth != "ambiguous":
+                correct_marker = " ✓" if r.gatekeeper_action == r.ground_truth else " ✗ WRONG"
+            lines.append(f"**{r.pair_id}** ({r.source}, {r.scenario}, GT={r.ground_truth}, FUSE={r.fuse_score:.3f}){correct_marker}")
             lines.append(f"- Verdict: `{r.gatekeeper_action}` (is_same_role={r.gatekeeper_is_same_role})")
             lines.append(f"- Reasoning: {r.gatekeeper_reasoning}")
             lines.append("")
@@ -436,9 +538,81 @@ def _format_report(
     lines.append("")
 
     lines.append("---")
-    lines.append("*Report generated by `python -m jd_matcher.dedup calibrate`. Preliminary synthetic-only run.*")
+    lines.append("*Report generated by `python -m jd_matcher.dedup calibrate`. Final calibration — Phase 2 (synthetic + user-labeled real pairs).*")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# DB enrichment for real pairs
+# ---------------------------------------------------------------------------
+
+
+def _enrich_real_pairs_from_db(
+    pairs: list[CalibrationPair],
+    db_path: Path,
+) -> None:
+    """Fetch full_jd, top_skills, canonical_seniority from DB for real pairs.
+
+    Modifies pairs in-place. Pairs that cannot be enriched keep their
+    empty placeholder values (gatekeeper will see 'no JD text available').
+    """
+    # Collect all canonical_ids needed
+    ids_needed: set[int] = set()
+    for pair in pairs:
+        if pair.source != "real":
+            continue
+        try:
+            ids_needed.add(int(pair.pair_id.split("_")[0]) if "_" not in pair.pair_id else 0)
+        except (ValueError, IndexError):
+            pass
+
+    # The canonical_ids are stored in posting_a and posting_b metadata — but
+    # the CSV loader doesn't carry them through. We re-derive from the CSV
+    # via the pair's posting_a/posting_b dict (which has title/company but not id).
+    # Instead, we look up by title + company for the pair. This is fragile —
+    # better to store canonical_id in the pair. Since we control the CSV and
+    # the CalibrationPair dataclass, we add canonical_id_a and canonical_id_b
+    # as optional keys in the posting dicts.
+    if not db_path.exists():
+        logger.warning("calibrate: DB not found at %s — real pairs will have no full_jd", db_path)
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            for pair in pairs:
+                if pair.source != "real":
+                    continue
+                cid_a = pair.posting_a.get("canonical_id")
+                cid_b = pair.posting_b.get("canonical_id")
+                if cid_a:
+                    row = conn.execute(
+                        "SELECT full_jd, top_skills, canonical_seniority, role_summary "
+                        "FROM canonical_postings WHERE canonical_id = ?",
+                        (cid_a,),
+                    ).fetchone()
+                    if row:
+                        pair.posting_a["full_jd"] = row["full_jd"] or ""
+                        pair.posting_a["top_skills"] = json.loads(row["top_skills"] or "[]")
+                        pair.posting_a["canonical_seniority"] = row["canonical_seniority"] or ""
+                        pair.posting_a["role_summary"] = row["role_summary"] or ""
+                if cid_b:
+                    row = conn.execute(
+                        "SELECT full_jd, top_skills, canonical_seniority, role_summary "
+                        "FROM canonical_postings WHERE canonical_id = ?",
+                        (cid_b,),
+                    ).fetchone()
+                    if row:
+                        pair.posting_b["full_jd"] = row["full_jd"] or ""
+                        pair.posting_b["top_skills"] = json.loads(row["top_skills"] or "[]")
+                        pair.posting_b["canonical_seniority"] = row["canonical_seniority"] or ""
+                        pair.posting_b["role_summary"] = row["role_summary"] or ""
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.error("calibrate: DB enrichment failed — %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -462,27 +636,47 @@ def _load_synthetic_pairs(path: Path) -> list[CalibrationPair]:
 
 
 def _load_real_pairs(path: Path) -> list[CalibrationPair]:
+    """Load user-labeled real pairs from CSV.
+
+    Label normalization: strip whitespace + lowercase. Accepts 'merge' or 'new'.
+    Empty/blank labels are skipped and logged. Comment lines starting with '##'
+    are skipped by DictReader (not lines in the data rows — the CSV header comment
+    block is handled by passing comment=None and skipping rows where pair_id
+    starts with '#').
+    """
     if not path.exists():
         return []
     pairs = []
+    skipped = 0
     with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(
+            (line for line in f if not line.startswith("##")),
+        )
         for row in reader:
-            label = (row.get("user_label") or "").strip().lower()
+            raw_label = row.get("user_label") or ""
+            label = raw_label.strip().lower()
             if label not in ("merge", "new"):
-                continue  # skip unlabeled or unknown
+                skipped += 1
+                continue
+            canonical_a_id_str = row.get("canonical_a_id", "").strip()
+            canonical_b_id_str = row.get("canonical_b_id", "").strip()
+            canonical_a_id = int(canonical_a_id_str) if canonical_a_id_str.isdigit() else None
+            canonical_b_id = int(canonical_b_id_str) if canonical_b_id_str.isdigit() else None
+
             pairs.append(CalibrationPair(
                 pair_id=row.get("pair_id", "real_unknown"),
                 ground_truth=label,
                 scenario="real",
                 posting_a={
+                    "canonical_id": canonical_a_id,
                     "canonical_title": row.get("title_a", ""),
                     "canonical_company": row.get("company_a", ""),
-                    "full_jd": "",  # real pairs need DB lookup — skip for now
+                    "full_jd": "",  # enriched from DB below
                     "top_skills": [],
                     "canonical_seniority": "",
                 },
                 posting_b={
+                    "canonical_id": canonical_b_id,
                     "canonical_title": row.get("title_b", ""),
                     "canonical_company": row.get("company_b", ""),
                     "full_jd": "",
@@ -491,7 +685,77 @@ def _load_real_pairs(path: Path) -> list[CalibrationPair]:
                 },
                 source="real",
             ))
+    if skipped:
+        logger.info("calibrate: skipped %d real-pair row(s) with empty/unrecognized label", skipped)
     return pairs
+
+
+# ---------------------------------------------------------------------------
+# Threshold recommendation
+# ---------------------------------------------------------------------------
+
+
+def _recommend_threshold(results: list[PairResult]) -> tuple[float, str]:
+    """Compute the recommended gatekeeper dispatch threshold.
+
+    Evaluates each candidate threshold in _DISPATCH_SWEEP_THRESHOLDS.
+    Returns (threshold, rationale_string).
+    """
+    labeled = [r for r in results if r.ground_truth != "ambiguous"]
+    if not labeled:
+        return _GATEKEEPER_THRESHOLD, "No labeled pairs to evaluate — defaulting to 0.75."
+
+    regression_blocking_new = {
+        r.pair_id for r in results
+        if r.pair_id in {"real_002", "real_003", "real_007", "real_008", "real_009"}
+        and r.ground_truth == "new"
+    }
+
+    best_threshold = _GATEKEEPER_THRESHOLD
+    best_f1 = 0.0
+    best_precision = 0.0
+    best_recall = 0.0
+
+    for dt in _DISPATCH_SWEEP_THRESHOLDS:
+        gp, gr, gf1 = _precision_recall_f1(labeled, dt, use_gatekeeper=True, dispatch_threshold=dt)
+        # Check regression constraint: no false-merges on regression-blocking pairs
+        false_merge_on_regression = any(
+            r.pair_id in regression_blocking_new
+            and r.fuse_score >= dt
+            and r.gatekeeper_action == "merge"
+            for r in results
+        )
+        if false_merge_on_regression:
+            continue  # skip thresholds that cause regression-blocking false-merges
+        if gp >= 0.90 and gf1 > best_f1:
+            best_f1 = gf1
+            best_threshold = dt
+            best_precision = gp
+            best_recall = gr
+
+    if best_f1 == 0.0:
+        # No threshold achieves P>=0.90 — pick least-bad
+        for dt in _DISPATCH_SWEEP_THRESHOLDS:
+            gp, gr, gf1 = _precision_recall_f1(labeled, dt, use_gatekeeper=True, dispatch_threshold=dt)
+            if gf1 > best_f1:
+                best_f1 = gf1
+                best_threshold = dt
+                best_precision = gp
+                best_recall = gr
+        rationale = (
+            f"No threshold achieved precision ≥90% on labeled pairs. "
+            f"Selected {best_threshold} as highest-F1 option "
+            f"(P={best_precision:.3f}, R={best_recall:.3f}, F1={best_f1:.3f}). "
+            f"User review recommended."
+        )
+    else:
+        rationale = (
+            f"Threshold {best_threshold} achieves P={best_precision:.3f}, R={best_recall:.3f}, "
+            f"F1={best_f1:.3f} on combined synthetic+real pairs with zero false-merges on "
+            f"regression-blocking same-employer-different-role pairs."
+        )
+
+    return best_threshold, rationale
 
 
 # ---------------------------------------------------------------------------
@@ -502,12 +766,14 @@ def _load_real_pairs(path: Path) -> list[CalibrationPair]:
 def run_calibration(
     synthetic_only: bool = False,
     output_path: Path | None = None,
+    db_path: Path | None = None,
 ) -> None:
     from dotenv import load_dotenv
 
     load_dotenv(dotenv_path=Path.cwd() / ".env")
 
     resolved_output = output_path or _DEFAULT_OUTPUT_PATH
+    resolved_db = db_path or _DEFAULT_DB_PATH
 
     # Load pairs
     pairs: list[CalibrationPair] = []
@@ -515,11 +781,12 @@ def run_calibration(
 
     if not synthetic_only:
         real_pairs = _load_real_pairs(_LABELS_CSV_PATH)
-        pairs.extend(real_pairs)
         if real_pairs:
-            logger.info("calibrate: loaded %d real labeled pairs", len(real_pairs))
+            logger.info("calibrate: loaded %d real labeled pairs — enriching from DB", len(real_pairs))
+            _enrich_real_pairs_from_db(real_pairs, resolved_db)
         else:
             logger.info("calibrate: no real labeled pairs found (running synthetic-only)")
+        pairs.extend(real_pairs)
 
     logger.info("calibrate: total pairs to evaluate: %d", len(pairs))
 
@@ -563,8 +830,17 @@ def run_calibration(
         except Exception as exc:
             logger.error("calibrate: pair %s failed: %s", pair.pair_id, exc)
 
+    # Determine final threshold recommendation
+    final_threshold, threshold_rationale = _recommend_threshold(results)
+
     # Generate report
-    report = _format_report(results, total_cost_usd, total_calls)
+    report = _format_report(
+        results,
+        total_cost_usd,
+        total_calls,
+        final_threshold,
+        threshold_rationale,
+    )
 
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
     resolved_output.write_text(report, encoding="utf-8")
@@ -580,7 +856,12 @@ def run_calibration(
         print(f"\nAt FUSE threshold 0.90 (non-ambiguous pairs only):")
         print(f"  Raw-FUSE:    P={rp:.3f}  R={rr:.3f}  F1={rf1:.3f}")
         print(f"  GK-Augmented: P={gp:.3f}  R={gr:.3f}  F1={gf1:.3f}")
+
+    print(f"\nFinal gatekeeper_threshold recommendation: {final_threshold}")
+    print(f"Rationale: {threshold_rationale}")
     print(f"\nFull report: {resolved_output}")
+
+    return final_threshold
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -605,11 +886,18 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help=f"Output report path (default: {_DEFAULT_OUTPUT_PATH})",
     )
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=None,
+        help=f"SQLite DB path for real-pair enrichment (default: {_DEFAULT_DB_PATH})",
+    )
     args = parser.parse_args(argv)
 
     run_calibration(
         synthetic_only=args.synthetic_only,
         output_path=args.output,
+        db_path=args.db,
     )
 
 

@@ -9,18 +9,18 @@
 ## Your labels become ground truth for calibrating the LLM gatekeeper threshold.
 ##
 pair_id,canonical_a_id,canonical_b_id,title_a,title_b,company_a,company_b,fuse_score,user_label,user_notes
-real_001,319,347,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.850,,
-real_002,319,363,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.835,,
-real_003,347,363,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.820,,
-real_004,425,426,Senior Machine Learning Engineer (AI Training),Senior Machine Learning Expert (AI Training),Alignerr,Alignerr,0.910,,
-real_005,395,458,Data Scientist Early Career (Canada),Data Scientist Early Career (Canada),Jobright.ai,Jobright.ai,0.945,,
-real_006,316,396,Machine Learning Engineer - Early Career (Canada),Machine Learning Engineer - Early Career (Canada),Jobright.ai,Jobright.ai,0.940,,
-real_007,336,454,Portfolio Research Analyst Quantitative Equities,Quantitative Data Analyst Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.780,,
-real_008,379,454,Data Scientist Investment Data,Quantitative Data Analyst Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.800,,
-real_009,336,379,Portfolio Research Analyst Quantitative Equities,Data Scientist Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.760,,
-real_010,312,353,Applied Scientist II,Senior Data Analyst,Coalition,Coalition,0.720,,
-real_011,343,369,Data Science Manager,Senior Data Scientist,Deloitte,Deloitte,0.730,,
-real_012,384,424,Senior Data Analyst - Data & Insights,Lead Data Scientist - Search Data & Insights,Electronic Arts,Electronic Arts,0.750,,
-real_013,337,419,AI Engineer,Data Analytics Specialist,Crossing Hurdles,Crossing Hurdles,0.710,,
-real_014,320,390,Data Engineer,Machine Learning Scientist,DarkVision,DarkVision,0.690,,
-real_015,316,395,Machine Learning Engineer - Early Career (Canada),Data Scientist Early Career (Canada),Jobright.ai,Jobright.ai,0.880,,
+real_001,319,347,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.850,merge, both of them indicate a nice to have in health and mobile health applciation experience
+real_002,319,363,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.835,new,
+real_003,347,363,Data Scientist,Data Scientist,Alquemy Search & Consulting,Alquemy Search & Consulting,0.820,new,
+real_004,425,426,Senior Machine Learning Engineer (AI Training),Senior Machine Learning Expert (AI Training),Alignerr,Alignerr,0.910,merge, the duty of two jobs are mainly the same
+real_005,395,458,Data Scientist Early Career (Canada),Data Scientist Early Career (Canada),Jobright.ai,Jobright.ai,0.945,merge, all information about the post are the same
+real_006,316,396,Machine Learning Engineer - Early Career (Canada),Machine Learning Engineer - Early Career (Canada),Jobright.ai,Jobright.ai,0.940,merge, all information about the post are the same
+real_007,336,454,Portfolio Research Analyst Quantitative Equities,Quantitative Data Analyst Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.780,New,This is likely 2 different position in the same team. 
+real_008,379,454,Data Scientist Investment Data,Quantitative Data Analyst Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.800,New, 379 has explicitly requested for NER/ knowledge Graph/ ML/ AI knowledge and experiment.
+real_009,336,379,Portfolio Research Analyst Quantitative Equities,Data Scientist Investment Data,Connor Clark & Lunn Financial Group,Connor Clark & Lunn Financial Group,0.760,New, 379 has explicitly requested for NER/ knowledge Graph/ ML/ AI knowledge and experiment while 336 focus on financial modelling.
+real_010,312,353,Applied Scientist II,Senior Data Analyst,Coalition,Coalition,0.720,New,Different role responsibility team and seniority
+real_011,343,369,Data Science Manager,Senior Data Scientist,Deloitte,Deloitte,0.730,New,Different seniority and responsibility within the same team
+real_012,384,424,Senior Data Analyst - Data & Insights,Lead Data Scientist - Search Data & Insights,Electronic Arts,Electronic Arts,0.750,New,Different seniority
+real_013,337,419,AI Engineer,Data Analytics Specialist,Crossing Hurdles,Crossing Hurdles,0.710,New,Differet job responsibility and skills involved
+real_014,320,390,Data Engineer,Machine Learning Scientist,DarkVision,DarkVision,0.690,New,Clearly Data Scientist and Data Engineering role respectively
+real_015,316,395,Machine Learning Engineer - Early Career (Canada),Data Scientist Early Career (Canada),Jobright.ai,Jobright.ai,0.880,New,Clearly Data Scientist and ML Engineer role respectively

@@ -3,8 +3,28 @@ You are a job-posting deduplication assistant. Your task is to determine whether
 Return STRICT JSON -- no markdown fences, no text outside the JSON object:
 {{"is_same_role": true|false, "reasoning": "1-2 sentence explanation."}}
 
-=== SAME ROLE STANDARD ===
-Two postings are the SAME role if ALL of the following are true:
+=== DEFAULT ASSUMPTION ===
+Assume the two postings are DIFFERENT openings. Return is_same_role: true ONLY when you find concrete, positive evidence that they are the same role. When in doubt, return false. Under-merging is always preferred over over-merging.
+
+=== WHAT COUNTS AS EVIDENCE TO MERGE (must have at least one) ===
+- Near-identical responsibilities AND scope AND team/division explicitly mentioned in both
+- Same job ID, requisition number, or explicit "reposting" language visible in either posting
+- Postings differ only in superficial wording, formatting, or listed perks — but describe the same work, same team, same employer
+
+=== STAFFING FIRM / RECRUITING AGENCY RULE ===
+When the company name contains any of the following words: Search, Recruiting, Staffing, Consulting, Executive Search, Talent, Placement, Partners, Recruitment, or similar agency-indicator terms — default STRONGLY to is_same_role: false.
+
+Rationale: staffing firms post multiple distinct client mandates simultaneously. The boilerplate ("great communication skills", "competitive salary", "Vancouver-based") is identical across all their postings because it comes from the agency's template — not because the roles are the same. The client, the scope, and the actual team differ from posting to posting even when the title and skills look identical.
+
+To return is_same_role: true for a staffing-firm pair, you need EXTRAORDINARY evidence such as:
+- An explicit mention of the same end-client by name in both postings
+- The same job ID or requisition number referenced in both postings
+- One posting explicitly says it is a repost of the other
+
+Overlapping required skills, similar titles, and similar generic responsibilities are NOT sufficient evidence for a staffing-firm pair — these are boilerplate.
+
+=== SAME ROLE STANDARD (for non-staffing employers) ===
+Two postings from the same direct employer are the SAME role only if ALL of the following are true:
 1. Same employer (same company, not different subsidiaries or staffing-firm clients).
 2. Same team or business unit (e.g. both in "Risk Analytics", not one in "Risk Analytics" and another in "Marketing Analytics").
 3. Same level/seniority (e.g. both Senior, not Senior vs. Staff).
@@ -46,7 +66,20 @@ Posting B:
 
 Output: {{"is_same_role": false, "reasoning": "Both postings use the same title at TD Bank, but they are on entirely different teams (Credit Risk Analytics vs Market Risk) with distinct mandates -- consumer credit PD/LGD vs trading-book VaR -- and different required expertise. These are separate roles that happen to share a title."}}
 
---- Example 3: AMBIGUOUS (staffing agency covering multiple clients) ---
+--- Example 3: STAFFING FIRM — DIFFERENT CLIENT MANDATES (must return false) ---
+Posting A:
+  Company: Alquemy Search & Consulting
+  Title: Data Scientist
+  JD: Our client in financial services is seeking a Data Scientist to build forecasting models for credit risk. Requirements: Python, machine learning, 3+ years DS experience. Competitive salary.
+
+Posting B:
+  Company: Alquemy Search & Consulting
+  Title: Data Scientist
+  JD: Alquemy is recruiting a Data Scientist for a leading insurance company in Vancouver. Responsibilities include predictive modelling, data analysis, and collaboration with actuarial teams. Requirements: Python, ML, SQL, 3+ years DS experience.
+
+Output: {{"is_same_role": false, "reasoning": "Both postings are from Alquemy Search & Consulting (a staffing agency), but they represent different client mandates — one in financial services credit risk and one in insurance/actuarial analytics. Overlapping boilerplate skills (Python, ML) from the agency template are not sufficient evidence to treat these as the same role; no end-client is named in common."}}
+
+--- Example 4: AMBIGUOUS (staffing agency covering multiple clients) ---
 Posting A:
   Company: Recruiting in Motion
   Title: Data Scientist (Multiple Opportunities)
@@ -74,4 +107,6 @@ Posting B:
 {b_full_jd}
 
 === YOUR DECISION ===
+Remember: default is DIFFERENT. Return is_same_role: true only with positive evidence. For staffing-firm postings, require extraordinary evidence (explicit same end-client or same job ID). When in doubt, return false.
+
 Return JSON only: {{"is_same_role": true|false, "reasoning": "..."}}

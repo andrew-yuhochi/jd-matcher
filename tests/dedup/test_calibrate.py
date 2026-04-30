@@ -274,6 +274,63 @@ class TestLoadRealPairs:
         pairs = _load_real_pairs(path)
         assert pairs == []
 
+    def test_case_insensitive_label_normalization(self, tmp_path: Path):
+        """Mixed-case labels are normalized: Merge→merge, MERGE→merge, New→new, NEW→new."""
+        rows = [
+            {
+                "pair_id": "r1", "canonical_a_id": "1", "canonical_b_id": "2",
+                "title_a": "DS", "title_b": "DS", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.90", "user_label": "Merge", "user_notes": "",
+            },
+            {
+                "pair_id": "r2", "canonical_a_id": "3", "canonical_b_id": "4",
+                "title_a": "DS", "title_b": "DS", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.90", "user_label": "MERGE", "user_notes": "",
+            },
+            {
+                "pair_id": "r3", "canonical_a_id": "5", "canonical_b_id": "6",
+                "title_a": "DS", "title_b": "DS", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.80", "user_label": "merge", "user_notes": "",
+            },
+            {
+                "pair_id": "r4", "canonical_a_id": "7", "canonical_b_id": "8",
+                "title_a": "MLE", "title_b": "DE", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.75", "user_label": "New", "user_notes": "",
+            },
+            {
+                "pair_id": "r5", "canonical_a_id": "9", "canonical_b_id": "10",
+                "title_a": "MLE", "title_b": "DE", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.75", "user_label": "new", "user_notes": "",
+            },
+            {
+                "pair_id": "r6", "canonical_a_id": "11", "canonical_b_id": "12",
+                "title_a": "MLE", "title_b": "DE", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.75", "user_label": "NEW", "user_notes": "",
+            },
+            {
+                "pair_id": "r7", "canonical_a_id": "13", "canonical_b_id": "14",
+                "title_a": "DS", "title_b": "DS", "company_a": "A", "company_b": "A",
+                "fuse_score": "0.80", "user_label": "", "user_notes": "",  # blank → skipped
+            },
+        ]
+        path = _write_temp_csv(rows, tmp_path)
+        pairs = _load_real_pairs(path)
+
+        assert len(pairs) == 6  # blank row skipped
+        merge_pairs = [p for p in pairs if p.ground_truth == "merge"]
+        new_pairs = [p for p in pairs if p.ground_truth == "new"]
+        skipped_pairs = [p for p in pairs if p.pair_id == "r7"]
+
+        assert len(merge_pairs) == 3, f"Expected 3 merge pairs, got {len(merge_pairs)}: {[p.pair_id for p in merge_pairs]}"
+        assert len(new_pairs) == 3, f"Expected 3 new pairs, got {len(new_pairs)}: {[p.pair_id for p in new_pairs]}"
+        assert len(skipped_pairs) == 0, "Blank-label row should be skipped"
+
+        # Verify pair IDs in each group
+        merge_ids = {p.pair_id for p in merge_pairs}
+        new_ids = {p.pair_id for p in new_pairs}
+        assert merge_ids == {"r1", "r2", "r3"}
+        assert new_ids == {"r4", "r5", "r6"}
+
 
 # ---------------------------------------------------------------------------
 # Precision / recall / F1
@@ -335,7 +392,13 @@ class TestFormatReport:
             _make_result("synth_002", "new", 0.65, "new", gatekeeper_called=False),
             _make_result("synth_003", "ambiguous", 0.80, "new", gatekeeper_called=True),
         ]
-        report = _format_report(results, total_cost_usd=0.0023, total_calls=2)
+        report = _format_report(
+            results,
+            total_cost_usd=0.0023,
+            total_calls=2,
+            final_threshold=0.75,
+            threshold_rationale="Test rationale.",
+        )
         assert "# TASK-M2-012 Calibration Report" in report
         assert "Threshold Sweep" in report
         assert "Per-Pair Verdict Table" in report
@@ -344,10 +407,17 @@ class TestFormatReport:
         assert "synth_001" in report
         assert "synth_002" in report
         assert "synth_003" in report
+        assert "Final Threshold Decision" in report
 
     def test_report_threshold_table_has_all_thresholds(self):
         results = [_make_result("p1", "merge", 0.92, "merge")]
-        report = _format_report(results, total_cost_usd=0.0, total_calls=0)
+        report = _format_report(
+            results,
+            total_cost_usd=0.0,
+            total_calls=0,
+            final_threshold=0.75,
+            threshold_rationale="Default.",
+        )
         for thresh in ["0.85", "0.88", "0.90", "0.92", "0.95"]:
             assert thresh in report
 
@@ -368,5 +438,27 @@ class TestFormatReport:
             gatekeeper_status="called_success",
             gatekeeper_action="merge",
         )
-        report = _format_report([r], total_cost_usd=0.0001, total_calls=1)
+        report = _format_report(
+            [r],
+            total_cost_usd=0.0001,
+            total_calls=1,
+            final_threshold=0.75,
+            threshold_rationale="Test.",
+        )
         assert "Both are the same Senior DS role at Shopify." in report
+
+    def test_report_dispatch_sweep_section_present(self):
+        results = [
+            _make_result("p1", "merge", 0.92, "merge"),
+            _make_result("p2", "new", 0.70, "new"),
+        ]
+        report = _format_report(
+            results,
+            total_cost_usd=0.0,
+            total_calls=0,
+            final_threshold=0.75,
+            threshold_rationale="Test.",
+        )
+        assert "Dispatch Threshold Sweep" in report
+        for dt in ["0.70", "0.75", "0.80", "0.85"]:
+            assert dt in report

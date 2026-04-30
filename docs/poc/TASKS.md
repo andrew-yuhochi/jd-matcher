@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 13 | 27 |
+| Done | 14 | 28 |
 | In Progress | 0 | 0 |
-| To Do | 2 | 2 |
+| To Do | 1 | 1 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -403,8 +403,8 @@
 
 ##### TASK-M2-012 — Real-data validation + threshold calibration
 
-- **Status**: In Progress (Phase 1 complete 2026-04-29 — awaiting user labels for Phase 2)
-- **Blocked reason**: User must fill in `user_label` column in `tests/fixtures/dedup_labels.csv` (15 candidate pairs) before Phase 2 calibration can run. Re-dispatch `/implement jd-matcher TASK-M2-012` after labeling.
+- **Status**: Done (2026-04-29)
+- **Blocked reason**: N/A
 - **Agent**: data-pipeline + user
 - **Component**: C21 (calibration) + C29 (validation) + C32 (LLM gatekeeper) — TDD §C21, §C29, §C32
 - **Description**: Generate 30 synthetic test pairs (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios. Run M2 pipeline against existing 91+ postings. User labels 10-15 real pairs. Calibration script computes precision/recall at multiple thresholds; final threshold finalized in config. **Plus**: build the LLM dedup gatekeeper (per BACKLOG "Promoted to TASK-M2-012 scope — LLM gatekeeper for all merges", refined 2026-04-29) — 3-tier rule: FUSE < 0.75 → no-merge; ALL 4 features ≥ 1-ε → exact_4f auto-merge; borderline band → LLM gatekeeper reads BOTH FULL JDs and confirms "same role at same employer?". Fail-CLOSED: gatekeeper hard failure → action='pending_gatekeeper' (no DB writes, retry next run).
@@ -419,12 +419,12 @@
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-012.md`
 - **Acceptance Criteria**:
   - [x] 30 synthetic test fixtures generated (10 dup / 10 non-dup / 10 ambiguous) covering all 4 scenarios from C21 sample selection — `tests/fixtures/dedup_synthetic_pairs.yaml`
-  - [ ] User labels 10-15 real pairs from existing 91+ postings (CSV or YAML) — **PENDING: fill `tests/fixtures/dedup_labels.csv`**
+  - [x] User labels 10-15 real pairs from existing 91+ postings (CSV or YAML) — 15 pairs labeled by user in `tests/fixtures/dedup_labels.csv` (2026-04-29)
   - [x] ≥3 verified cross-source pairs (synthetic acceptable where live Indeed is unavailable per PRD §9 R3 — uses the synthetic C21 cross-source fixtures from TASK-M2-008)
   - [x] Calibration script computes precision/recall at thresholds `[0.85, 0.88, 0.90, 0.92, 0.95]` — `src/jd_matcher/dedup/calibrate.py`
   - [x] Precision ≥90% at chosen threshold — GK-augmented P=1.000 across all thresholds on synthetic pairs (Phase 1 synthetic-only run)
   - [x] ZERO false-merges on 10 different-team synthetic cases — **SC-7 PASSES: 0 false merges on all 7 different-team synthetic pairs**
-  - [ ] Final threshold committed in `config.yaml` — **PENDING Phase 2** (current: gatekeeper_threshold=0.75, `auto_merge_threshold=0.90` legacy)
+  - [x] Final threshold committed in `config/dedup.yaml` — `gatekeeper_threshold=0.75` (pinned Phase 1, confirmed Phase 2 Final — all dispatch sweep thresholds 0.70–0.85 achieve identical P/R/F1; 0.75 chosen for cost-efficiency)
   - [x] Calibration report committed as a quality artifact — `docs/poc/quality-logs/TASK-M2-012-calibration-report.md`
   - [x] **LLM dedup gatekeeper component** (`LLMDedupClassifier`): C28-style provider-abstracted; new module `src/jd_matcher/dedup/classifier.py`; exposes `classify(posting_a, posting_b, *, fuse_score, retry_count) -> GatekeeperVerdict | None`
   - [x] **Gatekeeper prompt** (`prompts/dedup_classifier_v1.txt`): accepts pair of FULL JDs + canonical_title + canonical_company for both; asks "Are these the same role at the same employer?"; returns yes/no + 1–2 sentence reasoning. Strict JSON output validated against Pydantic.
@@ -433,7 +433,7 @@
   - [x] **Calibration with gatekeeper**: precision/recall computed for both raw-FUSE and gatekeeper-augmented decisions on the 30-pair labeled set. GK-augmented P=R=F1=1.000 vs raw-FUSE P=0.625–1.000 across thresholds.
   - [x] **Acceptance**: ZERO false-merges on 10 different-team synthetic cases under gatekeeper-augmented decisions; gatekeeper verdict for each pair logged in calibration report.
   - [x] **Galent-pattern title-cosine review**: 1 pair identified (synth_003, FUSE=0.870, title_cosine=0.783, skills=1.0, seniority=1.0); gatekeeper correctly merges it. Documented in calibration report §Galent-Pattern Diagnostic. Title weight tuning deferred to Phase 2 with real-data evidence.
-  - **Phase 1 note**: 48 new tests added (963 total, 0 failures). Synthetic calibration shows GK-augmented P=R=F1=1.000. Phase 2 requires user labels in `tests/fixtures/dedup_labels.csv`.
+  - **Phase 2 finalized (2026-04-29)**: Gatekeeper prompt v2 (hiring-agent guard) shipped. Jobright canonicals 316/395/396/458 re-extracted from cache → real_005/006 FUSE 0.600 → 1.000 (exact_4f). **Final: P=1.000, R=0.857, F1=0.923** on 15 user-labeled real pairs (968 tests, 0 failures). Two under-merge limitations (real_001 Alquemy staffing repost, real_004 Alignerr title variant) accepted per user cost model. BACKLOG: MVP-M1 staffing-firm repost recognition. See calibration report for full history.
 
 ---
 

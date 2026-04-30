@@ -9,9 +9,9 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 |-|-|
 | **Phase** | PoC |
 | **Milestone** | M2 — Content-aware dedup + repost detection (+ title pre-filter) |
-| **Last completed** | TASK-M2-015 — Collapsed-card layout reshuffle + skills always visible (Done 2026-04-29) |
-| **Next task** | TASK-M2-012 — Real-data validation + threshold calibration (incl. LLM gatekeeper) [data-pipeline + user] |
-| **Next command** | /implement jd-matcher TASK-M2-012 |
+| **Last completed** | TASK-M2-012 — LLM dedup gatekeeper + real-data calibration (Done 2026-04-29) |
+| **Next task** | TASK-M2-013 — M2 demo + user approval [manual] |
+| **Next command** | /milestone-complete jd-matcher |
 | **Scope note** | Indeed extraction deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28 / PRD §9 R3. PoC = LinkedIn-only. browser_fetcher.py infrastructure committed (`ce7def0`) and ready for MVP reactivation. |
 
 ---

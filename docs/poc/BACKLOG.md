@@ -155,6 +155,7 @@ Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
 - **Dismissal-reason categories** + UI dropdown on dismiss action.
 - **Weekly review surface** — aggregates dismissal reasons + proposes threshold/keyword tuning.
 - **Settings page expansion** — fit-threshold slider, ranking-weight controls, source toggles.
+- **Staffing-firm repost recognition (MVP-M1)** — when a recognized staffing firm (Search/Recruiting/Staffing/Consulting suffix in canonical_company) legitimately reposts the same role without an explicit job-ID, the v2 gatekeeper under-merges (PoC TASK-M2-012 calibration: real_001 Alquemy 319↔347 case). Mitigation options for MVP-M1: (a) extract source job-ID from JD text as a pre-gatekeeper exact-match step; (b) add timestamp + scope-hash signal as an alternative repost detector; (c) explicit user-confirmation flow for borderline staffing-firm pairs in the UI. Decision deferred to MVP-M1 master-detail UX work.
 - **`scheduler` for `auto_remove_stale_applied`** — cron-like trigger to remove applied entries unchanged for 3 months.
 - **Coverage expansion based on PoC gaps** — additional LinkedIn search keywords (`AI Engineer`, `Applied AI Research`, `Quant Research`); Greenhouse ATS curated employer list (if PoC coverage audit reveals gap).
 - **Per-user namespace utilization** — schema is namespace-aware from M1 (hedge 3) but `user_id='default'` is the only value through MVP.

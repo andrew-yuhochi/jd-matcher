@@ -356,3 +356,73 @@ class TestLedgerWrites:
 
         finally:
             db_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Prompt v2 structure — hiring-agent guard
+# ---------------------------------------------------------------------------
+
+
+class TestPromptV2Structure:
+    """Verify the prompt file contains the v2 framing required for hiring-agent guard.
+
+    These tests read the actual prompt file on disk so they catch accidental
+    reversion without re-running live LLM calls.
+    """
+
+    def _load_prompt_text(self) -> str:
+        from jd_matcher.dedup.classifier import _load_prompt
+        return _load_prompt()
+
+    def test_prompt_default_different_framing_present(self):
+        """Prompt must assert 'different' as the default assumption."""
+        text = self._load_prompt_text().lower()
+        assert "default" in text and "different" in text, (
+            "v2 prompt must state that postings are assumed DIFFERENT by default"
+        )
+
+    def test_prompt_staffing_firm_guard_keywords_present(self):
+        """Prompt must include staffing-firm indicator keywords."""
+        text = self._load_prompt_text().lower()
+        staffing_indicators = ["recruiting", "staffing", "search"]
+        assert any(kw in text for kw in staffing_indicators), (
+            "v2 prompt must include staffing-firm guard keywords (Recruiting/Staffing/Search)"
+        )
+
+    def test_hiring_agent_pair_via_real_prompt_template(self):
+        """Gatekeeper with v2 prompt returns a verdict for a hiring-agent pair.
+
+        Uses a mock LLM returning 'different' — verifies the prompt template
+        formats correctly with staffing-firm company names and the classifier
+        surfaces the verdict without error.
+        """
+        from jd_matcher.dedup.classifier import LLMDedupClassifier, _load_prompt
+        from jd_matcher.llm.providers.base import ExtractionMetadata
+
+        verdict_json = '{"is_same_role": false, "reasoning": "Staffing firm — different client mandates, no shared job ID."}'
+        meta = ExtractionMetadata(input_tokens=800, output_tokens=40, latency_ms=300, cost_usd=0.00012)
+        mock = MagicMock()
+        mock.extract.return_value = (verdict_json, meta)
+
+        prompt = _load_prompt()
+        classifier = LLMDedupClassifier(
+            llm_client=mock,
+            prompt_template=prompt,
+            db_path=None,
+        )
+        posting_agency_a = {
+            "id": 10,
+            "canonical_title": "Data Scientist",
+            "canonical_company": "Alquemy Search & Consulting",
+            "full_jd": "Our financial services client needs a Data Scientist. Python, ML, SQL.",
+        }
+        posting_agency_b = {
+            "id": 11,
+            "canonical_title": "Data Scientist",
+            "canonical_company": "Alquemy Search & Consulting",
+            "full_jd": "Insurance client in Vancouver seeking a Data Scientist. Python, ML, SQL.",
+        }
+        result = classifier.classify(posting_agency_a, posting_agency_b, fuse_score=0.90)
+        assert result is not None
+        assert result.is_same_role is False
+        assert "staffing" in result.reasoning.lower() or "client" in result.reasoning.lower()

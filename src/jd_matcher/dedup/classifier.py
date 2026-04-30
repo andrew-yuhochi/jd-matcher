@@ -153,6 +153,8 @@ class LLMDedupClassifier:
         self._prompt_template = prompt_template
         self._db_path = db_path
         self._model_name = model_name
+        # Updated after every classify() call — lets callers (e.g. calibrate.py) read cost.
+        self.last_call_cost_usd: float = 0.0
 
     def classify(
         self,
@@ -181,6 +183,7 @@ class LLMDedupClassifier:
         output_tokens = 0
         cost_usd = 0.0
         latency_ms = 0
+        self.last_call_cost_usd = 0.0
 
         # Indent the full_jd for readable prompt presentation
         a_jd = (posting_a.get("full_jd") or "").strip()
@@ -228,6 +231,7 @@ class LLMDedupClassifier:
             try:
                 verdict = GatekeeperVerdict.model_validate_json(raw_json)
                 last_status = "success"
+                self.last_call_cost_usd = cost_usd
                 _write_ledger(
                     db_path=self._db_path,
                     model_name=self._model_name,
