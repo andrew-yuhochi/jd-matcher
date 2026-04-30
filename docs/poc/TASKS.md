@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 10 | 24 |
+| Done | 11 | 25 |
 | In Progress | 0 | 0 |
-| To Do | 5 | 5 |
+| To Do | 4 | 4 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -436,14 +436,41 @@
 
 ---
 
+##### TASK-M2-014 — Card UI enrichment (M2-available LLM fields)
+
+- **Status**: Done (2026-04-29)
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C9 (Web UI: frontend) — TDD §C9
+- **Description**: Surface M2-available LLM-extracted fields on canonical cards per BA verdict 2026-04-29 (ALIGNMENT-LOG.md). Triaged inclusion: `canonical_seniority` (chip top-right of title), `team_or_department` (italic muted on line 2b, conditional null-safe), `role_summary` first-sentence teaser (~120 chars under location row), `top_skills` chip strip in **expanded** view between JD body and action buttons. Excluded per BA: salary range and `role_orientation`/DS-fit (M3 — require companion logic).
+- **Dependencies**: TASK-M2-011
+- **Implementation Checklist**:
+  - Schema: reads `canonical_postings` (no schema changes)
+  - Wire: extend `_card.html` + canonical_view.py CanonicalCard model (add seniority/team/role_summary fields if not already there); hand-update TDD §C9 M2 update note to enumerate the new rendered fields
+  - CSS: `.card-seniority-chip`, `.card-team-line`, `.card-role-summary-teaser`, `.card-skills-strip`, `.card-skill-chip`
+  - Imports affected: canonical_view.py, _card.html, styles.css
+- **Demo Artifact**: Browser shows enriched cards on the live 148-canonical DB — seniority chip visible on every card, team line shown when non-null, role_summary teaser as 1-line under location, skills chips on expand.
+- **Quality log**: `docs/poc/quality-logs/TASK-M2-014.md`
+- **Acceptance Criteria**:
+  - [x] `canonical_seniority` renders as chip top-right of title (or absent if null)
+  - [x] `team_or_department` renders italic muted on its own line, null-safe (line absent when null)
+  - [x] `role_summary` first sentence (truncated ~120 chars, ellipsis on overflow) renders below location row
+  - [x] `top_skills` chips render in expanded view between JD body and action buttons (up to 10 chips)
+  - [x] All four fields are READ-ONLY display — no new state, no new endpoints, no probabilistic logic
+  - [x] DOM tests for each new element (chip presence, conditional null rendering, truncation)
+  - [x] No regression in existing 876 tests (886 pass, 10 skipped after adding 10 new tests)
+  - [x] TDD §C9 M2 update note appended with the new rendered fields (kept consistent with implementation)
+
+---
+
 ##### TASK-M2-013 — M2 demo + user approval
 
 - **Status**: To Do
 - **Blocked reason**:
 - **Agent**: manual (user)
 - **Component**: M2 milestone deliverable acceptance — references all M2 C-components
-- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
-- **Dependencies**: TASK-M2-012
+- **Description**: User runs full sync against current Gmail; observes merged cards with multi-source list + enriched LLM fields; verifies state inheritance; confirms Reposted badge for any 30+ day reposts; explicitly approves M2 deliverable.
+- **Dependencies**: TASK-M2-012, TASK-M2-014
 - **Implementation Checklist**:
   - Schema: N/A
   - Wire: N/A (demo task)

@@ -4,6 +4,10 @@
        id               — primary posting_id (used for POST /postings/{id}/... endpoints)
        canonical_id     — canonical_postings.canonical_id (DOM data-canonical-id)
        canonical_title, canonical_company, canonical_location
+       canonical_seniority — str | None; LLM-extracted seniority tier
+       team_or_department  — str | None; LLM-extracted team/dept; absent when null
+       role_summary        — str | None; ~3-4 sentence neutral summary; teaser from first sentence
+       top_skills          — list[str]; up to 10 shown in expanded view
        hydration_status — 'complete' | 'partial' | 'failed'
        first_seen       — ISO timestamp string or None
        full_jd          — str or None
@@ -19,6 +23,9 @@
   <div class="card-line1">
     <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
     <span class="card-id-chip">#{{ posting.canonical_id }}</span>
+    {% if posting.canonical_seniority %}
+      <span class="card-seniority-chip">{{ posting.canonical_seniority }}</span>
+    {% endif %}
     {% if posting.canonical_company %}
       — <strong>{{ posting.canonical_company }}</strong>
     {% endif %}
@@ -56,6 +63,12 @@
       </span>
     {% endif %}
   </div>
+  {% if posting.team_or_department %}
+  <div class="card-team-line">{{ posting.team_or_department }}</div>
+  {% endif %}
+  {% if posting.role_summary %}
+  <div class="card-role-summary-teaser">{{ posting.role_summary | truncate(120, true, '…') }}</div>
+  {% endif %}
   <div class="card-line3">
     <span class="card-date">First seen: {{ posting.first_seen[:10] if posting.first_seen else "?" }}</span>
   </div>

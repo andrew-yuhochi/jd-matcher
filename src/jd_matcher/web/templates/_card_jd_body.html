@@ -1,7 +1,14 @@
 {# Shared partial: expanded JD body section.
    Included by _card.html, applied.html, and dismissed.html.
-   Variable: posting.full_jd (str | None) #}
+   Variable: posting.full_jd (str | None), posting.top_skills (list[str]) #}
 <div class="card-expanded-body">
+  {% if posting.top_skills %}
+    <div class="card-skills-strip">
+      {% for skill in posting.top_skills[:10] %}
+        <span class="card-skill-chip">{{ skill }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
   {% if posting.full_jd %}
     <p class="card-full-jd">{{ posting.full_jd }}</p>
   {% else %}

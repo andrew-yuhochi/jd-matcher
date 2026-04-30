@@ -278,6 +278,60 @@ kbd {
 .card-sources-row { display: inline; }
 .card-sources-row .card-apply-link + .card-apply-link { margin-left: 0.35rem; }
 
+/* ── M2-014: LLM enrichment fields ───────────────────────────── */
+
+/* Seniority chip — right of #id chip in title row; low-emphasis label */
+.card-seniority-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+/* Team / department line — italic, muted, between location row and date row */
+.card-team-line {
+  font-size: 0.82rem;
+  color: #888;
+  font-style: italic;
+  margin-bottom: 0.15rem;
+}
+
+/* Role summary teaser — single-line truncated teaser below location row */
+.card-role-summary-teaser {
+  font-size: 0.83rem;
+  color: #555;
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Skills chip strip in expanded view */
+.card-skills-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Individual skill chip */
+.card-skill-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
 /* Unapply button (Applied tab) — mirrors Restore styling */
 .btn-unapply {
   cursor: pointer;

@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -671,3 +672,284 @@ def test_badge_wording_is_variants_not_sources(client: TestClient, db: Path) -> 
 
     assert "variants" in fragment, "Badge must use 'variants' wording"
     assert "2 sources" not in fragment, "Badge must not use old '2 sources' wording"
+
+
+# ---------------------------------------------------------------------------
+# TASK-M2-014 — LLM enrichment fields in card UI
+# ---------------------------------------------------------------------------
+
+
+def _seed_canonical_enriched(
+    conn: sqlite3.Connection,
+    title: str,
+    *,
+    seniority: str = "Senior",
+    team: str | None = None,
+    role_summary: str = "This role involves building ML systems at scale.",
+    top_skills: list[str] | None = None,
+    full_jd: str = "",
+) -> tuple[int, int]:
+    """Seed a canonical with all LLM enrichment fields configurable. Returns (pid, cid)."""
+    skills_json = json.dumps(top_skills if top_skills is not None else [])
+    cur_p = conn.execute(
+        """
+        INSERT INTO postings
+            (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
+        VALUES ('default', ?, 'complete', ?, ?, ?)
+        """,
+        (title, TS, TS, full_jd),
+    )
+    pid = cur_p.lastrowid
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, team_or_department, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', ?, 'EnrichCo', ?, 'Remote', ?, ?, ?, ?, '{}', ?, ?, '[]')
+        """,
+        (title, seniority, team, skills_json, role_summary, full_jd, TS, TS),
+    )
+    cid = cur_c.lastrowid
+    conn.execute(
+        """
+        INSERT INTO posting_canonical_links
+            (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
+        VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)
+        """,
+        (pid, cid, TS),
+    )
+    return pid, cid
+
+
+def test_seniority_chip_renders_when_present(client: TestClient, db: Path) -> None:
+    """Card must render a .card-seniority-chip element when canonical_seniority is non-null."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Seniority Present", seniority="Senior")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-seniority-chip" in fragment, ".card-seniority-chip missing when seniority is set"
+    assert "Senior" in fragment, "Seniority value 'Senior' not rendered in chip"
+
+
+def test_seniority_chip_absent_when_null(client: TestClient, db: Path) -> None:
+    """Card must NOT render .card-seniority-chip when canonical_seniority is null.
+
+    canonical_seniority is NOT NULL in the schema, so we test via a seed that stores
+    empty string — but the schema requires a value, so we use 'Mid' default from
+    _seed_canonical and verify the chip is absent only when seniority=''.
+    We seed with a non-null but empty-string seniority to trigger the null-guard.
+    Actually, since canonical_seniority is NOT NULL in schema, we test the template's
+    {% if posting.canonical_seniority %} guard using an empty string, which is falsy.
+    """
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # Insert with empty-string seniority (falsy in Jinja) to test the null-guard
+    cur_p = conn.execute(
+        "INSERT INTO postings (user_id, canonical_title, hydration_status, first_seen, last_seen) "
+        "VALUES ('default', 'No Seniority', 'complete', ?, ?)",
+        (TS, TS),
+    )
+    pid = cur_p.lastrowid
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'No Seniority', 'TestCo', '',
+                'Remote', '[]', 'A role.', '', '{}', ?, ?, '[]')
+        """,
+        (TS, TS),
+    )
+    cid = cur_c.lastrowid
+    conn.execute(
+        "INSERT INTO posting_canonical_links "
+        "(user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)",
+        (pid, cid, TS),
+    )
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-seniority-chip" not in fragment, (
+        ".card-seniority-chip must be absent when canonical_seniority is empty/falsy"
+    )
+
+
+def test_team_or_department_line_renders_when_present(client: TestClient, db: Path) -> None:
+    """Card must render .card-team-line with team text when team_or_department is non-null."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(
+        conn, "Team Present", team="Machine Learning Platform"
+    )
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-team-line" in fragment, ".card-team-line missing when team_or_department is set"
+    assert "Machine Learning Platform" in fragment, "Team name not rendered in card-team-line"
+
+
+def test_team_or_department_line_absent_when_null(client: TestClient, db: Path) -> None:
+    """Card must NOT render .card-team-line when team_or_department is null."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "No Team", team=None)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-team-line" not in fragment, (
+        ".card-team-line must be absent when team_or_department is null"
+    )
+
+
+def test_role_summary_teaser_renders_truncated(client: TestClient, db: Path) -> None:
+    """Card must render .card-role-summary-teaser, truncated to ~120 chars, when role_summary set."""
+    long_summary = (
+        "This is a very long role summary that definitely exceeds one hundred and twenty characters "
+        "and should be truncated before being rendered in the card teaser line."
+    )
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Long Summary", role_summary=long_summary)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-role-summary-teaser" in fragment, ".card-role-summary-teaser missing"
+    # Truncation ellipsis should appear
+    assert "…" in fragment or "..." in fragment, "Truncation ellipsis missing from teaser"
+    # The rendered teaser must not contain the full long summary verbatim
+    assert long_summary not in fragment, "Full untruncated summary rendered — truncation not applied"
+
+
+def test_role_summary_teaser_absent_when_null(client: TestClient, db: Path) -> None:
+    """Card must NOT render .card-role-summary-teaser when role_summary is empty/null."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Empty Summary", role_summary="")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-role-summary-teaser" not in fragment, (
+        ".card-role-summary-teaser must be absent when role_summary is empty"
+    )
+
+
+def test_top_skills_chips_render_in_expanded_view(client: TestClient, db: Path) -> None:
+    """Expanded view must show .card-skill-chip elements for each skill in top_skills."""
+    skills = ["Python", "SQL", "Machine Learning"]
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Skills Present", top_skills=skills)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-skills-strip" in fragment, ".card-skills-strip missing when top_skills is set"
+    assert "card-skill-chip" in fragment, ".card-skill-chip elements missing from expanded body"
+    for skill in skills:
+        assert skill in fragment, f"Skill '{skill}' not rendered in card fragment"
+
+
+def test_top_skills_strip_absent_when_empty(client: TestClient, db: Path) -> None:
+    """Expanded view must NOT render .card-skills-strip when top_skills is empty list."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "No Skills", top_skills=[])
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-skills-strip" not in fragment, (
+        ".card-skills-strip must be absent when top_skills is empty"
+    )
+
+
+def test_top_skills_strip_caps_at_10_chips(client: TestClient, db: Path) -> None:
+    """When top_skills has 12 entries, only 10 chip elements must be rendered."""
+    skills_12 = [f"Skill{i}" for i in range(1, 13)]  # Skill1 … Skill12
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "12 Skills", top_skills=skills_12)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    chip_count = fragment.count("card-skill-chip")
+    assert chip_count == 10, (
+        f"Expected 10 skill chips (cap), got {chip_count} — skills strip is not capped at 10"
+    )
+    # Skills 11 and 12 must not appear
+    assert "Skill11" not in fragment, "Skill11 rendered — cap at 10 not enforced"
+    assert "Skill12" not in fragment, "Skill12 rendered — cap at 10 not enforced"
+
+
+def test_card_css_rules_for_new_elements_exist() -> None:
+    """styles.css must define all 5 CSS rules added by TASK-M2-014."""
+    css_path = (
+        Path(__file__).parents[2]
+        / "src" / "jd_matcher" / "web" / "static" / "css" / "styles.css"
+    )
+    css = css_path.read_text()
+    for rule in [
+        ".card-seniority-chip",
+        ".card-team-line",
+        ".card-role-summary-teaser",
+        ".card-skills-strip",
+        ".card-skill-chip",
+    ]:
+        assert rule in css, f"CSS rule '{rule}' missing from styles.css"

@@ -257,7 +257,11 @@ def _main_view_canonical_list(
                 "canonical_id": c.canonical_id,    # for data-canonical-id attr
                 "canonical_title": c.canonical_title,
                 "canonical_company": c.canonical_company,
+                "canonical_seniority": c.canonical_seniority,
                 "canonical_location": c.canonical_location,
+                "team_or_department": c.team_or_department,
+                "role_summary": c.role_summary,
+                "top_skills": c.top_skills or [],
                 "hydration_status": c.hydration_status,
                 "first_seen": c.first_seen,
                 "last_seen": c.last_seen,
