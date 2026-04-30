@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 11 | 25 |
+| Done | 12 | 26 |
 | In Progress | 0 | 0 |
-| To Do | 4 | 4 |
+| To Do | 3 | 3 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -465,7 +465,7 @@
 
 ##### TASK-M2-015 — Collapsed-card layout reshuffle + skills moved to collapsed view
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C9 (Web UI: frontend) — TDD §C9
@@ -480,15 +480,15 @@
 - **Demo Artifact**: Browser shows the reshuffled card layout on the live 148-canonical DB matching the user's spec exactly. Skills visible without expanding. No regression in apply/dismiss/keyboard flows.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-015.md`
 - **Acceptance Criteria**:
-  - [ ] Line 1 renders `Title — Company Name` (left) + `#canonical_id` chip + variants/Reposted badges grouped at rightmost
-  - [ ] Line 2 renders dot-separated `Seniority · Team/department · Location` (each field conditionally rendered if non-null; separator handled cleanly when fields are absent)
-  - [ ] Line 3 renders `top_skills` chip strip in collapsed view (capped at 10, absent when empty)
-  - [ ] Line 4 renders `role_summary` truncated teaser (absent when null)
-  - [ ] Line 5 renders sources URL row left + first-seen date rightmost
-  - [ ] Expanded view (`_card_jd_body.html`) NO LONGER renders the skills strip (moved to collapsed)
-  - [ ] DOM tests for new layout (line ordering, metadata-row null-handling, skills-in-collapsed presence, expanded-view skills absence)
-  - [ ] No regression in existing 886 tests
-  - [ ] TDD §C9 M2 update note appended/amended for the new layout
+  - [x] Line 1 renders `Title — Company Name` (left) + `#canonical_id` chip + variants/Reposted badges grouped at rightmost
+  - [x] Line 2 renders dot-separated `Location · Team/department` (each field conditionally rendered if non-null; separator handled cleanly when fields are absent)
+  - [x] Line 3 renders `top_skills` chip strip in collapsed view (capped at 10, absent when empty)
+  - [x] Line 4 renders `role_summary` truncated teaser (absent when null)
+  - [x] Line 5 renders sources URL row left + first-seen date rightmost
+  - [x] Expanded view (`_card_jd_body.html`) NO LONGER renders the skills strip (moved to collapsed)
+  - [x] DOM tests for new layout (line ordering, metadata-row null-handling, skills-in-collapsed presence, expanded-view skills absence)
+  - [x] No regression in existing 886 tests (893 pass after adding 7 new tests)
+  - [x] TDD §C9 M2 update note appended/amended for the new layout
 
 ---
 

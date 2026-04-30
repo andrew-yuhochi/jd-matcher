@@ -7,7 +7,7 @@
        canonical_seniority — str | None; LLM-extracted seniority tier
        team_or_department  — str | None; LLM-extracted team/dept; absent when null
        role_summary        — str | None; ~3-4 sentence neutral summary; teaser from first sentence
-       top_skills          — list[str]; up to 10 shown in expanded view
+       top_skills          — list[str]; up to 10 shown in collapsed view
        hydration_status — 'complete' | 'partial' | 'failed'
        first_seen       — ISO timestamp string or None
        full_jd          — str or None
@@ -20,39 +20,64 @@
          data-posting-id="{{ posting.id or '' }}"
          data-canonical-id="{{ posting.canonical_id }}"
          data-url="{{ posting.sources[0].source_url if posting.sources else '' }}">
+  {# Line 1: Title — Company (left) | variants / Reposted / #id cluster (right) #}
   <div class="card-line1">
-    <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
-    <span class="card-id-chip">#{{ posting.canonical_id }}</span>
-    {% if posting.canonical_seniority %}
-      <span class="card-seniority-chip">{{ posting.canonical_seniority }}</span>
-    {% endif %}
-    {% if posting.canonical_company %}
-      — <strong>{{ posting.canonical_company }}</strong>
-    {% endif %}
-    {% if posting.sources | length > 1 %}
-      <span class="badge-source-count" title="{{ posting.sources | length }} variant(s)">{{ posting.sources | length }} variants</span>
-    {% endif %}
-    {% if posting.is_reposted %}
-      {%- set days_ago = "" -%}
-      {%- if posting.first_seen -%}
-        {%- set fs = posting.first_seen[:10] -%}
-        <span class="badge-reposted"
-              title="This role was first seen on {{ fs }} and reposted under a new job ID">Reposted</span>
-      {%- else -%}
-        <span class="badge-reposted" title="This role was reposted under a new job ID">Reposted</span>
-      {%- endif -%}
-    {% endif %}
-    {% if posting.hydration_status in ('partial', 'failed') %}
-      <span class="warning" title="JD hydration incomplete — open at source for full description.">&#x26A0; JD incomplete</span>
-    {% endif %}
+    <span class="card-title-company">
+      <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
+      {% if posting.canonical_company %}
+        <span class="card-company"> &mdash; <strong>{{ posting.canonical_company }}</strong></span>
+      {% endif %}
+    </span>
+    <span class="card-line1-right">
+      {% if posting.sources | length > 1 %}
+        <span class="badge-source-count" title="{{ posting.sources | length }} variant(s)">{{ posting.sources | length }} variants</span>
+      {% endif %}
+      {% if posting.is_reposted %}
+        {%- if posting.first_seen -%}
+          {%- set fs = posting.first_seen[:10] -%}
+          <span class="badge-reposted"
+                title="This role was first seen on {{ fs }} and reposted under a new job ID">Reposted</span>
+        {%- else -%}
+          <span class="badge-reposted" title="This role was reposted under a new job ID">Reposted</span>
+        {%- endif -%}
+      {% endif %}
+      {% if posting.canonical_seniority %}
+        <span class="card-seniority-chip">{{ posting.canonical_seniority }}</span>
+      {% endif %}
+      <span class="card-id-chip">#{{ posting.canonical_id }}</span>
+      {% if posting.hydration_status in ('partial', 'failed') %}
+        <span class="warning" title="JD hydration incomplete — open at source for full description.">&#x26A0; JD incomplete</span>
+      {% endif %}
+    </span>
   </div>
-  <div class="card-line2">
-    {% if posting.canonical_location %}
-      <span class="card-location">{{ posting.canonical_location }}</span>
-    {% endif %}
-    {% if posting.sources %}
-      {% if posting.canonical_location %} · {% endif %}
-      <span class="card-sources-row">Sources:
+  {# Line 2: Seniority · Team/department · Location (dot-separated, null-safe) #}
+  {%- set _meta_parts = [] -%}
+  {%- if posting.canonical_location -%}
+    {%- set _ = _meta_parts.append(posting.canonical_location) -%}
+  {%- endif -%}
+  {%- if posting.team_or_department -%}
+    {%- set _ = _meta_parts.append(posting.team_or_department) -%}
+  {%- endif -%}
+  {% if _meta_parts %}
+  <div class="card-line2-meta">{{ _meta_parts | join(' · ') }}</div>
+  {% endif %}
+  {# Line 3: top_skills chip strip (collapsed view; absent when empty) #}
+  {% if posting.top_skills %}
+  <div class="card-skills-strip">
+    {% for skill in posting.top_skills[:10] %}
+      <span class="card-skill-chip">{{ skill }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {# Line 4: role_summary first-sentence teaser (truncated ~120 chars) #}
+  {% if posting.role_summary %}
+  <div class="card-role-summary-teaser">{{ posting.role_summary | truncate(120, true, '…') }}</div>
+  {% endif %}
+  {# Line 5: Sources apply links (left) | First seen date (right) #}
+  <div class="card-line5-footer">
+    <span class="card-sources-row">
+      {% if posting.sources %}
+        Sources:
         {% for src in posting.sources %}
           <a class="card-apply-link card-apply-link-{{ loop.index0 }}"
              href="{{ src.source_url }}"
@@ -60,16 +85,8 @@
              rel="noopener noreferrer"
              data-source="{{ src.source }}">Apply on {{ src.display_name }}</a>{% if not loop.last %} {% endif %}
         {% endfor %}
-      </span>
-    {% endif %}
-  </div>
-  {% if posting.team_or_department %}
-  <div class="card-team-line">{{ posting.team_or_department }}</div>
-  {% endif %}
-  {% if posting.role_summary %}
-  <div class="card-role-summary-teaser">{{ posting.role_summary | truncate(120, true, '…') }}</div>
-  {% endif %}
-  <div class="card-line3">
+      {% endif %}
+    </span>
     <span class="card-date">First seen: {{ posting.first_seen[:10] if posting.first_seen else "?" }}</span>
   </div>
   <!-- Action buttons: hidden by default; keyboard-driven; present for accessibility -->

@@ -791,8 +791,8 @@ def test_seniority_chip_absent_when_null(client: TestClient, db: Path) -> None:
     )
 
 
-def test_team_or_department_line_renders_when_present(client: TestClient, db: Path) -> None:
-    """Card must render .card-team-line with team text when team_or_department is non-null."""
+def test_team_or_department_renders_in_metadata_row(client: TestClient, db: Path) -> None:
+    """Card must render team_or_department text in the .card-line2-meta dot-separated row."""
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
     _pid, cid = _seed_canonical_enriched(
@@ -807,12 +807,13 @@ def test_team_or_department_line_renders_when_present(client: TestClient, db: Pa
     card_end = html.find("</article>", card_start)
     fragment = html[card_start:card_end]
 
-    assert "card-team-line" in fragment, ".card-team-line missing when team_or_department is set"
-    assert "Machine Learning Platform" in fragment, "Team name not rendered in card-team-line"
+    # Team is now in the dot-separated metadata row (card-line2-meta), not a separate .card-team-line
+    assert "card-line2-meta" in fragment, ".card-line2-meta missing when team_or_department is set"
+    assert "Machine Learning Platform" in fragment, "Team name not rendered in metadata row"
 
 
-def test_team_or_department_line_absent_when_null(client: TestClient, db: Path) -> None:
-    """Card must NOT render .card-team-line when team_or_department is null."""
+def test_team_or_department_absent_when_null(client: TestClient, db: Path) -> None:
+    """When team_or_department is null and location is present, metadata row shows only location."""
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
     _pid, cid = _seed_canonical_enriched(conn, "No Team", team=None)
@@ -825,9 +826,14 @@ def test_team_or_department_line_absent_when_null(client: TestClient, db: Path) 
     card_end = html.find("</article>", card_start)
     fragment = html[card_start:card_end]
 
-    assert "card-team-line" not in fragment, (
-        ".card-team-line must be absent when team_or_department is null"
-    )
+    # Metadata row exists (location='Remote' still present) but no team dot-separator
+    if "card-line2-meta" in fragment:
+        meta_start = fragment.find("card-line2-meta")
+        meta_end = fragment.find("</div>", meta_start)
+        meta_fragment = fragment[meta_start:meta_end]
+        assert " · " not in meta_fragment, (
+            "Dot separator must not appear in metadata row when team is null"
+        )
 
 
 def test_role_summary_teaser_renders_truncated(client: TestClient, db: Path) -> None:
@@ -874,8 +880,8 @@ def test_role_summary_teaser_absent_when_null(client: TestClient, db: Path) -> N
     )
 
 
-def test_top_skills_chips_render_in_expanded_view(client: TestClient, db: Path) -> None:
-    """Expanded view must show .card-skill-chip elements for each skill in top_skills."""
+def test_top_skills_strip_renders_in_collapsed_view(client: TestClient, db: Path) -> None:
+    """Collapsed view (main page GET /) must show .card-skill-chip elements for each skill."""
     skills = ["Python", "SQL", "Machine Learning"]
     conn = sqlite3.connect(str(db))
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -890,9 +896,34 @@ def test_top_skills_chips_render_in_expanded_view(client: TestClient, db: Path) 
     fragment = html[card_start:card_end]
 
     assert "card-skills-strip" in fragment, ".card-skills-strip missing when top_skills is set"
-    assert "card-skill-chip" in fragment, ".card-skill-chip elements missing from expanded body"
+    assert "card-skill-chip" in fragment, ".card-skill-chip elements missing from collapsed view"
     for skill in skills:
         assert skill in fragment, f"Skill '{skill}' not rendered in card fragment"
+
+
+def test_top_skills_strip_absent_from_expanded_body(client: TestClient, db: Path) -> None:
+    """The _card_jd_body.html expanded body must NOT render the skills strip (moved to collapsed)."""
+    skills = ["Python", "SQL", "Machine Learning"]
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Skills Expanded Absent", top_skills=skills)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    # Locate the expanded body div within the card fragment
+    expanded_start = fragment.find('class="card-expanded-body"')
+    assert expanded_start != -1, ".card-expanded-body not found in card"
+    expanded_fragment = fragment[expanded_start:]
+
+    assert "card-skills-strip" not in expanded_fragment, (
+        ".card-skills-strip must NOT appear inside .card-expanded-body — skills moved to collapsed view"
+    )
 
 
 def test_top_skills_strip_absent_when_empty(client: TestClient, db: Path) -> None:
@@ -939,7 +970,7 @@ def test_top_skills_strip_caps_at_10_chips(client: TestClient, db: Path) -> None
 
 
 def test_card_css_rules_for_new_elements_exist() -> None:
-    """styles.css must define all 5 CSS rules added by TASK-M2-014."""
+    """styles.css must define all CSS rules added by TASK-M2-014."""
     css_path = (
         Path(__file__).parents[2]
         / "src" / "jd_matcher" / "web" / "static" / "css" / "styles.css"
@@ -951,5 +982,188 @@ def test_card_css_rules_for_new_elements_exist() -> None:
         ".card-role-summary-teaser",
         ".card-skills-strip",
         ".card-skill-chip",
+    ]:
+        assert rule in css, f"CSS rule '{rule}' missing from styles.css"
+
+
+# ---------------------------------------------------------------------------
+# TASK-M2-015 — Collapsed-card layout reshuffle
+# ---------------------------------------------------------------------------
+
+
+def test_card_line_order(client: TestClient, db: Path) -> None:
+    """Card DOM must have: line1 (title+company+id) before line2-meta before
+    skills strip before summary teaser before line5 footer — in that order."""
+    skills = ["Python", "SQL"]
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(
+        conn,
+        "Layout Order Test",
+        seniority="Senior",
+        team="ML Platform",
+        role_summary="A test role at a great company.",
+        top_skills=skills,
+    )
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    pos_line1 = fragment.find("card-line1")
+    pos_line2 = fragment.find("card-line2-meta")
+    pos_skills = fragment.find("card-skills-strip")
+    pos_summary = fragment.find("card-role-summary-teaser")
+    pos_footer = fragment.find("card-line5-footer")
+
+    assert pos_line1 != -1, "card-line1 not found"
+    assert pos_line2 != -1, "card-line2-meta not found"
+    assert pos_skills != -1, "card-skills-strip not found"
+    assert pos_summary != -1, "card-role-summary-teaser not found"
+    assert pos_footer != -1, "card-line5-footer not found"
+
+    assert pos_line1 < pos_line2, "card-line1 must precede card-line2-meta"
+    assert pos_line2 < pos_skills, "card-line2-meta must precede card-skills-strip"
+    assert pos_skills < pos_summary, "card-skills-strip must precede card-role-summary-teaser"
+    assert pos_summary < pos_footer, "card-role-summary-teaser must precede card-line5-footer"
+
+
+def test_metadata_row_all_three_fields_present(client: TestClient, db: Path) -> None:
+    """Line 2 must render 'Location · Team' when both location and team are present."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(
+        conn, "Meta All Fields", team="Data Platform"
+    )
+    # _seed_canonical_enriched seeds location='Remote' and seniority='Senior' by default
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    meta_start = fragment.find("card-line2-meta")
+    assert meta_start != -1, "card-line2-meta missing"
+    meta_end = fragment.find("</div>", meta_start)
+    meta_fragment = fragment[meta_start:meta_end]
+
+    assert "Remote" in meta_fragment, "Location 'Remote' missing from metadata row"
+    assert "Data Platform" in meta_fragment, "Team 'Data Platform' missing from metadata row"
+    assert " · " in meta_fragment, "Dot separator missing from metadata row"
+    # Ensure no stray double-dot or leading/trailing dot
+    assert " ·  · " not in meta_fragment, "Stray double-dot in metadata row"
+
+
+def test_metadata_row_missing_team(client: TestClient, db: Path) -> None:
+    """Line 2 renders only location when team is null — no stray dot."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Meta No Team", team=None)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    meta_start = fragment.find("card-line2-meta")
+    assert meta_start != -1, "card-line2-meta missing when location present"
+    meta_end = fragment.find("</div>", meta_start)
+    meta_fragment = fragment[meta_start:meta_end]
+
+    assert "Remote" in meta_fragment, "Location missing from metadata row"
+    assert " · " not in meta_fragment, (
+        "Stray dot separator in metadata row when team is absent"
+    )
+
+
+def test_metadata_row_all_null(client: TestClient, db: Path) -> None:
+    """Line 2 must be absent entirely when both location and team are null/empty."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # Insert a canonical with empty location and null team
+    cur_p = conn.execute(
+        "INSERT INTO postings (user_id, canonical_title, hydration_status, first_seen, last_seen) "
+        "VALUES ('default', 'No Meta', 'complete', ?, ?)",
+        (TS, TS),
+    )
+    pid = cur_p.lastrowid
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, team_or_department, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'No Meta', 'TestCo', 'Mid',
+                '', NULL, '[]', '', '', '{}', ?, ?, '[]')
+        """,
+        (TS, TS),
+    )
+    cid = cur_c.lastrowid
+    conn.execute(
+        "INSERT INTO posting_canonical_links "
+        "(user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)",
+        (pid, cid, TS),
+    )
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "card-line2-meta" not in fragment, (
+        "card-line2-meta must be absent when both location and team are null/empty"
+    )
+
+
+def test_card_footer_sources_left_date_right(client: TestClient, db: Path) -> None:
+    """Sources apply links and First-seen date must be in card-line5-footer (line 5)."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid, cid = _seed_canonical(conn, "Footer Test")
+    _add_source(conn, pid, "linkedin", "https://linkedin.com/jobs/view/99999")
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    footer_start = fragment.find("card-line5-footer")
+    assert footer_start != -1, "card-line5-footer missing from card"
+    footer_end = fragment.find("</div>", footer_start)
+    footer_fragment = fragment[footer_start:footer_end]
+
+    assert "Sources:" in footer_fragment, "Sources: label must be in footer (line 5)"
+    assert "Apply on LinkedIn" in footer_fragment, "Apply link must be in footer (line 5)"
+    assert "First seen:" in footer_fragment, "First seen date must be in footer (line 5)"
+
+
+def test_m2015_css_rules_exist() -> None:
+    """styles.css must define .card-line2-meta, .card-line5-footer, .card-line1-right."""
+    css_path = (
+        Path(__file__).parents[2]
+        / "src" / "jd_matcher" / "web" / "static" / "css" / "styles.css"
+    )
+    css = css_path.read_text()
+    for rule in [
+        ".card-line2-meta",
+        ".card-line5-footer",
+        ".card-line1-right",
     ]:
         assert rule in css, f"CSS rule '{rule}' missing from styles.css"
