@@ -1,17 +1,32 @@
 # Dedup configuration for jd-matcher (C21 — Two-Stage Dedup Engine)
 #
-# auto_merge_threshold: postings with fused similarity >= this value are
-#   automatically merged to the matching canonical. Default: 0.90.
-#   Tuned against the 30-pair labelled set at M2-end calibration task (M2-012).
+# auto_merge_threshold: LEGACY — kept for migration safety and backward
+#   compatibility with already-stored posting_canonical_links rows. Under the
+#   new 3-tier decide() logic (TASK-M2-012), this value is no longer used to
+#   gate merge decisions. The gatekeeper_threshold (0.75) is the live dispatch
+#   boundary; the 4-feature exact-match short-circuit handles clear dups.
+#   Do NOT remove this field — it may still be read by older code paths or
+#   during a DB rebuild from archived data.
+#
+# gatekeeper_threshold: FUSE scores in [gatekeeper_threshold, 1.0) enter the
+#   LLM gatekeeper (C32). Scores below this value → action='new' (no call).
+#   The 4-feature exact-match short-circuit fires before the gatekeeper for
+#   pairs where all 4 component scores individually >= 1.0 - 1e-6.
+#
+# gatekeeper_retry_count: number of retry attempts on gatekeeper failure
+#   (total attempts = 1 + gatekeeper_retry_count = 2). A hard fail after all
+#   attempts -> action='pending_gatekeeper' (fail-CLOSED).
 #
 # Fuse weights must sum to 1.0. The four weights map to:
-#   fuse_weight_embedding   — embedding cosine of role_summary vectors (0.4)
-#   fuse_weight_skills      — Jaccard similarity of top_skills sets (0.3)
-#   fuse_weight_title       — cosine of canonical_title embeddings (0.2)
-#   fuse_weight_seniority   — exact match of canonical_seniority values (0.1)
+#   fuse_weight_embedding   -- embedding cosine of role_summary vectors (0.4)
+#   fuse_weight_skills      -- Jaccard similarity of top_skills sets (0.3)
+#   fuse_weight_title       -- cosine of canonical_title embeddings (0.2)
+#   fuse_weight_seniority   -- exact match of canonical_seniority values (0.1)
 
 dedup:
-  auto_merge_threshold: 0.90
+  auto_merge_threshold: 0.90  # LEGACY -- unused under 3-tier logic; kept for migration safety
+  gatekeeper_threshold: 0.75
+  gatekeeper_retry_count: 1
   fuse_weight_embedding: 0.4
   fuse_weight_skills: 0.3
   fuse_weight_title: 0.2

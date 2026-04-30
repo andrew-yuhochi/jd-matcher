@@ -1,6 +1,8 @@
-"""CLI entry point: python -m jd_matcher.dedup decide --posting-id N
+"""CLI entry point: python -m jd_matcher.dedup <command>
 
-Demo artifact for TASK-M2-008.
+Commands:
+    decide     -- Run dedup decision for a single posting (demo artifact for TASK-M2-008)
+    calibrate  -- Calibrate C32 LLM gatekeeper against synthetic/real pairs (TASK-M2-012)
 """
 
 from __future__ import annotations
@@ -26,6 +28,15 @@ def _cmd_decide(args: argparse.Namespace) -> None:
     print(decision.model_dump_json(indent=2))
 
 
+def _cmd_calibrate(args: argparse.Namespace) -> None:
+    from jd_matcher.dedup.calibrate import run_calibration
+
+    run_calibration(
+        synthetic_only=args.synthetic_only,
+        output_path=args.output,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -35,7 +46,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="python -m jd_matcher.dedup",
-        description="C21 Two-Stage Dedup Engine CLI",
+        description="C21 Two-Stage Dedup Engine + C32 Gatekeeper CLI",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -53,9 +64,27 @@ def main(argv: list[str] | None = None) -> None:
         help="Path to SQLite DB (default: ~/.jd-matcher/jd-matcher.db)",
     )
 
+    calibrate_parser = sub.add_parser(
+        "calibrate",
+        help="Calibrate C32 gatekeeper against synthetic and real labeled pairs",
+    )
+    calibrate_parser.add_argument(
+        "--synthetic-only",
+        action="store_true",
+        help="Only use synthetic pairs (skip tests/fixtures/dedup_labels.csv)",
+    )
+    calibrate_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output report path (default: docs/poc/quality-logs/TASK-M2-012-calibration-report.md)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "decide":
         _cmd_decide(args)
+    elif args.command == "calibrate":
+        _cmd_calibrate(args)
 
 
 if __name__ == "__main__":

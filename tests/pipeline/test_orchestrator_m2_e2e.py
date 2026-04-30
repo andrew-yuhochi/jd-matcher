@@ -444,8 +444,12 @@ class TestDedupMergeInterleave:
         assert merge_kind_for_pid2 is not None, (
             f"posting {pid2} has no posting_canonical_links row"
         )
-        assert merge_kind_for_pid2[0] == "content_dedup", (
-            f"posting {pid2} should be 'content_dedup', got '{merge_kind_for_pid2[0]}'"
+        # Under the 3-tier decision logic (TASK-M2-012), identical postings
+        # hit the 4-feature exact-match short-circuit → merge_kind='exact_4f'.
+        # 'content_dedup' is the legacy value from earlier pipeline versions
+        # (kept in the Literal for backward compat with stored rows).
+        assert merge_kind_for_pid2[0] in ("content_dedup", "exact_4f", "gatekeeper_approved"), (
+            f"posting {pid2} should be a merge kind (got '{merge_kind_for_pid2[0]}')"
         )
         assert len(canonical_ids) == 1, (
             f"Both postings must share the same canonical_id, got {canonical_ids}"

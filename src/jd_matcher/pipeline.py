@@ -452,6 +452,17 @@ def run_pipeline(
                 dedup_total += 1
                 if decision.action == "merge":
                     dedup_merge += 1
+                elif decision.action == "pending_gatekeeper":
+                    # Fail-CLOSED: gatekeeper hard-failed — defer, no DB writes.
+                    logger.warning(
+                        json.dumps({
+                            "event": "dedup_pending_gatekeeper",
+                            "run_id": run_id,
+                            "posting_id": pid,
+                            "fuse_score": decision.stage2_top_match_score,
+                        })
+                    )
+                    continue
                 else:
                     dedup_new += 1
                 if "extraction_failed_full_jd_fallback" in decision.blocked_by:

@@ -1,0 +1,1506 @@
+# 30 synthetic dedup test pairs for TASK-M2-012 calibration.
+# Covers the Vancouver DS/ML job market. Pairs are realistic — not trivially obvious.
+#
+# Scenarios:
+#   exact_dup        — same role, different wording/formatting (should merge)
+#   repost           — same role re-posted after several weeks (should merge)
+#   near_dup         — nearly identical with minor variation (should merge)
+#   different_team   — same company, different business units (should NOT merge)
+#   different_senior — same company, different seniority with different scope (should NOT merge)
+#   different_company — same title, different employers (should NOT merge)
+#   hiring_agent     — staffing/recruiting firm multi-role posting (should NOT merge)
+#   ambiguous        — borderline cases for human review
+#
+# Ground truth: 'merge' | 'new'
+# ambiguous ground_truth = 'new' (conservative default; gatekeeper verdict + reasoning flagged for review)
+#
+# --- SHOULD MERGE (10 pairs) ---
+
+- pair_id: synth_001
+  scenario: exact_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Shopify
+    canonical_seniority: Senior
+    top_skills: [Python, SQL, machine learning, experimentation, A/B testing, causal inference]
+    full_jd: |
+      Shopify is hiring a Senior Data Scientist for our Merchant Analytics team in Vancouver (Hybrid).
+
+      About the role:
+      You will build predictive models to understand merchant health and surface actionable insights
+      to product and business teams. Core responsibilities include designing A/B experiments, building
+      causal inference frameworks, and owning end-to-end ML pipelines.
+
+      Requirements:
+      - 5+ years of hands-on data science experience
+      - Expert-level Python and SQL
+      - Strong statistical fundamentals (Bayesian methods, hypothesis testing)
+      - Experience with causal inference or experimentation platforms
+      - Excellent communication with non-technical stakeholders
+
+      Compensation: $130,000 – $160,000 CAD + equity
+      Location: Vancouver, BC (Hybrid 3 days/week)
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Shopify
+    canonical_seniority: Senior
+    top_skills: [Python, SQL, A/B testing, causal inference, machine learning, experimentation]
+    full_jd: |
+      Senior Data Scientist — Merchant Analytics | Shopify | Vancouver (Hybrid)
+
+      Shopify's Merchant Analytics team is looking for a Senior Data Scientist to join us in Vancouver.
+
+      What you'll do:
+      - Own predictive modelling for merchant health metrics
+      - Design and analyze A/B experiments and build causal inference frameworks
+      - Develop end-to-end ML pipelines from feature engineering to deployment
+      - Partner with product managers and engineering on data-driven decisions
+
+      What we need:
+      - 5+ years data science experience
+      - Strong Python and SQL skills
+      - Deep understanding of statistical methods and causal inference
+      - Comfort communicating results to business stakeholders
+
+      Salary: $130K–$160K CAD plus equity. Hybrid in Vancouver.
+
+- pair_id: synth_002
+  scenario: repost
+  ground_truth: merge
+  posting_a:
+    canonical_title: Machine Learning Engineer
+    canonical_company: TELUS Digital
+    canonical_seniority: Senior
+    top_skills: [Python, PyTorch, MLOps, Kubernetes, feature engineering, model deployment]
+    full_jd: |
+      TELUS Digital is seeking a Senior Machine Learning Engineer to join our AI Platform team in Vancouver.
+
+      You will design and deploy ML models powering TELUS's customer-facing virtual assistant and
+      internal automation tools. This role owns the full ML lifecycle: data preparation, model training,
+      evaluation, and production deployment on Kubernetes.
+
+      Qualifications:
+      - 4+ years ML engineering experience
+      - Proficiency in Python and PyTorch (TensorFlow experience a plus)
+      - Experience with Kubernetes-based ML serving infrastructure
+      - MLOps: CI/CD for models, monitoring, drift detection
+      - BSc/MSc in Computer Science, Engineering, or related field
+
+      Location: Vancouver, BC. Hybrid.
+      Salary: $120,000 – $150,000 CAD.
+  posting_b:
+    canonical_title: Machine Learning Engineer
+    canonical_company: TELUS Digital
+    canonical_seniority: Senior
+    top_skills: [Python, PyTorch, model deployment, Kubernetes, MLOps, feature engineering]
+    full_jd: |
+      [Re-listed] Senior Machine Learning Engineer — TELUS Digital AI Platform | Vancouver
+
+      We are still looking for a Senior Machine Learning Engineer for our AI Platform team in Vancouver.
+
+      Role overview:
+      Design, build, and operationalize ML models for our virtual assistant and automation products.
+      You will own the end-to-end ML workflow — from data pipelines to Kubernetes-based deployment —
+      and work closely with software engineers and product managers.
+
+      Must-have:
+      - 4+ years building and deploying ML systems in production
+      - Python, PyTorch expertise; TF background welcome
+      - Kubernetes, Helm, or similar container orchestration
+      - MLOps practices: model CI/CD, monitoring, retraining pipelines
+      - Degree in CS, Engineering, or equivalent practical experience
+
+      Hybrid in Vancouver. Salary $120K–$150K CAD.
+
+- pair_id: synth_003
+  scenario: near_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Data Engineer
+    canonical_company: Hootsuite
+    canonical_seniority: Senior
+    top_skills: [Python, Spark, dbt, Airflow, Snowflake, data modeling]
+    full_jd: |
+      Hootsuite is hiring a Senior Data Engineer in Vancouver to join our Data Platform team.
+
+      You'll build and maintain the data infrastructure that powers Hootsuite's analytics,
+      reporting, and ML workflows. Core stack: Apache Spark, dbt, Airflow, Snowflake.
+
+      Responsibilities:
+      - Design and maintain ELT pipelines using dbt and Airflow
+      - Optimize Spark jobs for performance and cost
+      - Own data quality checks and monitoring
+      - Collaborate with analysts and data scientists on schema design
+
+      Required:
+      - 4+ years data engineering experience
+      - Strong Python; experience with Spark
+      - dbt (or equivalent transformation tool) experience
+      - Cloud data warehousing (Snowflake preferred)
+      - Excellent communication skills
+
+      Hybrid in Vancouver. Salary: $110,000 – $140,000 CAD.
+  posting_b:
+    canonical_title: Senior Data Engineer
+    canonical_company: Hootsuite
+    canonical_seniority: Senior
+    top_skills: [Python, Spark, Snowflake, Airflow, dbt, data modeling]
+    full_jd: |
+      Senior Data Engineer | Data Platform | Hootsuite | Vancouver (Hybrid)
+
+      Join Hootsuite's Data Platform team as a Senior Data Engineer. You will design, build,
+      and scale the pipelines and infrastructure that support analytics, BI, and machine learning
+      across the organization.
+
+      Your work:
+      - Build and maintain ELT workflows with dbt and Airflow on Snowflake
+      - Tune Apache Spark for throughput and cost efficiency
+      - Instrument data quality monitoring and alerting
+      - Partner with analysts and data scientists to evolve the data model
+
+      Your background:
+      - 4+ years in data engineering roles
+      - Python proficiency; solid Spark experience
+      - dbt or similar transformation tooling
+      - Snowflake or comparable cloud DWH
+      - Strong communicator
+
+      Hybrid, Vancouver BC. $110K–$140K CAD.
+
+- pair_id: synth_004
+  scenario: exact_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Staff Data Scientist
+    canonical_company: Lululemon
+    canonical_seniority: Staff
+    top_skills: [Python, causal inference, experimentation, forecasting, SQL, stakeholder management]
+    full_jd: |
+      Lululemon | Staff Data Scientist | Guest Insights | Vancouver
+
+      We are looking for a Staff Data Scientist to lead our Guest Insights function. In this senior
+      individual-contributor role, you will own the modelling strategy for understanding guest
+      lifetime value, churn prediction, and campaign attribution.
+
+      You will mentor junior team members, define best practices, and interface directly with senior
+      marketing and product leadership.
+
+      What you bring:
+      - 7+ years data science experience, with at least 2 years at staff / principal level
+      - Deep expertise in causal inference and experimentation (not just A/B — also quasi-experiments)
+      - Strong forecasting and time-series modelling skills
+      - Python, SQL; familiarity with Databricks or Spark a strong plus
+      - Track record of influencing senior stakeholders with data
+
+      Vancouver HQ (hybrid). Total comp: $170,000 – $210,000 CAD.
+  posting_b:
+    canonical_title: Staff Data Scientist
+    canonical_company: Lululemon
+    canonical_seniority: Staff
+    top_skills: [causal inference, Python, SQL, forecasting, experimentation, stakeholder management]
+    full_jd: |
+      Staff Data Scientist — Guest Insights | Lululemon | Vancouver, BC
+
+      Lululemon's Guest Insights team is hiring a Staff Data Scientist to lead modelling strategy
+      for guest lifetime value, churn prediction, and marketing attribution.
+
+      This is a senior IC role: you will set the technical direction for the team, mentor junior
+      data scientists, and partner with VP-level leaders in Marketing and Product.
+
+      Requirements:
+      - 7+ years in data science; 2+ years at staff or principal level
+      - Causal inference mastery (quasi-experimental methods, not just A/B testing)
+      - Forecasting and time-series modelling expertise
+      - Python, SQL; Databricks / Spark experience strongly preferred
+      - Strong executive presence and communication
+
+      Hybrid at Vancouver HQ. Total compensation $170K–$210K CAD.
+
+- pair_id: synth_005
+  scenario: near_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Finning
+    canonical_seniority: Mid
+    top_skills: [Python, machine learning, SQL, scikit-learn, PowerBI, data visualization]
+    full_jd: |
+      Finning International | Data Scientist | Vancouver
+
+      Finning's Analytics & Digital team is hiring a Data Scientist to build predictive maintenance
+      models and demand-forecasting tools for heavy equipment operations across North America.
+
+      Key responsibilities:
+      - Build and deploy ML models for predictive maintenance and parts demand forecasting
+      - Create dashboards and reports using Power BI
+      - Work with operational data from telematics, IoT sensors, and ERP systems
+      - Collaborate with domain experts in equipment maintenance and supply chain
+
+      Requirements:
+      - 2–4 years data science experience
+      - Python (scikit-learn, pandas, XGBoost)
+      - SQL for data extraction and transformation
+      - Power BI or Tableau
+      - Experience with industrial or IoT data a plus
+
+      On-site / hybrid in Vancouver. Salary: $85,000 – $105,000 CAD.
+  posting_b:
+    canonical_title: Data Scientist
+    canonical_company: Finning
+    canonical_seniority: Mid
+    top_skills: [Python, scikit-learn, SQL, machine learning, PowerBI, predictive maintenance]
+    full_jd: |
+      Data Scientist — Analytics & Digital | Finning International | Vancouver (Hybrid)
+
+      Join Finning's Analytics & Digital team as a Data Scientist. You'll apply machine learning
+      to our heavy equipment maintenance and supply chain operations.
+
+      What you'll own:
+      - Predictive maintenance models using telematics and IoT sensor data
+      - Parts demand forecasting to optimize inventory
+      - Power BI dashboards for operational teams and management
+      - Cross-functional work with maintenance engineers and supply chain leads
+
+      What you'll need:
+      - 2–4 years of applied data science
+      - Python (scikit-learn, XGBoost, pandas)
+      - SQL; ERP or industrial data experience a bonus
+      - Power BI or Tableau for visualization
+
+      Hybrid Vancouver. $85K–$105K CAD.
+
+- pair_id: synth_006
+  scenario: repost
+  ground_truth: merge
+  posting_a:
+    canonical_title: ML Engineer
+    canonical_company: D-Wave
+    canonical_seniority: Senior
+    top_skills: [Python, quantum computing, optimization, OR-Tools, C++, algorithms]
+    full_jd: |
+      D-Wave Systems | Senior ML Engineer | Burnaby / Vancouver
+
+      D-Wave is hiring a Senior ML Engineer to join our Hybrid Solver team. You will develop
+      machine learning components that integrate with our quantum optimization platform.
+
+      The role blends classical ML with quantum-hybrid approaches to combinatorial optimization problems.
+
+      Responsibilities:
+      - Develop ML models that complement quantum annealing for optimization tasks
+      - Implement and benchmark hybrid algorithms (classical + quantum solvers)
+      - Build tooling and libraries for our Leap cloud platform customers
+      - Collaborate with researchers and software engineers
+
+      Requirements:
+      - 4+ years ML engineering experience
+      - Strong Python; C++ experience a plus
+      - Familiarity with combinatorial optimization (TSP, scheduling, routing)
+      - MSc or PhD in CS, Physics, Math, or related field preferred
+
+      Compensation: $130,000 – $165,000 CAD. Hybrid Burnaby/Vancouver.
+  posting_b:
+    canonical_title: ML Engineer
+    canonical_company: D-Wave
+    canonical_seniority: Senior
+    top_skills: [Python, C++, quantum computing, optimization, algorithms, OR-Tools]
+    full_jd: |
+      [REPOST] Senior ML Engineer — Hybrid Solver | D-Wave Systems | Vancouver/Burnaby
+
+      Still open: Senior ML Engineer role on D-Wave's Hybrid Solver team.
+
+      We are building ML components that complement our quantum hardware to solve optimization
+      problems at scale. This is a unique opportunity to work at the intersection of classical
+      ML and quantum computing.
+
+      Duties:
+      - Design and implement ML algorithms for quantum-hybrid optimization
+      - Benchmark hybrid solvers vs. classical baselines
+      - Contribute to Leap SDK libraries used by enterprise customers
+      - Engage with research scientists on algorithm design
+
+      Qualifications:
+      - 4+ years ML engineering
+      - Expert Python; C++ a big plus
+      - Background in combinatorial optimization or operations research
+      - Advanced degree (MSc/PhD) in CS, Physics, or Math strongly preferred
+
+      $130K–$165K CAD, hybrid in Vancouver/Burnaby.
+
+- pair_id: synth_007
+  scenario: exact_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Analytics Engineer
+    canonical_company: Clio
+    canonical_seniority: Mid
+    top_skills: [dbt, SQL, Snowflake, Python, data modeling, Looker]
+    full_jd: |
+      Clio | Analytics Engineer | Vancouver (Remote OK)
+
+      Clio's Data team is hiring an Analytics Engineer to own and scale our dbt models and
+      Snowflake data warehouse. You will be the bridge between raw data and the self-serve
+      analytics layer used by the entire company.
+
+      What you'll do:
+      - Build, maintain, and document dbt models following our naming and testing conventions
+      - Design Snowflake schemas for analytics use cases
+      - Partner with analysts and data scientists on data modeling decisions
+      - Own data quality monitoring and documentation in our data catalog
+      - Work with engineering on ingestion pipelines
+
+      Must have:
+      - 2–4 years analytics engineering or data engineering experience
+      - Expert SQL; dbt certification or significant dbt project experience
+      - Snowflake or BigQuery
+      - Strong collaboration and documentation habits
+
+      Remote-friendly; preference for Vancouver. Salary: $95,000 – $120,000 CAD.
+  posting_b:
+    canonical_title: Analytics Engineer
+    canonical_company: Clio
+    canonical_seniority: Mid
+    top_skills: [dbt, Snowflake, SQL, Looker, Python, data modeling]
+    full_jd: |
+      Analytics Engineer | Data Platform | Clio | Vancouver / Remote
+
+      Join Clio as an Analytics Engineer on our Data Platform team. You'll own the transformation
+      layer of our data stack — from raw source data to trusted, well-documented dbt models in Snowflake.
+
+      Your responsibilities:
+      - Write and maintain dbt models; enforce testing, documentation, and naming standards
+      - Design Snowflake schemas to serve BI and analytics use cases
+      - Collaborate with analysts, data scientists, and engineers
+      - Manage data quality and contribute to the data catalog
+      - Support ingestion pipeline work in partnership with engineering
+
+      Your profile:
+      - 2–4 years in analytics engineering or data engineering
+      - SQL expert; substantial dbt experience required
+      - Snowflake or BigQuery experience
+      - Excellent communicator with a documentation mindset
+
+      $95K–$120K CAD. Remote-friendly (Vancouver preference).
+
+- pair_id: synth_008
+  scenario: repost
+  ground_truth: merge
+  posting_a:
+    canonical_title: Senior Data Analyst
+    canonical_company: Absolute Software
+    canonical_seniority: Senior
+    top_skills: [SQL, Python, Tableau, A/B testing, product analytics, Mixpanel]
+    full_jd: |
+      Absolute Security | Senior Data Analyst | Product Analytics | Vancouver
+
+      Absolute is hiring a Senior Data Analyst to join our Product Analytics team. You'll own
+      product performance analytics for our endpoint security and compliance products.
+
+      Responsibilities:
+      - Define and track product KPIs; build dashboards in Tableau
+      - Conduct A/B test analysis and experiment design
+      - Work with product managers to identify growth opportunities from data
+      - Build and maintain data models in SQL for self-serve analytics
+      - Collaborate with data engineering on instrumentation
+
+      Requirements:
+      - 4+ years in product analytics or business intelligence
+      - Expert SQL; Python for analysis (pandas, statsmodels)
+      - Tableau or equivalent BI tool
+      - A/B testing and experiment design experience
+      - Experience in a SaaS B2B environment preferred
+
+      Hybrid Vancouver. Salary: $95,000 – $120,000 CAD.
+  posting_b:
+    canonical_title: Senior Data Analyst
+    canonical_company: Absolute Software
+    canonical_seniority: Senior
+    top_skills: [SQL, Tableau, Python, A/B testing, product analytics, experimentation]
+    full_jd: |
+      Senior Data Analyst — Product Analytics | Absolute Security | Vancouver (Hybrid)
+
+      Absolute Security's Product Analytics team is still looking for a Senior Data Analyst.
+
+      You will be the analytical partner to our product teams, owning KPI frameworks, experiment
+      analysis, and self-serve analytics infrastructure for Absolute's SaaS products.
+
+      What you'll do:
+      - Own product KPI tracking and Tableau dashboard development
+      - Lead A/B test design and statistical analysis
+      - Translate data findings into product and GTM recommendations
+      - Build SQL-based data models for business self-serve
+      - Collaborate on event instrumentation with data engineering
+
+      Who you are:
+      - 4+ years product analytics or BI in a SaaS environment
+      - Expert SQL; Python (pandas, statistical analysis)
+      - Tableau or similar BI tool
+      - Solid A/B testing fundamentals
+
+      Hybrid Vancouver. $95K–$120K CAD.
+
+- pair_id: synth_009
+  scenario: near_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Principal Data Scientist
+    canonical_company: RBC
+    canonical_seniority: Principal
+    top_skills: [Python, credit risk, machine learning, regulatory capital, SQL, model validation]
+    full_jd: |
+      RBC | Principal Data Scientist | Personal & Commercial Banking Risk | Vancouver
+
+      RBC's Personal & Commercial Banking Risk team is hiring a Principal Data Scientist to lead
+      the development of next-generation credit risk models for our consumer lending portfolio.
+
+      This is a senior IC role with technical leadership responsibilities across a team of 6 data scientists.
+
+      Responsibilities:
+      - Lead development of PD, LGD, and EAD models under IFRS 9 and Basel III frameworks
+      - Own model governance, documentation, and regulatory submissions
+      - Mentor senior and mid-level data scientists
+      - Partner with model validation, finance, and technology on end-to-end model lifecycle
+      - Drive innovation: introduce modern ML techniques (gradient boosting, neural nets) while
+        maintaining regulatory interpretability requirements
+
+      Requirements:
+      - 8+ years credit risk or quantitative finance modelling experience
+      - Expert Python; SAS experience a plus
+      - Deep understanding of IFRS 9, Basel III, and SR 11-7 model risk guidelines
+      - PhD or MSc in Statistics, Mathematics, or Quantitative Finance preferred
+      - Track record of leading technical teams
+
+      Location: Vancouver. Hybrid. Total compensation: $185,000 – $230,000 CAD.
+  posting_b:
+    canonical_title: Principal Data Scientist
+    canonical_company: RBC
+    canonical_seniority: Principal
+    top_skills: [credit risk, Python, machine learning, regulatory capital, model validation, SQL]
+    full_jd: |
+      Principal Data Scientist — Credit Risk Modelling | RBC | Vancouver (Hybrid)
+
+      Royal Bank of Canada's Personal & Commercial Banking Risk group seeks a Principal Data
+      Scientist to take technical ownership of consumer credit risk model development.
+
+      You will lead a team of data scientists building PD/LGD/EAD models compliant with IFRS 9
+      and Basel III, while driving adoption of modern machine learning methods within the
+      regulatory interpretability constraints of SR 11-7.
+
+      What you'll do:
+      - Own and lead credit risk model development and validation cycle
+      - Author model documentation and support regulatory submissions
+      - Mentor and technically lead a team of 6 data scientists
+      - Collaborate across model validation, finance, and technology verticals
+      - Pioneer ML innovation (gradient boosting, neural architectures) within regulatory constraints
+
+      What you need:
+      - 8+ years quantitative modelling in credit risk or related finance domain
+      - Python expertise; SAS experience beneficial
+      - Strong knowledge of IFRS 9, Basel III, SR 11-7
+      - MSc or PhD in Statistics, Mathematics, Finance, or equivalent
+      - Proven technical leadership experience
+
+      Hybrid at Vancouver offices. Total comp $185K–$230K CAD.
+
+- pair_id: synth_010
+  scenario: exact_dup
+  ground_truth: merge
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Kabam
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, game analytics, player behavior modeling, A/B testing, churn prediction]
+    full_jd: |
+      Kabam | Data Scientist | Game Analytics | Vancouver
+
+      Kabam is looking for a Data Scientist to join our Game Analytics team in Vancouver.
+
+      You will work on player behaviour modelling, monetization analytics, and experiment analysis
+      for our flagship mobile and PC gaming titles.
+
+      Responsibilities:
+      - Build player segmentation and churn prediction models
+      - Design and analyze in-game A/B experiments for monetization optimization
+      - Develop daily/weekly reporting and KPI tracking systems
+      - Provide data-driven recommendations to game designers and product managers
+
+      Requirements:
+      - 2–4 years data science experience; gaming industry experience a plus
+      - Python (pandas, scikit-learn); SQL
+      - Experience with A/B testing and experiment analysis
+      - Familiarity with mobile analytics platforms (Firebase, Amplitude, Mixpanel)
+      - Strong data storytelling and visualization skills
+
+      Vancouver (hybrid). Salary: $90,000 – $115,000 CAD.
+  posting_b:
+    canonical_title: Data Scientist
+    canonical_company: Kabam
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, A/B testing, player behavior modeling, game analytics, churn prediction]
+    full_jd: |
+      Data Scientist — Game Analytics | Kabam | Vancouver (Hybrid)
+
+      Kabam's Game Analytics team is hiring a Data Scientist to help us understand player behavior
+      and optimize the player experience for our flagship titles.
+
+      What you'll work on:
+      - Player segmentation and churn prediction models
+      - Monetization A/B experiment analysis
+      - KPI dashboards and reporting for game leadership
+      - Data-driven recommendations to game designers and product teams
+
+      Your background:
+      - 2–4 years data science; games experience a plus but not required
+      - Python (scikit-learn, pandas); SQL expertise
+      - A/B testing and statistical analysis experience
+      - Mobile analytics platform experience (Firebase, Amplitude)
+      - Clear communicator; strong visualization skills
+
+      $90K–$115K CAD. Hybrid in Vancouver.
+
+# --- SHOULD NOT MERGE (10 pairs) ---
+
+- pair_id: synth_011
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: TD Bank
+    canonical_seniority: Senior
+    top_skills: [Python, credit risk, PD modelling, LGD, SAS, Basel III]
+    full_jd: |
+      TD Bank | Senior Data Scientist | Credit Risk Analytics | Vancouver
+
+      TD's Credit Risk Analytics team is hiring a Senior Data Scientist to build regulatory
+      credit risk models for the consumer lending portfolio.
+
+      Key responsibilities:
+      - Develop PD and LGD models for personal loans and credit cards under IFRS 9
+      - Produce model documentation for regulatory submissions
+      - Collaborate with model validation and finance on model governance
+
+      Requirements:
+      - 5+ years credit risk modelling
+      - Python and SAS; strong statistical modelling background
+      - Knowledge of IFRS 9, Basel III, and SR 11-7
+
+      Vancouver. Hybrid. $130K–$165K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: TD Bank
+    canonical_seniority: Senior
+    top_skills: [Python, fraud detection, machine learning, SQL, graph analytics, anomaly detection]
+    full_jd: |
+      TD Bank | Senior Data Scientist | Fraud Analytics | Vancouver
+
+      TD's Fraud Analytics team is hiring a Senior Data Scientist to build real-time fraud
+      detection and prevention models for our digital banking channels.
+
+      Key responsibilities:
+      - Develop fraud detection models using transaction data and behavioural signals
+      - Build graph-based analytics to identify fraud rings
+      - Design real-time scoring pipelines for card and online banking transactions
+
+      Requirements:
+      - 5+ years data science; fraud or anomaly detection experience preferred
+      - Python, SQL; graph analytics experience a strong plus
+      - Experience with streaming data (Kafka or Flink) beneficial
+
+      Vancouver. Hybrid. $130K–$165K CAD.
+
+- pair_id: synth_012
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Hootsuite
+    canonical_seniority: Mid
+    top_skills: [Python, NLP, social media analytics, text classification, SQL, transformers]
+    full_jd: |
+      Hootsuite | Data Scientist | Content Intelligence | Vancouver
+
+      Join Hootsuite's Content Intelligence team as a Data Scientist. You'll build NLP models
+      to classify social media content, detect sentiment trends, and surface insights for
+      marketing teams and enterprise customers.
+
+      Responsibilities:
+      - Fine-tune transformer models for social media text classification
+      - Build sentiment and trend detection pipelines
+      - Develop topic modelling and entity extraction features for our platform
+
+      Requirements:
+      - 2–4 years NLP / text ML experience
+      - Python; HuggingFace transformers; SQL
+      - Experience working with social media data at scale
+
+      Hybrid Vancouver. $90K–$115K CAD.
+  posting_b:
+    canonical_title: Data Scientist
+    canonical_company: Hootsuite
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, product analytics, A/B testing, funnel analysis, Amplitude]
+    full_jd: |
+      Hootsuite | Data Scientist | Product Growth | Vancouver
+
+      Hootsuite's Product Growth team is hiring a Data Scientist to support growth analytics,
+      funnel optimization, and experiment design for our SaaS platform.
+
+      Responsibilities:
+      - Own product growth KPI tracking and funnel analysis
+      - Design and analyze A/B experiments for onboarding and activation
+      - Partner with product managers on data-driven product decisions
+
+      Requirements:
+      - 2–4 years product analytics or data science in a SaaS context
+      - Python, SQL; Amplitude or Mixpanel experience
+      - Strong A/B testing and experiment design skills
+
+      Hybrid Vancouver. $90K–$115K CAD.
+
+- pair_id: synth_013
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: ML Engineer
+    canonical_company: Sophos
+    canonical_seniority: Senior
+    top_skills: [Python, threat detection, malware classification, XGBoost, security ML, MITRE ATT&CK]
+    full_jd: |
+      Sophos | Senior ML Engineer | Threat Detection | Vancouver
+
+      Sophos is hiring a Senior ML Engineer to develop machine learning models that power our
+      endpoint threat detection products. You will build and maintain classifiers for malware,
+      ransomware, and anomalous behaviour.
+
+      Responsibilities:
+      - Train and evaluate malware classifiers using PE file features, behaviour logs
+      - Develop models aligned with MITRE ATT&CK framework
+      - Build evaluation frameworks for detection precision and recall at scale
+
+      Requirements:
+      - 4+ years ML engineering
+      - Security domain knowledge (malware, ransomware, EDR)
+      - Python; XGBoost, LightGBM, deep learning
+
+      Vancouver hybrid. $130K–$155K CAD.
+  posting_b:
+    canonical_title: ML Engineer
+    canonical_company: Sophos
+    canonical_seniority: Senior
+    top_skills: [Python, NLP, email security, phishing detection, BERT, transformer models]
+    full_jd: |
+      Sophos | Senior ML Engineer | Email Security | Vancouver
+
+      Sophos's Email Security team is hiring a Senior ML Engineer to build NLP-based models
+      for detecting phishing, spam, and business email compromise (BEC) attacks.
+
+      Responsibilities:
+      - Build and fine-tune BERT-based classifiers for email threat detection
+      - Develop feature engineering pipelines from email headers, body, and metadata
+      - Collaborate with threat intelligence teams to label adversarial samples
+
+      Requirements:
+      - 4+ years ML engineering with NLP focus
+      - Python; transformers (BERT, RoBERTa, DistilBERT)
+      - Email security or phishing detection experience strongly preferred
+
+      Vancouver hybrid. $130K–$155K CAD.
+
+- pair_id: synth_014
+  scenario: different_seniority
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Trulioo
+    canonical_seniority: Mid
+    top_skills: [Python, machine learning, identity verification, SQL, scikit-learn, fraud signals]
+    full_jd: |
+      Trulioo | Data Scientist | Identity Analytics | Vancouver
+
+      Trulioo is hiring a Data Scientist for our Identity Analytics team. You will build ML models
+      to improve identity verification match rates and fraud signal scoring.
+
+      Responsibilities:
+      - Build match-rate optimization models using customer identity data
+      - Develop fraud signal scoring pipelines
+      - Collaborate with engineering to integrate models into production
+
+      Requirements:
+      - 2–4 years data science experience
+      - Python, SQL; scikit-learn or XGBoost
+      - Identity verification or fraud domain knowledge a plus
+
+      Vancouver hybrid. $85K–$105K CAD.
+  posting_b:
+    canonical_title: Lead Data Scientist
+    canonical_company: Trulioo
+    canonical_seniority: Lead
+    top_skills: [Python, machine learning, identity verification, team leadership, SQL, model governance]
+    full_jd: |
+      Trulioo | Lead Data Scientist | Identity Analytics | Vancouver
+
+      Trulioo is hiring a Lead Data Scientist to lead our Identity Analytics data science team.
+
+      You will manage and mentor a team of 4 data scientists, own the technical roadmap for identity
+      ML, drive model governance and production quality, and serve as the technical lead for
+      regulatory compliance initiatives.
+
+      Requirements:
+      - 7+ years data science; 2+ years leading or mentoring data science teams
+      - Deep ML expertise; identity / fraud domain strongly preferred
+      - Python, SQL; strong model governance and deployment experience
+      - Excellent communication; track record of influencing senior stakeholders
+
+      Vancouver hybrid. $145K–$175K CAD.
+
+- pair_id: synth_015
+  scenario: different_company
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Finning
+    canonical_seniority: Senior
+    top_skills: [Python, predictive maintenance, IoT, machine learning, SQL, telematics]
+    full_jd: |
+      Finning International | Senior Data Scientist | Asset Analytics | Vancouver
+
+      Finning's Asset Analytics team seeks a Senior Data Scientist to build predictive maintenance
+      models for heavy equipment fleets using telematics and IoT sensor data.
+
+      Responsibilities:
+      - Build ML models for component failure prediction using time-series sensor data
+      - Develop parts demand forecasting pipelines
+      - Collaborate with equipment engineers and supply chain teams
+
+      Requirements:
+      - 5+ years data science; industrial/IoT domain strongly preferred
+      - Python; time-series and anomaly detection experience
+      - SQL; Spark or Databricks a plus
+
+      Vancouver. Hybrid. $115K–$140K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Ritchie Bros
+    canonical_seniority: Senior
+    top_skills: [Python, auction analytics, pricing models, machine learning, SQL, forecasting]
+    full_jd: |
+      Ritchie Bros. Auctioneers | Senior Data Scientist | Pricing Analytics | Vancouver
+
+      Ritchie Bros.' Pricing Analytics team is hiring a Senior Data Scientist to build
+      price prediction models for heavy equipment auctioned on our marketplace.
+
+      Responsibilities:
+      - Build auction price prediction and reserve price recommendation models
+      - Develop equipment condition and depreciation scoring
+      - Partner with commercial and technology teams
+
+      Requirements:
+      - 5+ years data science; marketplace or auction domain a plus
+      - Python; SQL; ML model deployment experience
+      - Understanding of heavy equipment or construction industry preferred
+
+      Vancouver. Hybrid. $115K–$140K CAD.
+
+- pair_id: synth_016
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Alquemy Search & Consulting
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, NLP, SQL, scikit-learn, financial services]
+    full_jd: |
+      Alquemy Search & Consulting is representing a leading Canadian financial services firm
+      seeking a Senior Data Scientist for their Anti-Money Laundering (AML) Compliance team.
+
+      The role will develop ML models to detect suspicious transactions, build entity resolution
+      pipelines, and support regulatory reporting.
+
+      Requirements:
+      - 5+ years data science; AML / financial crime experience strongly preferred
+      - Python, SQL; NLP and graph analytics a strong plus
+      - Understanding of AML regulatory frameworks (FINTRAC, FinCEN)
+
+      Vancouver, hybrid. $130K–$155K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Alquemy Search & Consulting
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, trading analytics, quantitative finance, time-series]
+    full_jd: |
+      Alquemy Search & Consulting is representing a major Canadian bank hiring a Senior Data
+      Scientist for their Capital Markets Quantitative Analytics team.
+
+      The role will develop quantitative pricing models, risk analytics, and trade surveillance
+      tools for fixed-income and derivatives products.
+
+      Requirements:
+      - 5+ years quantitative finance or data science; capital markets experience required
+      - Python, SQL; derivatives pricing and fixed-income modelling experience
+      - CFA or FRM designation an asset
+
+      Vancouver, hybrid. $135K–$165K CAD.
+
+- pair_id: synth_017
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Engineer
+    canonical_company: Fortinet
+    canonical_seniority: Senior
+    top_skills: [Python, Kafka, Spark, Elasticsearch, security data pipelines, SQL]
+    full_jd: |
+      Fortinet | Senior Data Engineer | Security Analytics Platform | Vancouver
+
+      Fortinet's Security Analytics Platform team is hiring a Senior Data Engineer to build
+      high-throughput data pipelines ingesting network telemetry, threat intelligence feeds,
+      and security event logs.
+
+      Responsibilities:
+      - Build Kafka-based streaming pipelines for security telemetry at petabyte scale
+      - Develop Spark batch jobs for threat analytics
+      - Maintain Elasticsearch clusters for real-time querying
+
+      Requirements:
+      - 4+ years data engineering; security data or high-throughput streaming experience preferred
+      - Python; Kafka; Spark or Flink
+      - Elasticsearch or OpenSearch operational experience
+
+      Vancouver. Hybrid. $110K–$140K CAD.
+  posting_b:
+    canonical_title: Data Engineer
+    canonical_company: Fortinet
+    canonical_seniority: Senior
+    top_skills: [Python, dbt, Snowflake, Airflow, SQL, data modeling, BI]
+    full_jd: |
+      Fortinet | Senior Data Engineer | Business Intelligence | Vancouver
+
+      Fortinet's Business Intelligence team is hiring a Senior Data Engineer to own the enterprise
+      data warehouse and analytics pipelines that power finance, sales, and executive reporting.
+
+      Responsibilities:
+      - Build and maintain dbt models in Snowflake for finance and sales analytics
+      - Orchestrate pipelines with Airflow
+      - Partner with analysts on schema design and data quality
+
+      Requirements:
+      - 4+ years data engineering; enterprise DWH experience preferred
+      - dbt, Snowflake (or BigQuery/Redshift); Airflow
+      - Python; SQL expert
+
+      Vancouver. Hybrid. $110K–$140K CAD.
+
+- pair_id: synth_018
+  scenario: hiring_agent
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Recruiting in Motion
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL]
+    full_jd: |
+      Recruiting in Motion is actively sourcing Senior Data Scientists for multiple Vancouver-area
+      clients across fintech, insurance, and e-commerce. Roles are at the Senior level and offer
+      hybrid working arrangements.
+
+      Skills in demand: Python, SQL, machine learning, experimentation, NLP, deep learning.
+      Compensation varies by client: $120K–$160K CAD range.
+
+      Apply now and our team will match you to the best-fit opportunity based on your background.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Recruiting in Motion
+    canonical_seniority: Senior
+    top_skills: [Python, NLP, machine learning, SQL, transformers, text classification]
+    full_jd: |
+      Recruiting in Motion is representing a leading Canadian insurance company hiring a
+      Senior Data Scientist for their Claims Analytics team in Vancouver.
+
+      The role will focus on NLP-based claims triage and fraud signal extraction from
+      unstructured text (medical reports, adjuster notes, claims descriptions).
+
+      Requirements:
+      - 5+ years data science; NLP / text ML experience required
+      - Python (transformers, HuggingFace); SQL
+      - Insurance or claims domain experience a strong plus
+
+      Hybrid Vancouver. $130K–$155K CAD.
+
+- pair_id: synth_019
+  scenario: different_company
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior ML Engineer
+    canonical_company: Visier
+    canonical_seniority: Senior
+    top_skills: [Python, NLP, LLM, RAG, people analytics, SQL, LangChain]
+    full_jd: |
+      Visier | Senior ML Engineer | AI Features | Vancouver
+
+      Visier is building AI-powered features for our people analytics platform and hiring a
+      Senior ML Engineer to lead LLM integration, RAG architecture, and natural language
+      query capabilities.
+
+      Responsibilities:
+      - Design and implement RAG pipelines for HR data Q&A features
+      - Fine-tune and prompt-engineer LLMs for HR analytics use cases
+      - Build evaluation frameworks for LLM output quality
+      - Collaborate with product and engineering on AI feature delivery
+
+      Requirements:
+      - 4+ years ML engineering; LLM or NLP focus required
+      - Python; LangChain or LlamaIndex; vector databases (Pinecone, Weaviate)
+      - Experience shipping LLM-powered features to production
+
+      Vancouver, hybrid. $135K–$165K CAD.
+  posting_b:
+    canonical_title: Senior ML Engineer
+    canonical_company: Mobify
+    canonical_seniority: Senior
+    top_skills: [Python, NLP, LLM, recommendation systems, SQL, PyTorch]
+    full_jd: |
+      Mobify | Senior ML Engineer | Personalization | Vancouver
+
+      Mobify's Personalization team is hiring a Senior ML Engineer to develop recommendation
+      engines and LLM-powered personalization features for our e-commerce platform.
+
+      Responsibilities:
+      - Build collaborative filtering and content-based recommendation models
+      - Integrate LLM-based product description generation and personalized search
+      - Own model evaluation, A/B testing, and production deployment
+
+      Requirements:
+      - 4+ years ML engineering; recommendation systems or NLP experience preferred
+      - Python; PyTorch; experience with LLMs in a product setting
+      - SQL; experience with feature stores a plus
+
+      Vancouver, hybrid. $130K–$160K CAD.
+
+- pair_id: synth_020
+  scenario: different_team
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Analyst
+    canonical_company: Electronic Arts
+    canonical_seniority: Mid
+    top_skills: [SQL, Python, Tableau, player analytics, A/B testing, cohort analysis]
+    full_jd: |
+      Electronic Arts | Data Analyst | Live Services Analytics | Burnaby
+
+      EA's Live Services Analytics team is hiring a Data Analyst to support operations and
+      player experience analytics for our live game services.
+
+      Responsibilities:
+      - Build dashboards and reports for live game KPIs (DAU, retention, monetization)
+      - Conduct cohort and funnel analysis
+      - Support A/B test analysis for in-game events and live ops decisions
+
+      Requirements:
+      - 2–4 years data analysis; gaming or live services experience preferred
+      - SQL expert; Python (pandas); Tableau
+      - A/B testing experience
+
+      Burnaby. Hybrid. $80K–$100K CAD.
+  posting_b:
+    canonical_title: Data Analyst
+    canonical_company: Electronic Arts
+    canonical_seniority: Mid
+    top_skills: [SQL, Excel, Tableau, finance analytics, forecasting, FP&A]
+    full_jd: |
+      Electronic Arts | Data Analyst | Finance & Business Analytics | Burnaby
+
+      EA's Finance & Business Analytics team is hiring a Data Analyst to support financial
+      planning and analysis for the Burnaby studio.
+
+      Responsibilities:
+      - Build P&L tracking dashboards for studio leadership
+      - Support budgeting and forecasting processes with data models
+      - Analyze revenue and cost variances across product lines
+
+      Requirements:
+      - 2–4 years in FP&A, finance analytics, or business intelligence
+      - SQL, Excel (advanced); Tableau or Power BI
+      - Accounting or finance background a plus
+
+      Burnaby. Hybrid. $80K–$100K CAD.
+
+# --- AMBIGUOUS (10 pairs — borderline; gatekeeper verdict + reasoning flagged for review) ---
+# ground_truth set to 'new' as conservative default; user review of gatekeeper output expected.
+
+- pair_id: synth_021
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Alquemy Search & Consulting
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, financial services, credit risk, scikit-learn]
+    full_jd: |
+      Alquemy Search & Consulting is representing a major Canadian bank hiring a
+      Senior Data Scientist for their Retail Banking Risk team.
+
+      The role will focus on customer credit risk: PD modelling, behavioural scoring,
+      and early warning systems for retail banking products.
+
+      Requirements:
+      - 5+ years data science; retail credit risk preferred
+      - Python, SQL; scikit-learn or XGBoost
+      - IFRS 9 or Basel III knowledge beneficial
+
+      Vancouver hybrid. $130K–$155K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Alquemy Search & Consulting
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, credit risk, financial services, XGBoost]
+    full_jd: |
+      Alquemy Search & Consulting is representing a major Canadian bank (different engagement)
+      hiring a Senior Data Scientist for their Retail Credit Analytics team.
+
+      The role is very similar to our current open retail risk role: PD/LGD modelling, credit
+      scoring, and early warning indicator development. The client is a different bank but the
+      mandate is nearly identical.
+
+      Requirements:
+      - 5+ years data science in credit/retail risk
+      - Python, SQL; strong ML skills
+      - Basel III / IFRS 9 familiarity
+
+      Vancouver hybrid. $130K–$155K CAD.
+
+- pair_id: synth_022
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: TELUS
+    canonical_seniority: Senior
+    top_skills: [Python, churn prediction, machine learning, SQL, customer analytics, CLV]
+    full_jd: |
+      TELUS | Senior Data Scientist | Consumer Analytics | Vancouver
+
+      TELUS's Consumer Analytics team is hiring a Senior Data Scientist to build customer
+      churn prediction and lifetime value models for our wireless and home services.
+
+      Responsibilities:
+      - Own churn prediction model for consumer segments
+      - Build CLV models to support retention campaigns
+      - Collaborate with marketing on segment targeting
+
+      Requirements:
+      - 5+ years data science; telco or subscription analytics preferred
+      - Python, SQL; ML deployment experience
+      - Customer analytics or CRM data experience
+
+      Vancouver. Hybrid. $130K–$160K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: TELUS
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, customer analytics, churn prediction, propensity modeling]
+    full_jd: |
+      TELUS | Senior Data Scientist | B2B Analytics | Vancouver
+
+      TELUS's B2B Analytics team is hiring a Senior Data Scientist to build churn and propensity
+      models for business customers (SMB and enterprise wireless and connectivity services).
+
+      Responsibilities:
+      - Build churn and upsell propensity models for B2B segments
+      - Partner with B2B sales teams on model-informed targeting
+      - Develop CLV models for enterprise accounts
+
+      Requirements:
+      - 5+ years data science; B2B or enterprise analytics preferred
+      - Python, SQL; customer analytics experience
+      - Strong communication with non-technical stakeholders
+
+      Vancouver. Hybrid. $130K–$160K CAD.
+
+- pair_id: synth_023
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Absolute Software
+    canonical_seniority: Senior
+    top_skills: [Python, NLP, security ML, anomaly detection, SQL, log analysis]
+    full_jd: |
+      Absolute Security | Senior Data Scientist | Security Intelligence | Vancouver
+
+      Absolute Security is hiring a Senior Data Scientist to apply NLP and anomaly detection
+      to endpoint security telemetry, helping identify threats and policy violations in enterprise
+      device fleets.
+
+      Responsibilities:
+      - Build NLP classifiers for endpoint activity logs and security events
+      - Develop anomaly detection models for device behavior
+      - Collaborate with threat research teams
+
+      Requirements:
+      - 5+ years data science; security or log analytics experience preferred
+      - Python; NLP, anomaly detection expertise
+      - SQL; experience with large-scale log data
+
+      Vancouver. Hybrid. $120K–$145K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Absolute Software
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, endpoint security, anomaly detection, scikit-learn]
+    full_jd: |
+      Absolute Security | Senior Data Scientist | Product Intelligence | Vancouver
+
+      Absolute Security's Product Intelligence team is hiring a Senior Data Scientist to build
+      models that improve product features, including resilience scoring, compliance posture
+      assessment, and endpoint health prediction.
+
+      Responsibilities:
+      - Build ML models for endpoint compliance and resilience scoring
+      - Develop predictive features for our network security product
+      - Partner with product management on feature prioritization via data
+
+      Requirements:
+      - 5+ years data science; security product or B2B SaaS experience preferred
+      - Python, SQL; ML modelling and deployment
+      - Strong communication with product stakeholders
+
+      Vancouver. Hybrid. $120K–$145K CAD.
+
+- pair_id: synth_024
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Machine Learning Engineer
+    canonical_company: Slack
+    canonical_seniority: Senior
+    top_skills: [Python, search ranking, information retrieval, machine learning, Elasticsearch, SQL]
+    full_jd: |
+      Slack (Salesforce) | Senior Machine Learning Engineer | Search Relevance | Vancouver
+
+      Slack's Search Relevance team is hiring a Senior ML Engineer to improve search ranking
+      and relevance for Slack's message and file search experience.
+
+      Responsibilities:
+      - Build and iterate on Learning-to-Rank models for message search
+      - Develop offline and online evaluation frameworks for search quality
+      - Collaborate with search infrastructure engineers on indexing and retrieval
+
+      Requirements:
+      - 4+ years ML engineering; information retrieval or search ranking experience
+      - Python; Elasticsearch or Solr; LTR frameworks (RankNet, LambdaMART)
+      - Strong experimentation mindset
+
+      Vancouver. Hybrid. $160K–$195K CAD (USD or CAD depending on citizenship).
+  posting_b:
+    canonical_title: Machine Learning Engineer
+    canonical_company: Slack
+    canonical_seniority: Senior
+    top_skills: [Python, recommendation systems, machine learning, Elasticsearch, SQL, notifications]
+    full_jd: |
+      Slack (Salesforce) | Senior Machine Learning Engineer | Notifications & Recommendations | Vancouver
+
+      Slack's Notifications & Recommendations team is hiring a Senior ML Engineer to personalize
+      notification delivery and build channel/content recommendation features.
+
+      Responsibilities:
+      - Build personalized notification ranking and throttling models
+      - Develop channel and content recommendation algorithms
+      - A/B test recommendation features across millions of users
+
+      Requirements:
+      - 4+ years ML engineering; recommendation systems experience preferred
+      - Python; ML at scale; familiarity with Elasticsearch
+      - Experience with real-time personalization systems
+
+      Vancouver. Hybrid. $160K–$195K CAD.
+
+- pair_id: synth_025
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Staff ML Engineer
+    canonical_company: Wavelength
+    canonical_seniority: Staff
+    top_skills: [Python, LLM, fine-tuning, RLHF, NLP, distributed training, PyTorch]
+    full_jd: |
+      Wavelength AI | Staff ML Engineer | Model Training | Vancouver
+
+      Wavelength AI is hiring a Staff ML Engineer to own our LLM fine-tuning infrastructure
+      and RLHF pipeline. You will work on the core model training stack.
+
+      Responsibilities:
+      - Own distributed fine-tuning infrastructure for 7B–70B parameter models
+      - Implement RLHF and DPO training pipelines
+      - Develop evaluation harnesses and safety benchmarks
+
+      Requirements:
+      - 6+ years ML engineering; LLM fine-tuning or pre-training experience required
+      - PyTorch; distributed training (FSDP, DeepSpeed); RLHF
+      - Track record of shipping training infrastructure at scale
+
+      Vancouver. Hybrid. $180K–$220K CAD.
+  posting_b:
+    canonical_title: Staff ML Engineer
+    canonical_company: Wavelength
+    canonical_seniority: Staff
+    top_skills: [Python, LLM, inference optimization, serving infrastructure, PyTorch, CUDA]
+    full_jd: |
+      Wavelength AI | Staff ML Engineer | Inference & Serving | Vancouver
+
+      Wavelength AI is hiring a Staff ML Engineer to lead the inference optimization and serving
+      infrastructure for our LLM products.
+
+      Responsibilities:
+      - Own LLM inference stack: batching, quantization, speculative decoding
+      - Optimize CUDA kernels and serving latency for production SLAs
+      - Collaborate with model team on deployment tradeoffs
+
+      Requirements:
+      - 6+ years ML engineering; LLM inference or systems ML experience required
+      - PyTorch; CUDA; vLLM, TensorRT-LLM, or equivalent inference frameworks
+      - Strong systems engineering background
+
+      Vancouver. Hybrid. $185K–$225K CAD.
+
+- pair_id: synth_026
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: Procurify
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, spend analytics, procurement, NLP]
+    full_jd: |
+      Procurify | Senior Data Scientist | Spend Intelligence | Vancouver
+
+      Procurify is hiring a Senior Data Scientist to build AI-powered spend intelligence features
+      for our procurement platform. You will develop models that help finance teams understand
+      and control company spending.
+
+      Responsibilities:
+      - Build spend classification and anomaly detection models
+      - Develop vendor recommendation and benchmarking algorithms
+      - Partner with product on AI feature scoping and delivery
+
+      Requirements:
+      - 4+ years data science; B2B SaaS or fintech preferred
+      - Python, SQL; NLP experience a plus
+      - Strong product sense and collaboration skills
+
+      Vancouver. Hybrid. $115K–$140K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: Procurify
+    canonical_seniority: Senior
+    top_skills: [Python, SQL, machine learning, spend analytics, NLP, classification]
+    full_jd: |
+      Procurify | Senior Data Scientist | AI Insights | Vancouver
+
+      Procurify's growing AI team is hiring a Senior Data Scientist (this is a second headcount
+      on the same team as our current Spend Intelligence DS opening). Focus is overlapping but
+      this role will have more emphasis on natural language processing for automated PO
+      categorization and vendor name resolution.
+
+      Responsibilities:
+      - Build NLP models for purchase order classification
+      - Vendor name canonicalization and deduplication
+      - Spend pattern analysis and anomaly detection
+
+      Requirements:
+      - 4+ years data science; NLP experience required
+      - Python, SQL; B2B SaaS experience a plus
+      - Comfortable in a fast-moving startup environment
+
+      Vancouver. Hybrid. $115K–$140K CAD.
+
+- pair_id: synth_027
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Limeade
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, people analytics, machine learning, engagement modeling, survey data]
+    full_jd: |
+      Limeade | Data Scientist | People Analytics | Vancouver
+
+      Limeade is hiring a Data Scientist to build predictive models on employee wellbeing and
+      engagement data from our HR platform.
+
+      Responsibilities:
+      - Build employee engagement and burnout prediction models
+      - Develop survey response analysis pipelines
+      - Partner with customer success on analytics deliverables
+
+      Requirements:
+      - 2–4 years data science; HR tech or people analytics preferred
+      - Python, SQL; scikit-learn; experience with survey data
+      - Strong communication with non-technical stakeholders
+
+      Vancouver. Hybrid. $90K–$110K CAD.
+  posting_b:
+    canonical_title: Data Scientist
+    canonical_company: Limeade
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, people analytics, machine learning, NLP, wellbeing]
+    full_jd: |
+      Limeade | Data Scientist | Customer Intelligence | Vancouver
+
+      Limeade's Customer Intelligence team is hiring a Data Scientist to develop analytics
+      products that help HR leaders understand program effectiveness and workforce wellbeing trends.
+
+      Responsibilities:
+      - Build benchmark analytics comparing customer wellbeing metrics to industry norms
+      - Develop NLP models to analyze open-ended survey feedback
+      - Create self-serve analytics features for enterprise HR customers
+
+      Requirements:
+      - 2–4 years data science; people analytics or HR tech preferred
+      - Python, SQL; NLP experience a plus
+      - Customer-facing communication skills
+
+      Vancouver. Hybrid. $90K–$110K CAD.
+
+- pair_id: synth_028
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Data Scientist
+    canonical_company: Best Buy Canada
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, retail analytics, pricing models, machine learning, forecasting]
+    full_jd: |
+      Best Buy Canada | Data Scientist | Pricing & Promotions | Burnaby
+
+      Best Buy Canada's Pricing & Promotions team is hiring a Data Scientist to build
+      dynamic pricing models and promotional effectiveness analytics.
+
+      Responsibilities:
+      - Build price elasticity and demand forecasting models
+      - Analyze promotional campaign effectiveness and ROI
+      - Collaborate with merchandising and marketing teams
+
+      Requirements:
+      - 2–4 years data science; retail or e-commerce preferred
+      - Python, SQL; pricing or demand modelling experience a plus
+      - Strong analytical communication skills
+
+      Burnaby. Hybrid. $90K–$110K CAD.
+  posting_b:
+    canonical_title: Data Scientist
+    canonical_company: Best Buy Canada
+    canonical_seniority: Mid
+    top_skills: [Python, SQL, retail analytics, supply chain, forecasting, machine learning]
+    full_jd: |
+      Best Buy Canada | Data Scientist | Supply Chain Analytics | Burnaby
+
+      Best Buy Canada's Supply Chain Analytics team is hiring a Data Scientist to build
+      inventory optimization and demand forecasting models.
+
+      Responsibilities:
+      - Build inventory replenishment and markdown optimization models
+      - Develop demand forecasting pipelines using sell-through and web traffic data
+      - Partner with supply chain operations and finance teams
+
+      Requirements:
+      - 2–4 years data science; supply chain, retail, or e-commerce preferred
+      - Python, SQL; time-series forecasting experience
+      - Experience with inventory or demand planning preferred
+
+      Burnaby. Hybrid. $90K–$110K CAD.
+
+- pair_id: synth_029
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Engineer
+    canonical_company: SOTI
+    canonical_seniority: Senior
+    top_skills: [Python, Kafka, Spark, AWS, data pipelines, SQL]
+    full_jd: |
+      SOTI | Senior Data Engineer | Platform Engineering | Vancouver
+
+      SOTI's Platform Engineering team is hiring a Senior Data Engineer to build real-time
+      data pipelines for our mobile device management platform.
+
+      Responsibilities:
+      - Design and implement Kafka-based streaming pipelines for device telemetry
+      - Build Spark batch processing for compliance reporting
+      - Collaborate with software engineers on data architecture
+
+      Requirements:
+      - 4+ years data engineering; streaming data experience required
+      - Python; Kafka; Spark or Flink; AWS (Kinesis, EMR, Glue)
+      - SQL expert
+
+      Vancouver. Hybrid. $110K–$135K CAD.
+  posting_b:
+    canonical_title: Senior Data Engineer
+    canonical_company: SOTI
+    canonical_seniority: Senior
+    top_skills: [Python, dbt, Snowflake, Airflow, SQL, AWS]
+    full_jd: |
+      SOTI | Senior Data Engineer | Analytics Infrastructure | Vancouver
+
+      SOTI's Analytics Infrastructure team is hiring a Senior Data Engineer to build and
+      maintain the enterprise data warehouse and analytics pipelines supporting business reporting.
+
+      Responsibilities:
+      - Build dbt models in Snowflake for finance, sales, and operations analytics
+      - Orchestrate pipelines with Airflow on AWS
+      - Own data quality and monitoring
+
+      Requirements:
+      - 4+ years data engineering; enterprise DWH experience preferred
+      - dbt, Snowflake; Airflow; AWS
+      - SQL expert; Python
+
+      Vancouver. Hybrid. $110K–$135K CAD.
+
+- pair_id: synth_030
+  scenario: ambiguous
+  ground_truth: new
+  posting_a:
+    canonical_title: Senior Data Scientist
+    canonical_company: CCL Industries
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, quality engineering, computer vision, SQL, manufacturing]
+    full_jd: |
+      CCL Industries | Senior Data Scientist | Quality Engineering Analytics | Vancouver
+
+      CCL Industries is hiring a Senior Data Scientist to build ML models for quality defect
+      detection and process optimization in our label and packaging manufacturing operations.
+
+      Responsibilities:
+      - Build computer vision models for automated defect detection on production lines
+      - Develop process optimization models using sensor and production data
+      - Partner with quality engineers and plant operations teams
+
+      Requirements:
+      - 4+ years data science; manufacturing or computer vision experience preferred
+      - Python; OpenCV, PyTorch (or TensorFlow); SQL
+      - Experience with industrial sensor or IoT data a plus
+
+      Vancouver. On-site/hybrid. $115K–$140K CAD.
+  posting_b:
+    canonical_title: Senior Data Scientist
+    canonical_company: CCL Industries
+    canonical_seniority: Senior
+    top_skills: [Python, machine learning, SQL, supply chain, demand forecasting, operations research]
+    full_jd: |
+      CCL Industries | Senior Data Scientist | Supply Chain Analytics | Vancouver
+
+      CCL Industries is hiring a Senior Data Scientist to build supply chain optimization and
+      demand forecasting models supporting our global packaging operations.
+
+      Responsibilities:
+      - Build demand forecasting models for materials and finished goods
+      - Develop inventory optimization and supplier risk scoring
+      - Partner with procurement and supply chain operations teams
+
+      Requirements:
+      - 4+ years data science; supply chain or operations research experience preferred
+      - Python, SQL; time-series and OR modelling
+      - Manufacturing or distribution industry background a plus
+
+      Vancouver. Hybrid. $115K–$140K CAD.

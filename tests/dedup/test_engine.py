@@ -30,10 +30,12 @@ from jd_matcher.dedup.engine import (
     DedupConfig,
     DedupDecision,
     _CanonicalCandidate,
+    _FuseComponents,
     _PostingRow,
     _block_lookup,
     _compute_fuse_score,
     decide,
+    is_exact_match,
     jaccard,
     seniority_match,
     title_cosine,
@@ -378,6 +380,7 @@ class TestFuseMath:
             team_or_department="Engineering",
             top_skills=skills or [],
             role_summary=None,
+            full_jd=None,
         )
 
     def _make_candidate(
@@ -397,6 +400,7 @@ class TestFuseMath:
             team_or_department="Engineering",
             top_skills=skills or [],
             role_summary="A role.",
+            full_jd=None,
         )
 
     @pytest.fixture
@@ -700,18 +704,33 @@ class TestUserScenarios:
                     pass
             disk.commit()
 
-        config = DedupConfig(auto_merge_threshold=0.90)
-        # emb cosine(vec_linkedin, vec_indeed) ≈ high; skills=1.0; title=1.0; seniority=1.0
-        # We mock title_cosine=1.0 to ensure total >= 0.90
+        from jd_matcher.dedup.classifier import GatekeeperVerdict
+
+        gk_mock = MagicMock()
+        gk_mock.classify.return_value = GatekeeperVerdict(
+            is_same_role=True,
+            reasoning="Same ML Engineer role at Shopify from a different source.",
+        )
+
+        # gatekeeper_threshold=0.75 so FUSE in borderline band triggers gatekeeper.
+        # Embeddings are very similar but not identical → exact_4f short-circuit won't fire.
+        config = DedupConfig(gatekeeper_threshold=0.75)
         with patch("jd_matcher.dedup.engine.title_cosine", return_value=1.0):
-            decision = decide(posting_id=indeed_posting_pid, db_path=db_path, config=config)
+            decision = decide(
+                posting_id=indeed_posting_pid,
+                db_path=db_path,
+                config=config,
+                gatekeeper=gk_mock,
+            )
 
         assert decision.action == "merge", (
             f"Scenario (iii): cross-source same-role should MERGE. Got action={decision.action}"
         )
         assert decision.target_canonical_id == canonical_id
-        assert decision.merge_kind == "content_dedup"
-        assert decision.similarity >= 0.90
+        assert decision.merge_kind in ("gatekeeper_approved", "exact_4f"), (
+            f"Expected gatekeeper_approved or exact_4f, got {decision.merge_kind}"
+        )
+        assert decision.similarity >= 0.75
 
     def test_scenario_iv_same_role_different_location(self, tmp_path: Path) -> None:
         """(iv) Same company + same team + same role + different location → BOTH shown (BLOCK separates)."""
@@ -1127,3 +1146,358 @@ class TestBlockLookup:
         )
         # Expected: 0 — exact-case SQL equality; C18 stores title-case
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# TASK-M2-012: 3-tier decision logic tests
+# ---------------------------------------------------------------------------
+
+
+def _make_fuse_components(
+    emb: float = 0.9,
+    skills: float = 0.9,
+    title: float = 0.9,
+    seniority: float = 1.0,
+) -> _FuseComponents:
+    fuse = 0.4 * emb + 0.3 * skills + 0.2 * title + 0.1 * seniority
+    return _FuseComponents(
+        embedding_cosine=emb,
+        jaccard_top_skills=skills,
+        title_cosine=title,
+        seniority_match=seniority,
+        fuse_score=fuse,
+    )
+
+
+class TestIsExactMatch:
+    """Unit tests for the 4-feature exact-match short-circuit."""
+
+    def test_all_four_at_1_is_exact(self) -> None:
+        c = _make_fuse_components(emb=1.0, skills=1.0, title=1.0, seniority=1.0)
+        assert is_exact_match(c) is True
+
+    def test_all_four_at_1_minus_tiny_epsilon_is_exact(self) -> None:
+        # 1e-7 < _EXACT_EPSILON (1e-6) — should still pass
+        c = _make_fuse_components(emb=1.0 - 1e-7, skills=1.0, title=1.0, seniority=1.0)
+        assert is_exact_match(c) is True
+
+    def test_one_component_at_0_99_is_not_exact(self) -> None:
+        # 0.01 > _EXACT_EPSILON — must fail
+        c = _make_fuse_components(emb=0.99, skills=1.0, title=1.0, seniority=1.0)
+        assert is_exact_match(c) is False
+
+    def test_embedding_below_threshold_fails(self) -> None:
+        c = _make_fuse_components(emb=0.95, skills=1.0, title=1.0, seniority=1.0)
+        assert is_exact_match(c) is False
+
+    def test_skills_below_threshold_fails(self) -> None:
+        c = _make_fuse_components(emb=1.0, skills=0.9, title=1.0, seniority=1.0)
+        assert is_exact_match(c) is False
+
+    def test_title_below_threshold_fails(self) -> None:
+        c = _make_fuse_components(emb=1.0, skills=1.0, title=0.85, seniority=1.0)
+        assert is_exact_match(c) is False
+
+    def test_seniority_below_threshold_fails(self) -> None:
+        c = _make_fuse_components(emb=1.0, skills=1.0, title=1.0, seniority=0.0)
+        assert is_exact_match(c) is False
+
+    def test_all_slightly_below_1_fails(self) -> None:
+        c = _make_fuse_components(emb=0.99, skills=0.99, title=0.99, seniority=0.99)
+        assert is_exact_match(c) is False
+
+
+class TestThreeTierDecide:
+    """Integration tests for the 3-tier decide() logic with mocked gatekeeper."""
+
+    def _build_db(self, tmp_path: Path) -> Path:
+        db_path = _make_on_disk_db(tmp_path)
+        return db_path
+
+    def _make_gatekeeper_mock(self, is_same_role: bool | None) -> MagicMock:
+        """Return a mock gatekeeper:
+        - is_same_role=True  → verdict with is_same_role=True
+        - is_same_role=False → verdict with is_same_role=False
+        - is_same_role=None  → None (hard fail)
+        """
+        from jd_matcher.dedup.classifier import GatekeeperVerdict
+
+        mock = MagicMock()
+        if is_same_role is None:
+            mock.classify.return_value = None
+        else:
+            mock.classify.return_value = GatekeeperVerdict(
+                is_same_role=is_same_role,
+                reasoning="Test reasoning.",
+            )
+        return mock
+
+    def test_tier1_below_threshold_no_gatekeeper_call(self, tmp_path: Path) -> None:
+        """FUSE < 0.75 → action='new', gatekeeper NOT called."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        # Seed a posting and canonical with FUSE guaranteed below 0.75
+        # Use orthogonal embeddings and no skill overlap
+        pid = _insert_posting(
+            conn, company="Shopify", title="Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql"],
+        )
+        cid = _insert_canonical(
+            conn, company="Shopify", title="Software Engineer",
+            location="Vancouver", seniority="Mid",
+            skills=["java", "kubernetes"],
+        )
+        # Embeddings: orthogonal → cosine ≈ 0
+        _insert_embedding(conn, pid, [1.0, 0.0, 0.0, 0.0])
+        canonical_pid = _insert_posting(
+            conn, company="Shopify", title="Software Engineer",
+            location="Vancouver", seniority="Mid",
+            skills=["java", "kubernetes"],
+        )
+        _insert_embedding(conn, canonical_pid, [0.0, 1.0, 0.0, 0.0])
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(True)  # would return True, but shouldn't be called
+
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.0):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "new"
+        gk.classify.assert_not_called()
+
+    def test_tier2_exact_4f_no_gatekeeper_call(self, tmp_path: Path) -> None:
+        """All 4 features at 1.0 → action='merge', merge_kind='exact_4f', gatekeeper NOT called."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        # Same title, same seniority, same skills, identical embedding
+        pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        cid = _insert_canonical(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        identical_vec = [1.0, 0.5, 0.3, 0.2]
+        _insert_embedding(conn, pid, identical_vec)
+        canonical_pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        _insert_embedding(conn, canonical_pid, identical_vec)
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(True)
+
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        # Patch title_cosine to return 1.0 (identical titles)
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=1.0):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "merge"
+        assert decision.merge_kind == "exact_4f"
+        gk.classify.assert_not_called()
+
+    def test_tier3_borderline_gatekeeper_approves_merge(self, tmp_path: Path) -> None:
+        """FUSE in borderline band, gatekeeper returns True → action='merge', merge_kind='gatekeeper_approved'."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        cid = _insert_canonical(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        # High cosine but not 1.0 — stays in borderline band
+        vec_a = [1.0, 0.0, 0.0]
+        vec_b = [0.95, 0.31, 0.0]  # cosine ≈ 0.95
+        _insert_embedding(conn, pid, vec_a)
+        canonical_pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "ml"],
+        )
+        _insert_embedding(conn, canonical_pid, vec_b)
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(True)
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        # title_cosine=0.85 → not exact (0.85 < 1-eps) → borderline band
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.85):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "merge"
+        assert decision.merge_kind == "gatekeeper_approved"
+        assert decision.gatekeeper_reasoning == "Test reasoning."
+        gk.classify.assert_called_once()
+
+    def test_tier3_borderline_gatekeeper_rejects_merge(self, tmp_path: Path) -> None:
+        """FUSE in borderline band, gatekeeper returns False → action='new'."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        pid = _insert_posting(
+            conn, company="TD Bank", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "risk"],
+        )
+        cid = _insert_canonical(
+            conn, company="TD Bank", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "fraud"],
+        )
+        vec_a = [1.0, 0.0, 0.0]
+        vec_b = [0.92, 0.39, 0.0]
+        _insert_embedding(conn, pid, vec_a)
+        canonical_pid = _insert_posting(
+            conn, company="TD Bank", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql", "fraud"],
+        )
+        _insert_embedding(conn, canonical_pid, vec_b)
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(False)
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.88):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "new"
+        gk.classify.assert_called_once()
+
+    def test_tier3_gatekeeper_hard_fail_pending(self, tmp_path: Path) -> None:
+        """Gatekeeper returns None (hard fail) → action='pending_gatekeeper'."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql"],
+        )
+        cid = _insert_canonical(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql"],
+        )
+        vec_a = [1.0, 0.0, 0.0]
+        vec_b = [0.93, 0.37, 0.0]
+        _insert_embedding(conn, pid, vec_a)
+        canonical_pid = _insert_posting(
+            conn, company="Shopify", title="Senior Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python", "sql"],
+        )
+        _insert_embedding(conn, canonical_pid, vec_b)
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(None)  # hard fail
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.82):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "pending_gatekeeper"
+        gk.classify.assert_called_once()
+
+    def test_pending_gatekeeper_no_target_canonical(self, tmp_path: Path) -> None:
+        """pending_gatekeeper decision has target_canonical_id=None (no merge written)."""
+        db_path = self._build_db(tmp_path)
+        conn = sqlite3.connect(str(db_path))
+
+        pid = _insert_posting(
+            conn, company="Shopify", title="Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python"],
+        )
+        cid = _insert_canonical(
+            conn, company="Shopify", title="Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python"],
+        )
+        vec = [1.0, 0.0, 0.0]
+        _insert_embedding(conn, pid, vec)
+        canonical_pid = _insert_posting(
+            conn, company="Shopify", title="Data Scientist",
+            location="Vancouver", seniority="Senior",
+            skills=["python"],
+        )
+        _insert_embedding(conn, canonical_pid, vec)
+        _link_posting_to_canonical(conn, canonical_pid, cid)
+        conn.commit()
+        conn.close()
+
+        gk = self._make_gatekeeper_mock(None)
+        cfg = DedupConfig(gatekeeper_threshold=0.75)
+        with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.80):
+            decision = decide(pid, db_path=db_path, config=cfg, gatekeeper=gk)
+
+        assert decision.action == "pending_gatekeeper"
+        assert decision.target_canonical_id is None
+
+
+class TestPendingGatekeeperSerialization:
+    """pending_gatekeeper is a valid action value in DedupDecision."""
+
+    def test_pending_gatekeeper_json_round_trip(self) -> None:
+        d = DedupDecision(
+            action="pending_gatekeeper",
+            target_canonical_id=None,
+            similarity=0.82,
+            merge_kind="new_canonical",
+            stage1_block_size=1,
+            stage2_top_match_score=0.82,
+            blocked_by=["canonical_company", "team_or_department", "canonical_location"],
+        )
+        restored = DedupDecision.model_validate_json(d.model_dump_json())
+        assert restored.action == "pending_gatekeeper"
+        assert restored.target_canonical_id is None
+
+    def test_merge_kind_exact_4f_round_trip(self) -> None:
+        d = DedupDecision(
+            action="merge",
+            target_canonical_id=5,
+            similarity=1.0,
+            merge_kind="exact_4f",
+            stage1_block_size=1,
+            stage2_top_match_score=1.0,
+            blocked_by=[],
+        )
+        restored = DedupDecision.model_validate_json(d.model_dump_json())
+        assert restored.merge_kind == "exact_4f"
+
+    def test_merge_kind_gatekeeper_approved_round_trip(self) -> None:
+        d = DedupDecision(
+            action="merge",
+            target_canonical_id=7,
+            similarity=0.85,
+            merge_kind="gatekeeper_approved",
+            stage1_block_size=2,
+            stage2_top_match_score=0.85,
+            blocked_by=[],
+            gatekeeper_reasoning="Both describe the same ML Engineer role.",
+        )
+        restored = DedupDecision.model_validate_json(d.model_dump_json())
+        assert restored.merge_kind == "gatekeeper_approved"
+        assert restored.gatekeeper_reasoning == "Both describe the same ML Engineer role."

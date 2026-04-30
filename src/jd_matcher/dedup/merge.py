@@ -339,6 +339,20 @@ def apply_decision(
             posting = _fetch_posting(candidate_id, conn)
             posting["source"] = source  # override with resolved source
 
+            if decision.action == "pending_gatekeeper":
+                # Fail-CLOSED: gatekeeper hard-failed.  The posting stays as-is —
+                # no canonical created, no link written.  Next pipeline run retries.
+                logger.info(
+                    "C29 pending_gatekeeper: posting_id=%d — deferred (no DB writes)",
+                    candidate_id,
+                )
+                raise ValueError(
+                    f"apply_decision called with action='pending_gatekeeper' for "
+                    f"posting {candidate_id}. C29 must not be called for deferred "
+                    f"decisions — the caller (pipeline.py) must check the action "
+                    f"before invoking apply_decision."
+                )
+
             if decision.action == "new":
                 canonical_id = _insert_new_canonical(posting, conn, now)
 

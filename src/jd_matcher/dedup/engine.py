@@ -1,4 +1,4 @@
-"""C21 — Two-Stage Dedup Engine: BLOCK + FUSE.
+"""C21 — Two-Stage Dedup Engine: BLOCK + FUSE + LLM Gatekeeper.
 
 Public API:
     decide(posting_id, db_path=None, provider=None) -> DedupDecision
@@ -14,6 +14,17 @@ Stage 2 — FUSE: for each BLOCK candidate compute:
     Weights are config-driven (config/dedup.yaml: dedup.fuse_weight_*).
     NULL terms contribute 0 — no weight renormalization (safe default: degraded
     data → lower score → less likely to merge).
+
+3-Tier Decision (TASK-M2-012):
+    fuse_score < gatekeeper_threshold (0.75)
+        → action='new'  (no gatekeeper call)
+    ALL 4 component features individually >= 1.0 - EPSILON  (exact-match short-circuit)
+        → action='merge', merge_kind='exact_4f'  (no gatekeeper call)
+    gatekeeper_threshold <= fuse_score < exact-match
+        → call LLM gatekeeper (C32)
+        → gatekeeper returns True  → action='merge', merge_kind='gatekeeper_approved'
+        → gatekeeper returns False → action='new'
+        → gatekeeper fails (all retries) → action='pending_gatekeeper' (fail-CLOSED)
 
 Safety check (Step 0): postings whose posting_embeddings.text_source='full_jd'
     are short-circuited to action='new' before BLOCK runs.
@@ -48,6 +59,10 @@ _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 # src/jd_matcher/dedup/engine.py → dedup/ → jd_matcher/ → src/ → project root
 _DEFAULT_DEDUP_CONFIG_PATH = Path(__file__).parents[3] / "config" / "dedup.yaml"
 
+# Component-level epsilon for the 4-feature exact-match short-circuit.
+# Each of the 4 FUSE components must individually be >= 1.0 - _EXACT_EPSILON.
+_EXACT_EPSILON = 1e-6
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -56,7 +71,12 @@ _DEFAULT_DEDUP_CONFIG_PATH = Path(__file__).parents[3] / "config" / "dedup.yaml"
 
 @dataclass(frozen=True)
 class DedupConfig:
+    # LEGACY — kept for migration safety; no longer used in 3-tier decide() logic.
     auto_merge_threshold: float = 0.90
+    # Dispatch threshold: FUSE below this → action='new' without calling gatekeeper.
+    gatekeeper_threshold: float = 0.75
+    # Total gatekeeper attempts = 1 + gatekeeper_retry_count.
+    gatekeeper_retry_count: int = 1
     fuse_weight_embedding: float = 0.4
     fuse_weight_skills: float = 0.3
     fuse_weight_title: float = 0.2
@@ -73,6 +93,8 @@ def _load_dedup_config(path: Path | None = None) -> DedupConfig:
         dedup_raw = raw.get("dedup", {})
         return DedupConfig(
             auto_merge_threshold=float(dedup_raw.get("auto_merge_threshold", 0.90)),
+            gatekeeper_threshold=float(dedup_raw.get("gatekeeper_threshold", 0.75)),
+            gatekeeper_retry_count=int(dedup_raw.get("gatekeeper_retry_count", 1)),
             fuse_weight_embedding=float(dedup_raw.get("fuse_weight_embedding", 0.4)),
             fuse_weight_skills=float(dedup_raw.get("fuse_weight_skills", 0.3)),
             fuse_weight_title=float(dedup_raw.get("fuse_weight_title", 0.2)),
@@ -89,15 +111,35 @@ def _load_dedup_config(path: Path | None = None) -> DedupConfig:
 
 
 class DedupDecision(BaseModel):
-    """Result of C21's two-stage dedup evaluation for a single posting."""
+    """Result of C21's evaluation for a single posting.
 
-    action: Literal["merge", "new"]
+    action values:
+        'merge'               — posting maps to an existing canonical
+        'new'                 — posting becomes a new canonical
+        'pending_gatekeeper'  — gatekeeper hard-failed; posting deferred (fail-CLOSED)
+
+    merge_kind values:
+        'new_canonical'       — action='new' path
+        'exact_4f'            — auto-merged via 4-feature exact-match short-circuit
+        'gatekeeper_approved' — LLM gatekeeper confirmed same role
+        'content_dedup'       — LEGACY: stored in older posting_canonical_links rows
+        'repost'              — re-tagged by C30 Repost Detector (still valid)
+    """
+
+    action: Literal["merge", "new", "pending_gatekeeper"]
     target_canonical_id: int | None
     similarity: float
-    merge_kind: Literal["content_dedup", "repost", "new_canonical"]
+    merge_kind: Literal[
+        "content_dedup",      # LEGACY — kept for backward compat with stored rows
+        "repost",             # C30 re-tag
+        "new_canonical",      # action='new' path
+        "exact_4f",           # 4-feature exact-match short-circuit
+        "gatekeeper_approved", # LLM gatekeeper approved
+    ]
     stage1_block_size: int
     stage2_top_match_score: float
     blocked_by: list[str]
+    gatekeeper_reasoning: str | None = None  # populated when gatekeeper ran
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +157,7 @@ class _CanonicalCandidate:
     team_or_department: str | None
     top_skills: list[str]  # decoded from JSON
     role_summary: str | None
+    full_jd: str | None  # needed by gatekeeper (C32 uses full JD, not role_summary)
 
 
 @dataclass
@@ -128,6 +171,7 @@ class _PostingRow:
     team_or_department: str | None
     top_skills: list[str]
     role_summary: str | None
+    full_jd: str | None  # needed by gatekeeper
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +277,7 @@ def _block_lookup(
     _SELECT_COLS = (
         "SELECT canonical_id, canonical_title, canonical_company, "
         "canonical_seniority, canonical_location, team_or_department, "
-        "top_skills, role_summary FROM canonical_postings "
+        "top_skills, role_summary, full_jd FROM canonical_postings "
     )
 
     if team_or_department is None:
@@ -271,6 +315,7 @@ def _block_lookup(
                 team_or_department=row[5],
                 top_skills=skills,
                 role_summary=row[7],
+                full_jd=row[8],
             )
         )
     return candidates
@@ -334,7 +379,18 @@ def _load_canonical_embedding(canonical_id: int, conn: sqlite3.Connection) -> np
     return np.frombuffer(blob, dtype=np.float32)
 
 
-def _compute_fuse_score(
+@dataclass
+class _FuseComponents:
+    """Per-component FUSE scores before weighting, used by the exact-match check."""
+
+    embedding_cosine: float
+    jaccard_top_skills: float
+    title_cosine: float
+    seniority_match: float
+    fuse_score: float  # weighted total
+
+
+def _compute_fuse_components(
     *,
     posting: _PostingRow,
     candidate: _CanonicalCandidate,
@@ -342,15 +398,12 @@ def _compute_fuse_score(
     canonical_vec: np.ndarray | None,
     config: DedupConfig,
     db_path: Path,
-) -> tuple[float, dict[str, float]]:
-    """Compute the weighted fuse similarity between a posting and a canonical candidate.
+) -> _FuseComponents:
+    """Compute per-component FUSE scores between a posting and a canonical candidate.
 
     When a term is NULL/missing, it contributes 0 to the total.
     Weights are NOT renormalized — degraded data yields a lower total score,
     which reduces the chance of a false merge.  This is the safe default.
-
-    Returns:
-        (total_score, per_term_breakdown)
     """
     # Embedding cosine
     if posting_vec is not None and canonical_vec is not None:
@@ -376,14 +429,65 @@ def _compute_fuse_score(
         + config.fuse_weight_seniority * sen_sim
     )
 
+    return _FuseComponents(
+        embedding_cosine=emb_sim,
+        jaccard_top_skills=skills_sim,
+        title_cosine=t_sim,
+        seniority_match=sen_sim,
+        fuse_score=total,
+    )
+
+
+def _compute_fuse_score(
+    *,
+    posting: _PostingRow,
+    candidate: _CanonicalCandidate,
+    posting_vec: np.ndarray | None,
+    canonical_vec: np.ndarray | None,
+    config: DedupConfig,
+    db_path: Path,
+) -> tuple[float, dict[str, float]]:
+    """Compute the weighted fuse similarity between a posting and a canonical candidate.
+
+    Thin wrapper around _compute_fuse_components for backward compatibility with
+    tests that import this function directly.
+    """
+    components = _compute_fuse_components(
+        posting=posting,
+        candidate=candidate,
+        posting_vec=posting_vec,
+        canonical_vec=canonical_vec,
+        config=config,
+        db_path=db_path,
+    )
     breakdown = {
-        "emb_cosine": emb_sim,
-        "skills_jaccard": skills_sim,
-        "title_cosine": t_sim,
-        "seniority_match": sen_sim,
-        "total": total,
+        "emb_cosine": components.embedding_cosine,
+        "skills_jaccard": components.jaccard_top_skills,
+        "title_cosine": components.title_cosine,
+        "seniority_match": components.seniority_match,
+        "total": components.fuse_score,
     }
-    return total, breakdown
+    return components.fuse_score, breakdown
+
+
+# ---------------------------------------------------------------------------
+# 4-feature exact-match short-circuit
+# ---------------------------------------------------------------------------
+
+
+def is_exact_match(components: _FuseComponents) -> bool:
+    """Return True iff all 4 FUSE component scores are individually >= 1.0 - EPSILON.
+
+    This is the component-level exact-match check — NOT a fuse_score threshold.
+    Each of the 4 components must independently pass the epsilon test:
+        embedding_cosine, jaccard_top_skills, title_cosine, seniority_match
+    """
+    return (
+        components.embedding_cosine >= 1.0 - _EXACT_EPSILON
+        and components.jaccard_top_skills >= 1.0 - _EXACT_EPSILON
+        and components.title_cosine >= 1.0 - _EXACT_EPSILON
+        and components.seniority_match >= 1.0 - _EXACT_EPSILON
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -396,17 +500,21 @@ def decide(
     db_path: Path | None = None,
     config: DedupConfig | None = None,
     config_path: Path | None = None,
+    gatekeeper: object | None = None,
 ) -> DedupDecision:
-    """Run the two-stage dedup algorithm for a single posting.
+    """Run the two-stage dedup algorithm + LLM gatekeeper for a single posting.
 
     Returns a DedupDecision without writing anything to the database.
     All writes (canonical record creation / merge) are handled by C29 (M2-009).
 
     Args:
-        posting_id: ID of the candidate posting in the postings table.
-        db_path:    Path to the SQLite DB (defaults to ~/.jd-matcher/jd-matcher.db).
-        config:     DedupConfig override (useful in tests to avoid file I/O).
+        posting_id:  ID of the candidate posting in the postings table.
+        db_path:     Path to the SQLite DB (defaults to ~/.jd-matcher/jd-matcher.db).
+        config:      DedupConfig override (useful in tests to avoid file I/O).
         config_path: Path to dedup.yaml override (used when config=None).
+        gatekeeper:  LLMDedupClassifier instance (or any object with a classify()
+                     method).  If None, a default classifier is built when needed.
+                     Pass an explicit instance in tests to inject mocks.
 
     Raises:
         ValueError: When posting_id is not found in the DB.
@@ -449,7 +557,7 @@ def decide(
         posting_row = conn.execute(
             """
             SELECT id, user_id, canonical_title, canonical_company, canonical_location,
-                   team_or_department, seniority_band, top_skills
+                   team_or_department, seniority_band, top_skills, full_jd
             FROM postings
             WHERE id = ?
             """,
@@ -458,7 +566,7 @@ def decide(
         if posting_row is None:
             raise ValueError(f"Posting {posting_id} not found in DB")
 
-        pid, user_id, title, company, location, team, seniority, raw_skills = posting_row
+        pid, user_id, title, company, location, team, seniority, raw_skills, full_jd = posting_row
         try:
             skills: list[str] = json.loads(raw_skills) if raw_skills else []
         except (json.JSONDecodeError, TypeError):
@@ -474,6 +582,7 @@ def decide(
             team_or_department=team,
             top_skills=skills,
             role_summary=None,  # not needed directly; embedding loaded from posting_embeddings
+            full_jd=full_jd,
         )
 
         if not posting.canonical_company or not posting.canonical_location:
@@ -536,11 +645,12 @@ def decide(
 
         best_score = 0.0
         best_candidate_id: int | None = None
-        best_breakdown: dict[str, float] = {}
+        best_components: _FuseComponents | None = None
+        best_candidate: _CanonicalCandidate | None = None
 
         for cand in candidates:
             canonical_vec = _load_canonical_embedding(cand.canonical_id, conn)
-            score, breakdown = _compute_fuse_score(
+            components = _compute_fuse_components(
                 posting=posting,
                 candidate=cand,
                 posting_vec=posting_vec,
@@ -548,39 +658,39 @@ def decide(
                 config=cfg,
                 db_path=resolved_db,
             )
+            score = components.fuse_score
 
             logger.debug(
-                "dedup: posting %d vs canonical %d: score=%.4f breakdown=%s",
+                "dedup: posting %d vs canonical %d: score=%.4f emb=%.3f skills=%.3f title=%.3f seniority=%.3f",
                 posting_id,
                 cand.canonical_id,
                 score,
-                breakdown,
+                components.embedding_cosine,
+                components.jaccard_top_skills,
+                components.title_cosine,
+                components.seniority_match,
             )
 
             if score > best_score:
                 best_score = score
                 best_candidate_id = cand.canonical_id
-                best_breakdown = breakdown
+                best_components = components
+                best_candidate = cand
 
         logger.info(
-            "dedup: posting %d stage2_top_match=%.4f (threshold=%.2f) best_canonical=%s",
+            "dedup: posting %d stage2_top_match=%.4f (gatekeeper_threshold=%.2f) best_canonical=%s",
             posting_id,
             best_score,
-            cfg.auto_merge_threshold,
+            cfg.gatekeeper_threshold,
             best_candidate_id,
         )
 
-        if best_score >= cfg.auto_merge_threshold and best_candidate_id is not None:
-            return DedupDecision(
-                action="merge",
-                target_canonical_id=best_candidate_id,
-                similarity=best_score,
-                merge_kind="content_dedup",
-                stage1_block_size=block_size,
-                stage2_top_match_score=best_score,
-                blocked_by=blocked_by_fields,
-            )
-        else:
+        # ----------------------------------------------------------------
+        # 3-Tier Decision
+        # ----------------------------------------------------------------
+
+        # Tier 1: below gatekeeper threshold → no merge, no gatekeeper call
+        if best_score < cfg.gatekeeper_threshold or best_candidate_id is None:
             return DedupDecision(
                 action="new",
                 target_canonical_id=None,
@@ -589,6 +699,110 @@ def decide(
                 stage1_block_size=block_size,
                 stage2_top_match_score=best_score,
                 blocked_by=blocked_by_fields,
+            )
+
+        # Tier 2: 4-feature exact-match short-circuit → auto-merge, no gatekeeper call
+        if is_exact_match(best_components):
+            logger.info(
+                "dedup: posting %d → canonical %d: exact-4f match (all components >= 1-ε)",
+                posting_id,
+                best_candidate_id,
+            )
+            return DedupDecision(
+                action="merge",
+                target_canonical_id=best_candidate_id,
+                similarity=best_score,
+                merge_kind="exact_4f",
+                stage1_block_size=block_size,
+                stage2_top_match_score=best_score,
+                blocked_by=blocked_by_fields,
+            )
+
+        # Tier 3: borderline band → call LLM gatekeeper
+        logger.info(
+            "dedup: posting %d → canonical %d: fuse=%.4f in borderline band — dispatching gatekeeper",
+            posting_id,
+            best_candidate_id,
+            best_score,
+        )
+
+        # Build the gatekeeper lazily (so tests can inject a mock via the
+        # gatekeeper= parameter without touching the factory)
+        resolved_gatekeeper = gatekeeper
+        if resolved_gatekeeper is None:
+            from jd_matcher.dedup.classifier import make_classifier
+            resolved_gatekeeper = make_classifier(db_path=resolved_db)
+
+        posting_a_dict = {
+            "id": posting.posting_id,
+            "full_jd": posting.full_jd or "",
+            "canonical_title": posting.canonical_title or "",
+            "canonical_company": posting.canonical_company or "",
+        }
+        posting_b_dict = {
+            "id": best_candidate_id,
+            "full_jd": best_candidate.full_jd or "",
+            "canonical_title": best_candidate.canonical_title or "",
+            "canonical_company": best_candidate.canonical_company or "",
+        }
+
+        verdict = resolved_gatekeeper.classify(
+            posting_a_dict,
+            posting_b_dict,
+            fuse_score=best_score,
+            retry_count=cfg.gatekeeper_retry_count,
+        )
+
+        if verdict is None:
+            # Fail-CLOSED: both retry attempts failed — defer
+            logger.warning(
+                "dedup: posting %d → canonical %d: gatekeeper hard-fail → pending_gatekeeper",
+                posting_id,
+                best_candidate_id,
+            )
+            return DedupDecision(
+                action="pending_gatekeeper",
+                target_canonical_id=None,
+                similarity=best_score,
+                merge_kind="new_canonical",
+                stage1_block_size=block_size,
+                stage2_top_match_score=best_score,
+                blocked_by=blocked_by_fields,
+            )
+
+        if verdict.is_same_role:
+            logger.info(
+                "dedup: posting %d → canonical %d: gatekeeper approved merge. Reasoning: %s",
+                posting_id,
+                best_candidate_id,
+                verdict.reasoning,
+            )
+            return DedupDecision(
+                action="merge",
+                target_canonical_id=best_candidate_id,
+                similarity=best_score,
+                merge_kind="gatekeeper_approved",
+                stage1_block_size=block_size,
+                stage2_top_match_score=best_score,
+                blocked_by=blocked_by_fields,
+                gatekeeper_reasoning=verdict.reasoning,
+            )
+        else:
+            logger.info(
+                "dedup: posting %d → canonical %d: gatekeeper rejected merge. Reasoning: %s",
+                posting_id,
+                best_candidate_id,
+                verdict.reasoning,
+            )
+            return DedupDecision(
+                action="new",
+                target_canonical_id=None,
+                similarity=best_score,
+                merge_kind="new_canonical",
+                stage1_block_size=block_size,
+                stage2_top_match_score=best_score,
+                blocked_by=blocked_by_fields,
+                gatekeeper_reasoning=verdict.reasoning,
             )
     finally:
         conn.close()

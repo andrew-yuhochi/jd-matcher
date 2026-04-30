@@ -40,6 +40,17 @@ def _ensure_postings_canonical_seniority_column(conn: sqlite3.Connection) -> Non
         conn.execute("ALTER TABLE postings ADD COLUMN canonical_seniority TEXT NULL;")
 
 
+def _ensure_llm_call_ledger_notes_column(conn: sqlite3.Connection) -> None:
+    """Add notes column to llm_call_ledger if absent (M2-012 migration).
+
+    The notes column carries a JSON payload for calls that need per-pair context
+    (e.g. dedup_gatekeeper calls store {posting_a_id, posting_b_id, fuse_score}).
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(llm_call_ledger);")}
+    if "notes" not in existing:
+        conn.execute("ALTER TABLE llm_call_ledger ADD COLUMN notes TEXT NULL;")
+
+
 def _ensure_email_ingest_log_filter_columns(conn: sqlite3.Connection) -> None:
     """Add filter_status / filter_reason columns + their index to email_ingest_log if absent.
 
@@ -92,6 +103,7 @@ def init_db(db_path: Path | None = None) -> None:
         _ensure_pipeline_runs_counts_column(conn)
         _ensure_postings_canonical_seniority_column(conn)
         _ensure_email_ingest_log_filter_columns(conn)
+        _ensure_llm_call_ledger_notes_column(conn)
         # Seed the single 'default' user row — ignored if it already exists.
         conn.execute(
             "INSERT OR IGNORE INTO users (id) VALUES (?);",
