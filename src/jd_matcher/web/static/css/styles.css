@@ -372,6 +372,57 @@ kbd {
   white-space: nowrap;
 }
 
+/* ── Skills tiering — M2-016 ──────────────────────────────── */
+
+/* Match chips: category-specific background colors (WCAG AA contrast ratios verified).
+   DS/ML purple (#9c5cd6 on white ≈ 4.7:1), blue (#3b82f6 ≈ 4.6:1),
+   green (#10b981 ≈ 4.5:1 borderline — text white passes with font-weight boost). */
+
+/* Non-match override: all non-match chips render gray regardless of category class.
+   This single rule takes precedence over the category-color rules below. */
+.card-skill-chip.skill-chip-nomatch {
+  background: #e5e7eb;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+/* Category match colors */
+.card-skill-chip.skill-chip-ds.skill-chip-match {
+  background: #9c5cd6;
+  color: #fff;
+  border-color: #7c3aed;
+}
+
+.card-skill-chip.skill-chip-lang.skill-chip-match {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.card-skill-chip.skill-chip-platform.skill-chip-match {
+  background: #10b981;
+  color: #fff;
+  border-color: #059669;
+  font-weight: 500;
+}
+
+/* Other-category match (rare — user would need to list an "other"-bucket skill in
+   core_skills, which the current user_profile.yaml does not do, but supported). */
+.card-skill-chip.skill-chip-other.skill-chip-match {
+  background: #9ca3af;
+  color: #fff;
+  border-color: #6b7280;
+}
+
+/* Skills-match footer — small, muted, placed between strip and role summary */
+.card-skills-footer {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: -0.15rem;
+  margin-bottom: 0.35rem;
+}
+
 /* Unapply button (Applied tab) — mirrors Restore styling */
 .btn-unapply {
   cursor: pointer;

@@ -25,6 +25,13 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from jd_matcher.skills import (
+    ClassifiedSkill,
+    classify_and_sort_skills,
+    load_skill_categories,
+    load_user_profile,
+)
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
@@ -71,6 +78,10 @@ class CanonicalCard(BaseModel):
     sources: list[SourceLink]        # ordered by source precedence
     is_reposted: bool                # True if any link has merge_kind='repost'
     primary_posting_id: Optional[int]  # earliest-linked posting; used for state POST endpoints
+    # M2-016 — skills tiering
+    classified_skills: list[ClassifiedSkill]  # sorted: matches first (by category priority), then non-matches
+    skills_match_count: int                   # number of skills in user's core_skills
+    skills_total_count: int                   # total skills on this card (before cap)
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +221,10 @@ def select_main(
             (user_id, user_id, user_id),
         ).fetchall()
 
+        # Load skill configs once per select_main() call (lru_cache makes this cheap).
+        skill_categories = load_skill_categories()
+        user_profile = load_user_profile()
+
         cards: list[CanonicalCard] = []
         for row in rows:
             (
@@ -224,6 +239,12 @@ def select_main(
                 sources_summary, merge_kind_history,
                 sources, is_reposted, primary_posting_id,
             ) = _aggregate_link_info(canonical_id, conn)
+
+            classified_skills, skills_match_count, skills_total_count = classify_and_sort_skills(
+                top_skills or [],
+                user_profile,
+                skill_categories,
+            )
 
             cards.append(CanonicalCard(
                 canonical_id=canonical_id,
@@ -243,6 +264,9 @@ def select_main(
                 sources=sources,
                 is_reposted=is_reposted,
                 primary_posting_id=primary_posting_id,
+                classified_skills=classified_skills,
+                skills_match_count=skills_match_count,
+                skills_total_count=skills_total_count,
             ))
 
     finally:

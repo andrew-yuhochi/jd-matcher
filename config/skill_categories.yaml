@@ -1,0 +1,157 @@
+# Universal skill → category mapping. Used to color-code chips on canonical cards.
+# Anything not listed here falls back to "other" (gray).
+# Match against user_profile.core_skills is case-insensitive and uses the alias map below.
+
+categories:
+  ds_ml:
+    color: purple
+    css_class: skill-chip-ds
+    skills:
+      - Machine Learning
+      - Data Analysis
+      - Data Science
+      - Statistical Analysis
+      - Statistics
+      - Deep Learning
+      - LLMs
+      - Generative AI
+      - AI
+      - NLP
+      - A/B Testing
+      - Causal Inference
+      - Predictive Modeling
+      - MLOps
+      - Feature Engineering
+      - Computer Vision
+      - Data Mining
+      - Algorithms
+      - Experimental Design
+      - Recommendation Systems
+      - Reinforcement Learning
+      - Time Series
+      # Additional skills seen in live DB
+      - Artificial Intelligence
+      - Agentic AI
+      - Biostatistics
+      - Bioinformatics
+      - Biomedical Science
+      - Clustering
+      - Customer Analytics
+      - Marketing Analytics
+      - Model Deployment
+      - Quantitative Data Analysis
+      - Quantitative Finance
+      - Quantitative Research
+      - Quantitative Risk Analytics
+      - Signal Processing
+      - Statistical Planning
+      - Statistical Reporting
+      - Stochastic Modeling
+      - Transformer-based Models
+      - XGBoost
+      - SHAP
+      - BigQuery ML
+      - Autonomous Systems
+      - 6D Pose Estimation
+      - 3D Geometry
+      - Stereo Depth Estimation
+  languages:
+    color: blue
+    css_class: skill-chip-lang
+    skills:
+      - Python
+      - SQL
+      - R
+      - Scala
+      - Java
+      - JavaScript
+      - C++
+      - C#
+      # Additional languages seen in live DB
+      - TypeScript
+      - XML
+      - DAX
+      - SAS
+      - SPSS
+      - .NET
+      - gRPC
+      - Unix/Linux
+  platforms:
+    color: green
+    css_class: skill-chip-platform
+    skills:
+      - PyTorch
+      - TensorFlow
+      - Scikit-Learn
+      - Pandas
+      - Polars
+      - AWS
+      - Azure
+      - GCP
+      - Cloud Computing
+      - Spark
+      - Databricks
+      - Kubernetes
+      - Docker
+      - CI/CD
+      - Microservices
+      - Data Pipelines
+      - Airflow
+      - Kafka
+      - Elasticsearch
+      - dbt
+      - LangChain
+      - APIs
+      - Power BI
+      - Tableau
+      # Additional platforms seen in live DB
+      - LangGraph
+      - AutoGen
+      - Snowflake
+      - Power Query
+      - Metabase
+      - Azure Data Factory
+      - Apache Spark
+      - PySpark
+      - TensorRT
+      - SAP HANA SQL
+      - SAP HANA Modelling
+      - SAP HANA XSJS
+      - S/4 HANA Embedded Analytics
+      - CDS views
+      - n8n
+      - Microsoft 365
+      - Vertex AI
+  other:
+    color: gray
+    css_class: skill-chip-other
+    # Anything not in the above three categories falls here automatically.
+    # Examples (do not need explicit listing — fallback handles them):
+    #   Data Visualization, Data Governance, Data Modeling, Data Quality,
+    #   Data Management, Business Intelligence, Business Analysis,
+    #   Optimization, Automation, Derivatives Pricing, GenAI (handled via aliases)
+
+# Category priority for ordering matching skills (left-to-right in the strip).
+priority_order:
+  - ds_ml
+  - languages
+  - platforms
+  - other
+
+# Aliases — case-insensitive bi-directional matching. Maps "alias" → "canonical".
+# When a card has skill "GenAI", it matches user_profile entries for "Generative AI".
+# Conversely if user_profile has "GenAI", it matches card skills for "Generative AI".
+aliases:
+  Generative AI: [GenAI, generative ai, gen ai]
+  Scikit-Learn: [scikit-learn, sklearn, SKLearn]
+  Pandas: [pandas]
+  TensorFlow: [tensorflow, TF]
+  PyTorch: [pytorch]
+  Machine Learning: [ML, machine learning]
+  LLMs: [LLM, llm, llms, Large Language Models]
+  AWS: [aws, Amazon Web Services]
+  Azure: [azure, Microsoft Azure]
+  GCP: [gcp, Google Cloud Platform, Google Cloud]
+  Time Series: [Time-Series Analysis, time series, time-series]
+  Spark: [Apache Spark, PySpark]
+  Artificial Intelligence: [Artificial Intelligence]

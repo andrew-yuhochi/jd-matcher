@@ -61,13 +61,18 @@
   {% if _meta_parts %}
   <div class="card-line2-meta">{{ _meta_parts | join(' · ') }}</div>
   {% endif %}
-  {# Line 3: top_skills chip strip (collapsed view; absent when empty) #}
-  {% if posting.top_skills %}
+  {# Line 3: skills chip strip — classified (match + category color) and ordered.
+     classified_skills is already capped at 10 and sorted: matches first (ds_ml →
+     languages → platforms → other), non-matches appended. Absent when empty. #}
+  {% if posting.classified_skills %}
   <div class="card-skills-strip">
-    {% for skill in posting.top_skills[:10] %}
-      <span class="card-skill-chip">{{ skill }}</span>
+    {% for cs in posting.classified_skills %}
+      <span class="card-skill-chip {{ cs.css_class }} {% if cs.is_match %}skill-chip-match{% else %}skill-chip-nomatch{% endif %}">{{ cs.skill }}</span>
     {% endfor %}
   </div>
+  {% if posting.skills_total_count > 0 %}
+  <div class="card-skills-footer">Skills match: {{ posting.skills_match_count }}/{{ posting.skills_total_count }}</div>
+  {% endif %}
   {% endif %}
   {# Line 4: role_summary first-sentence teaser (truncated ~120 chars) #}
   {% if posting.role_summary %}

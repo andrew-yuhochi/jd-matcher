@@ -1167,3 +1167,249 @@ def test_m2015_css_rules_exist() -> None:
         ".card-line1-right",
     ]:
         assert rule in css, f"CSS rule '{rule}' missing from styles.css"
+
+
+# ---------------------------------------------------------------------------
+# TASK-M2-016 — Skills tiering: match-against-stack + category color + ordering
+# ---------------------------------------------------------------------------
+
+
+from jd_matcher.skills import (  # noqa: E402 — grouped with imports for readability
+    CategorySpec,
+    ClassifiedSkill,
+    SkillCategoryMap,
+    UserProfile,
+    classify_and_sort_skills,
+)
+
+
+def _make_skill_map(
+    *,
+    ds_ml: list[str] | None = None,
+    languages: list[str] | None = None,
+    platforms: list[str] | None = None,
+    aliases: dict[str, str] | None = None,
+) -> SkillCategoryMap:
+    """Build a minimal SkillCategoryMap for unit tests."""
+    return SkillCategoryMap(
+        categories={
+            "ds_ml": CategorySpec(color="purple", css_class="skill-chip-ds", skills=ds_ml or []),
+            "languages": CategorySpec(color="blue", css_class="skill-chip-lang", skills=languages or []),
+            "platforms": CategorySpec(color="green", css_class="skill-chip-platform", skills=platforms or []),
+            "other": CategorySpec(color="gray", css_class="skill-chip-other", skills=[]),
+        },
+        priority_order=["ds_ml", "languages", "platforms", "other"],
+        alias_map=aliases or {},
+    )
+
+
+def _make_profile(core_skills: list[str]) -> UserProfile:
+    return UserProfile(core_skills=core_skills, core_skills_normalized=set())
+
+
+# ── Unit tests on classify_and_sort_skills ──────────────────────────────────
+
+
+def test_classify_and_sort_skills_returns_correct_counts() -> None:
+    """Direct unit test: match_count and total_count are accurate."""
+    skill_map = _make_skill_map(
+        ds_ml=["Machine Learning"],
+        languages=["Python", "SQL"],
+        platforms=["AWS"],
+    )
+    profile = _make_profile(["Python", "Machine Learning"])  # 2 of 4 match
+
+    skills = ["Machine Learning", "Python", "SQL", "AWS"]
+    classified, match_count, total_count = classify_and_sort_skills(skills, profile, skill_map)
+
+    assert total_count == 4, f"total_count should be 4, got {total_count}"
+    assert match_count == 2, f"match_count should be 2, got {match_count}"
+    assert len(classified) == 4  # no cap needed for 4 skills
+
+
+def test_alias_matching_genai_matches_generative_ai() -> None:
+    """Card skill 'GenAI' must match user_profile entry 'Generative AI' via alias."""
+    alias_map = {"genai": "generative ai", "generative ai": "generative ai"}
+    skill_map = _make_skill_map(ds_ml=["Generative AI"], aliases=alias_map)
+    profile = _make_profile(["Generative AI"])
+
+    classified, match_count, total_count = classify_and_sort_skills(["GenAI"], profile, skill_map)
+
+    assert match_count == 1, "GenAI should match via alias to Generative AI"
+    assert classified[0].is_match is True
+    assert classified[0].category == "ds_ml"
+
+
+def test_alias_matching_case_insensitive() -> None:
+    """Card skill 'python' (lowercase) must match user_profile 'Python'."""
+    skill_map = _make_skill_map(languages=["Python"])
+    profile = _make_profile(["Python"])
+
+    classified, match_count, _ = classify_and_sort_skills(["python"], profile, skill_map)
+
+    assert match_count == 1, "Case-insensitive match failed for 'python' vs 'Python'"
+    assert classified[0].is_match is True
+
+
+def test_skills_ordered_ds_then_lang_then_platform_then_other() -> None:
+    """Matching skills must appear in ds_ml → languages → platforms → other order."""
+    skill_map = _make_skill_map(
+        ds_ml=["Machine Learning"],
+        languages=["Python"],
+        platforms=["AWS"],
+    )
+    profile = _make_profile(["Python", "Machine Learning", "AWS"])
+
+    # Feed in reverse of expected priority order to confirm reordering
+    skills = ["AWS", "Python", "Machine Learning"]
+    classified, _, _ = classify_and_sort_skills(skills, profile, skill_map)
+
+    categories = [cs.category for cs in classified]
+    assert categories == ["ds_ml", "languages", "platforms"], (
+        f"Expected [ds_ml, languages, platforms] ordering, got {categories}"
+    )
+
+
+def test_empty_user_profile_all_skills_render_as_nomatch() -> None:
+    """With an empty core_skills, every skill must be is_match=False."""
+    skill_map = _make_skill_map(languages=["Python", "SQL"])
+    profile = _make_profile([])  # empty profile
+
+    classified, match_count, total_count = classify_and_sort_skills(["Python", "SQL"], profile, skill_map)
+
+    assert match_count == 0, "No skills should match an empty user profile"
+    assert all(not cs.is_match for cs in classified), "All chips must have is_match=False"
+
+
+def test_skills_capped_at_10_after_sorting() -> None:
+    """With 15 skills (8 match + 7 non-match), cap at 10 must preserve all 8 matches."""
+    skill_map = _make_skill_map(
+        ds_ml=["ML1", "ML2", "ML3"],
+        languages=["L1", "L2", "L3"],
+        platforms=["P1", "P2"],
+    )
+    matching_skills = ["ML1", "ML2", "ML3", "L1", "L2", "L3", "P1", "P2"]  # 8 matches
+    non_matching = ["NM1", "NM2", "NM3", "NM4", "NM5", "NM6", "NM7"]  # 7 non-matches
+    profile = _make_profile(matching_skills)
+
+    all_skills = matching_skills + non_matching  # 15 total, matches first in input too
+    classified, match_count, total_count = classify_and_sort_skills(all_skills, profile, skill_map)
+
+    assert total_count == 15, f"total_count should be 15, got {total_count}"
+    assert match_count == 8, f"match_count should be 8, got {match_count}"
+    assert len(classified) == 10, f"classified should be capped at 10, got {len(classified)}"
+    # All 8 matches must be present (non-matches are sacrificed at the cap)
+    rendered_match_skills = {cs.skill for cs in classified if cs.is_match}
+    assert rendered_match_skills == set(matching_skills), (
+        f"All 8 matches must survive the cap. Missing: {set(matching_skills) - rendered_match_skills}"
+    )
+
+
+def test_unknown_skill_falls_back_to_other_category() -> None:
+    """A skill not in any category list must get category='other'."""
+    skill_map = _make_skill_map(ds_ml=["Machine Learning"])
+    profile = _make_profile([])
+
+    classified, _, _ = classify_and_sort_skills(["SomeObscureSkill"], profile, skill_map)
+
+    assert classified[0].category == "other", (
+        f"Unknown skill should fall back to 'other', got {classified[0].category}"
+    )
+    assert classified[0].css_class == "skill-chip-other"
+
+
+# ── HTML-level tests (require client + db fixture) ──────────────────────────
+
+
+def test_match_skill_renders_with_category_color(client: TestClient, db: Path) -> None:
+    """A skill in user's core_skills must render chip with both category class and skill-chip-match."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # Python is in user_profile.yaml core_skills (languages category)
+    _pid, cid = _seed_canonical_enriched(conn, "Match Color Test", top_skills=["Python"])
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "skill-chip-lang" in fragment, "Python must have skill-chip-lang category class"
+    assert "skill-chip-match" in fragment, "Python (a core skill) must have skill-chip-match class"
+
+
+def test_nonmatch_skill_renders_gray(client: TestClient, db: Path) -> None:
+    """A skill NOT in user's core_skills must render with skill-chip-nomatch class."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # Tableau is in platforms category but NOT in user's core_skills
+    _pid, cid = _seed_canonical_enriched(conn, "Nomatch Gray Test", top_skills=["Tableau"])
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "skill-chip-nomatch" in fragment, "Tableau (not in core_skills) must have skill-chip-nomatch class"
+    assert "skill-chip-platform" in fragment, "Tableau must still have its category class"
+
+
+def test_skills_match_count_footer_renders(client: TestClient, db: Path) -> None:
+    """Footer must show 'Skills match: X/Y' when classified_skills is non-empty."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    # 3 matching (Python, SQL, AWS) + 2 non-matching (Tableau, Data Governance)
+    skills = ["Python", "SQL", "AWS", "Tableau", "Data Governance"]
+    _pid, cid = _seed_canonical_enriched(conn, "Footer Count Test", top_skills=skills)
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "Skills match:" in fragment, "Skills match footer must be present"
+    assert "3/5" in fragment, "Footer must show 3/5 (Python, SQL, AWS match; Tableau, Data Governance do not)"
+
+
+def test_skills_match_count_zero_total_no_footer(client: TestClient, db: Path) -> None:
+    """When top_skills is empty, the skills footer must be absent."""
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    _pid, cid = _seed_canonical_enriched(conn, "Empty Skills Footer Test", top_skills=[])
+    conn.commit()
+    conn.close()
+
+    html = client.get("/").text
+    card_start = html.find(f'id="card-{cid}"')
+    assert card_start != -1, f"card-{cid} missing"
+    card_end = html.find("</article>", card_start)
+    fragment = html[card_start:card_end]
+
+    assert "Skills match:" not in fragment, "Footer must be absent when top_skills is empty"
+    assert "card-skills-footer" not in fragment, "card-skills-footer must be absent when no skills"
+
+
+def test_m2016_css_rules_exist() -> None:
+    """styles.css must define all CSS rules added by TASK-M2-016."""
+    css_path = (
+        Path(__file__).parents[2]
+        / "src" / "jd_matcher" / "web" / "static" / "css" / "styles.css"
+    )
+    css = css_path.read_text()
+    for rule in [
+        ".card-skill-chip.skill-chip-nomatch",
+        ".card-skill-chip.skill-chip-ds.skill-chip-match",
+        ".card-skill-chip.skill-chip-lang.skill-chip-match",
+        ".card-skill-chip.skill-chip-platform.skill-chip-match",
+        ".card-skill-chip.skill-chip-other.skill-chip-match",
+        ".card-skills-footer",
+    ]:
+        assert rule in css, f"CSS rule '{rule}' missing from styles.css"

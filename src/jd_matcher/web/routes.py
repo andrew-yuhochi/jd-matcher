@@ -270,6 +270,10 @@ def _main_view_canonical_list(
                 "sources": [s.model_dump() for s in c.sources],
                 "is_reposted": c.is_reposted,
                 "is_viewed": False,  # canonical-level viewed state is M3+
+                # M2-016 — skills tiering
+                "classified_skills": [cs.model_dump() for cs in c.classified_skills],
+                "skills_match_count": c.skills_match_count,
+                "skills_total_count": c.skills_total_count,
             }
         )
     return result

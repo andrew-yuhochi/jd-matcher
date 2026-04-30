@@ -1,0 +1,39 @@
+# User profile for skills-match against canonical card extraction.
+# Edit core_skills to tune which skills get visually highlighted on cards.
+# Match is case-insensitive and alias-aware (see config/skill_categories.yaml::aliases).
+
+core_skills:
+  # DS/ML
+  - Machine Learning
+  - Data Analysis
+  - Data Science
+  - Statistical Analysis
+  - Statistics
+  - Deep Learning
+  - LLMs
+  - Generative AI
+  - AI
+  - NLP
+  - A/B Testing
+  - Causal Inference
+  - Predictive Modeling
+  - MLOps
+  - Feature Engineering
+  - Computer Vision
+  - Data Mining
+  # Languages
+  - Python
+  - SQL
+  - R
+  # Platforms / Frameworks
+  - PyTorch
+  - TensorFlow
+  - Scikit-Learn
+  - Pandas
+  - Polars
+  - AWS
+  - Azure
+  - GCP
+  - Cloud Computing
+  - Spark
+  - Databricks

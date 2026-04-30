@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 12 | 26 |
+| Done | 13 | 27 |
 | In Progress | 0 | 0 |
-| To Do | 3 | 3 |
+| To Do | 2 | 2 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 1 (M1) |
 | Invalidated tasks | — | 0 |
@@ -494,7 +494,7 @@
 
 ##### TASK-M2-016 — Skills tiering: match-against-stack + category color + ordering
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C9 (Web UI: frontend) — TDD §C9
@@ -510,18 +510,18 @@
 - **Demo Artifact**: Browser shows the tiered skills strip on the live 148-canonical DB — matching skills visually distinct by category color, non-matching lumped as gray, ordered DS/ML → Languages → Platforms → Other → non-matching, footer shows `Skills match: X/Y` per card.
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-016.md`
 - **Acceptance Criteria**:
-  - [ ] `config/user_profile.yaml` created with the 31-entry core_skills list
-  - [ ] `config/skill_categories.yaml` created with all canonical skills mapped to one of 4 categories + alias map (`GenAI` ↔ `Generative AI`, `Scikit-Learn` ↔ `scikit-learn`)
-  - [ ] Match against user_profile is case-insensitive AND alias-aware
-  - [ ] Skills not in any category fallback to "Other" (gray)
-  - [ ] Empty/missing `user_profile.yaml` gracefully degrades — all skills render as gray non-match (no crash)
-  - [ ] Ordering: matching skills first (DS/ML → Languages → Platforms → Other), then non-matching
-  - [ ] Cap at 10 chips total (overflow handled gracefully)
-  - [ ] Each chip has category color CSS class (`.skill-chip-ds`, `.skill-chip-lang`, `.skill-chip-platform`, `.skill-chip-other`) + match state (`.skill-chip-match` / `.skill-chip-nomatch`)
-  - [ ] Match count footer renders: `Skills match: X/Y` (or absent if Y=0)
-  - [ ] DOM tests for: category coloring, match treatment, ordering, alias matching (e.g., card has `GenAI` matches user's `Generative AI`), empty user_profile fallback, footer count accuracy
-  - [ ] No regression in existing 893 tests
-  - [ ] TDD §C9 M2 update note appended for the skills tiering
+  - [x] `config/user_profile.yaml` created with the 31-entry core_skills list
+  - [x] `config/skill_categories.yaml` created with all canonical skills mapped to one of 4 categories + alias map (`GenAI` ↔ `Generative AI`, `Scikit-Learn` ↔ `scikit-learn`)
+  - [x] Match against user_profile is case-insensitive AND alias-aware
+  - [x] Skills not in any category fallback to "Other" (gray)
+  - [x] Empty/missing `user_profile.yaml` gracefully degrades — all skills render as gray non-match (no crash)
+  - [x] Ordering: matching skills first (DS/ML → Languages → Platforms → Other), then non-matching
+  - [x] Cap at 10 chips total (overflow handled gracefully)
+  - [x] Each chip has category color CSS class (`.skill-chip-ds`, `.skill-chip-lang`, `.skill-chip-platform`, `.skill-chip-other`) + match state (`.skill-chip-match` / `.skill-chip-nomatch`)
+  - [x] Match count footer renders: `Skills match: X/Y` (or absent if Y=0)
+  - [x] DOM tests for: category coloring, match treatment, ordering, alias matching (e.g., card has `GenAI` matches user's `Generative AI`), empty user_profile fallback, footer count accuracy
+  - [x] No regression in existing 893 tests (905 passing, 10 skipped)
+  - [x] TDD §C9 M2 update note appended for the skills tiering
 
 ---
 
