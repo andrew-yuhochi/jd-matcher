@@ -232,6 +232,42 @@ kbd {
 /* ── Viewed / unviewed differentiation (inbox pattern) ───────── */
 .card-viewed { opacity: 0.6; }
 
+/* ── M2: Reposted badge + source-count badge ──────────────────── */
+
+/* Non-hideable; styled like the hydration .warning but in blue-grey */
+.badge-reposted {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0 5px;
+  margin-left: 0.4rem;
+  cursor: help;
+  vertical-align: middle;
+}
+
+/* Source-count badge shown next to title when canonical has >1 source */
+.badge-source-count {
+  display: inline-block;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0 5px;
+  margin-left: 0.4rem;
+  cursor: default;
+  vertical-align: middle;
+}
+
+/* Sources row layout */
+.card-sources-row { display: inline; }
+.card-sources-row .card-apply-link + .card-apply-link { margin-left: 0.35rem; }
+
 /* Unapply button (Applied tab) — mirrors Restore styling */
 .btn-unapply {
   cursor: pointer;

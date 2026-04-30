@@ -375,7 +375,7 @@
 
 ##### TASK-M2-011 — Web UI updates (C8 + C9) — multi-source + Reposted badge
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C8 (Web UI: backend) + C9 (Web UI: frontend) — TDD §C8, §C9
@@ -388,15 +388,15 @@
   - JS: action handlers (apply/dismiss/restore/unapply) target canonical-id (via posting-id-to-canonical-id resolution server-side)
   - Imports affected: `routes.py` + templates
   - Runtime files: existing assets
-- **Demo Artifact**: Browser shows merged cards with "Sources: [Apply on LinkedIn] [Apply on Indeed]"; cards with repost link history show "Reposted" badge inline.
+- **Demo Artifact**: `docs/poc/demos/milestone-2/TASK-M2-011-ui.txt` — 148 canonical cards rendered, multi-source Sources row, badge-source-count on all cards (linkedin_email + linkedin_hydrator), 0 repost badges (expected — LinkedIn-only corpus).
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-011.md`
 - **Acceptance Criteria**:
-  - [ ] Cards render `Sources: [Apply on LinkedIn] [Apply on Indeed]` when canonical has multi-source link
-  - [ ] Reposted badge renders for canonicals with at least one `merge_kind='repost'` in `posting_canonical_links`
-  - [ ] Apply/dismiss/restore/unapply endpoints work on canonical-level state (verified — dismissing a merged card hides ALL variants on next render)
-  - [ ] Card-viewed (`e` key) and card-greying (opacity 0.6) work correctly with canonical-id (one card per canonical, not per posting)
-  - [ ] DOM tests for new template elements (multi-source list, Reposted badge)
-  - [ ] No regression in M1 UI tests (all 443+ existing UI tests still pass)
+  - [x] Cards render `Sources: [Apply on LinkedIn] [Apply on Indeed]` when canonical has multi-source link
+  - [x] Reposted badge renders for canonicals with at least one `merge_kind='repost'` in `posting_canonical_links`
+  - [x] Apply/dismiss/restore/unapply endpoints work on canonical-level state (verified — dismissing a merged card hides ALL variants on next render)
+  - [x] Card-viewed (`e` key) and card-greying (opacity 0.6) work correctly with canonical-id (one card per canonical, not per posting)
+  - [x] DOM tests for new template elements (multi-source list, Reposted badge) — 17 new tests in test_m2_ui.py
+  - [x] No regression in M1 UI tests (854 → 871 passing, 0 failures)
 
 ---
 

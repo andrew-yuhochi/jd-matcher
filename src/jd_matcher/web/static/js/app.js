@@ -388,9 +388,20 @@ document.addEventListener("keydown", function (e) {
 
     case "o":
       if (focusedCard) {
-        const link = focusedCard.querySelector(".card-apply-link");
-        if (link) window.open(link.href, "_blank", "noopener,noreferrer");
+        // Open first source URL (LinkedIn precedence — first link in DOM order)
+        const firstLink = focusedCard.querySelector(".card-apply-link");
+        if (firstLink) window.open(firstLink.href, "_blank", "noopener,noreferrer");
         // no-op if no URL present
+      }
+      break;
+
+    case "O":
+      if (focusedCard) {
+        // Open ALL source URLs in new tabs
+        const allLinks = focusedCard.querySelectorAll(".card-apply-link");
+        allLinks.forEach(function (link) {
+          window.open(link.href, "_blank", "noopener,noreferrer");
+        });
       }
       break;
 

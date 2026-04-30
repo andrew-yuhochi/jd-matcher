@@ -44,6 +44,14 @@ class CanonicalStateView(BaseModel):
     suppress_from_main: bool
 
 
+class SourceLink(BaseModel):
+    """One source entry for a canonical card — used by the multi-source apply row."""
+
+    source: str          # e.g. 'linkedin', 'indeed'
+    source_url: str      # apply URL from posting_sources
+    display_name: str    # e.g. 'LinkedIn', 'Indeed'
+
+
 class CanonicalCard(BaseModel):
     canonical_id: int
     canonical_title: Optional[str]
@@ -53,10 +61,16 @@ class CanonicalCard(BaseModel):
     team_or_department: Optional[str]
     top_skills: Optional[list[str]]
     role_summary: Optional[str]
+    full_jd: Optional[str]
+    hydration_status: str
     first_seen: Optional[str]
     last_seen: Optional[str]
     sources_summary: list[str]
     merge_kind_history: list[str]
+    # M2 additions
+    sources: list[SourceLink]        # ordered by source precedence
+    is_reposted: bool                # True if any link has merge_kind='repost'
+    primary_posting_id: Optional[int]  # earliest-linked posting; used for state POST endpoints
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +150,12 @@ def select_main(
     Sources and merge_kind_history are aggregated from posting_canonical_links
     joined to posting_sources (falling back to source column if posting_sources
     has no row for a given posting).
+
+    hydration_status is derived from the canonical's linked postings:
+      - 'complete' if any linked posting has hydration_status='complete'
+      - 'partial'  if any partial but none complete
+      - 'failed'   if all linked postings failed
+    full_jd is taken from the canonical_postings row (already the "longer of merged variants").
     """
     conn = _open_conn(db_path)
     try:
@@ -150,10 +170,28 @@ def select_main(
                 cp.team_or_department,
                 cp.top_skills,
                 cp.role_summary,
+                cp.full_jd,
                 cp.first_seen,
-                cp.last_seen
+                cp.last_seen,
+                -- Derive hydration_status from linked postings
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM posting_canonical_links pcl2
+                        JOIN postings p2 ON p2.id = pcl2.posting_id
+                        WHERE pcl2.canonical_id = cp.canonical_id
+                          AND p2.hydration_status = 'complete'
+                    ) THEN 'complete'
+                    WHEN EXISTS (
+                        SELECT 1 FROM posting_canonical_links pcl2
+                        JOIN postings p2 ON p2.id = pcl2.posting_id
+                        WHERE pcl2.canonical_id = cp.canonical_id
+                          AND p2.hydration_status = 'partial'
+                    ) THEN 'partial'
+                    ELSE 'failed'
+                END AS hydration_status
             FROM canonical_postings cp
-            WHERE NOT EXISTS (
+            WHERE cp.user_id = ?
+            AND NOT EXISTS (
                 SELECT 1
                 FROM posting_canonical_links pcl
                 JOIN applied a ON a.posting_id = pcl.posting_id
@@ -169,36 +207,46 @@ def select_main(
             )
             ORDER BY cp.first_seen DESC
             """,
-            (user_id, user_id),
+            (user_id, user_id, user_id),
         ).fetchall()
+
+        cards: list[CanonicalCard] = []
+        for row in rows:
+            (
+                canonical_id, canonical_title, canonical_company,
+                canonical_seniority, canonical_location, team_or_department,
+                top_skills_raw, role_summary, full_jd, first_seen, last_seen,
+                hydration_status,
+            ) = row
+
+            top_skills = _parse_json_list(top_skills_raw)
+            (
+                sources_summary, merge_kind_history,
+                sources, is_reposted, primary_posting_id,
+            ) = _aggregate_link_info(canonical_id, conn)
+
+            cards.append(CanonicalCard(
+                canonical_id=canonical_id,
+                canonical_title=canonical_title,
+                canonical_company=canonical_company,
+                canonical_seniority=canonical_seniority,
+                canonical_location=canonical_location,
+                team_or_department=team_or_department,
+                top_skills=top_skills,
+                role_summary=role_summary,
+                full_jd=full_jd,
+                hydration_status=hydration_status,
+                first_seen=first_seen,
+                last_seen=last_seen,
+                sources_summary=sources_summary,
+                merge_kind_history=merge_kind_history,
+                sources=sources,
+                is_reposted=is_reposted,
+                primary_posting_id=primary_posting_id,
+            ))
+
     finally:
         conn.close()
-
-    cards: list[CanonicalCard] = []
-    for row in rows:
-        (
-            canonical_id, canonical_title, canonical_company,
-            canonical_seniority, canonical_location, team_or_department,
-            top_skills_raw, role_summary, first_seen, last_seen,
-        ) = row
-
-        top_skills = _parse_json_list(top_skills_raw)
-        sources_summary, merge_kind_history = _aggregate_link_info(canonical_id, db_path)
-
-        cards.append(CanonicalCard(
-            canonical_id=canonical_id,
-            canonical_title=canonical_title,
-            canonical_company=canonical_company,
-            canonical_seniority=canonical_seniority,
-            canonical_location=canonical_location,
-            team_or_department=team_or_department,
-            top_skills=top_skills,
-            role_summary=role_summary,
-            first_seen=first_seen,
-            last_seen=last_seen,
-            sources_summary=sources_summary,
-            merge_kind_history=merge_kind_history,
-        ))
 
     return cards
 
@@ -254,45 +302,111 @@ def get_canonical_state(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+# Stable display-order precedence for source labels.
+# Sources not in this list sort after all listed ones (alphabetically).
+_SOURCE_PRECEDENCE: list[str] = [
+    "linkedin",
+    "indeed",
+    "himalayas",
+    "linkedin_email",
+    "indeed_email",
+    "linkedin_hydrator",
+    "indeed_hydrator",
+]
+
+_SOURCE_DISPLAY_NAMES: dict[str, str] = {
+    "linkedin": "LinkedIn",
+    "indeed": "Indeed",
+    "himalayas": "Himalayas",
+    "linkedin_email": "LinkedIn",
+    "indeed_email": "Indeed",
+    "linkedin_hydrator": "LinkedIn",
+    "indeed_hydrator": "Indeed",
+}
+
+
+def _source_display_name(source: str) -> str:
+    return _SOURCE_DISPLAY_NAMES.get(source, source.replace("_", " ").title())
+
+
+def _source_sort_key(source: str) -> tuple[int, str]:
+    try:
+        return (_SOURCE_PRECEDENCE.index(source), source)
+    except ValueError:
+        return (len(_SOURCE_PRECEDENCE), source)
+
 
 def _aggregate_link_info(
     canonical_id: int,
-    db_path: Path | None = None,
-) -> tuple[list[str], list[str]]:
-    """Return (sources_summary, merge_kind_history) for a canonical.
+    conn: sqlite3.Connection,
+) -> tuple[list[str], list[str], list[SourceLink], bool, Optional[int]]:
+    """Return (sources_summary, merge_kind_history, sources, is_reposted, primary_posting_id).
 
-    sources_summary: distinct source labels from posting_sources (or 'unknown' fallback).
+    sources_summary: distinct source labels (legacy field — kept for CanonicalCard compat).
     merge_kind_history: distinct merge_kind values from posting_canonical_links.
+    sources: SourceLink list ordered by _SOURCE_PRECEDENCE, one entry per distinct source+URL.
+    is_reposted: True if any posting_canonical_links row has merge_kind='repost'.
+    primary_posting_id: the oldest-linked posting_id for this canonical (seed posting).
     """
-    conn = _open_conn(db_path)
-    try:
-        link_rows = conn.execute(
-            """
-            SELECT pcl.posting_id, pcl.merge_kind,
-                   COALESCE(ps.source, 'unknown') AS source_label
-            FROM posting_canonical_links pcl
-            LEFT JOIN posting_sources ps ON ps.posting_id = pcl.posting_id
-            WHERE pcl.canonical_id = ?
-            """,
-            (canonical_id,),
-        ).fetchall()
-    finally:
-        conn.close()
+    link_rows = conn.execute(
+        """
+        SELECT pcl.posting_id, pcl.merge_kind,
+               COALESCE(ps.source, 'unknown') AS source_label,
+               COALESCE(ps.source_url, '') AS source_url,
+               pcl.merged_at
+        FROM posting_canonical_links pcl
+        LEFT JOIN posting_sources ps ON ps.posting_id = pcl.posting_id
+        WHERE pcl.canonical_id = ?
+        ORDER BY pcl.merged_at ASC
+        """,
+        (canonical_id,),
+    ).fetchall()
 
-    sources: list[str] = []
-    merge_kinds: list[str] = []
     seen_sources: set[str] = set()
     seen_kinds: set[str] = set()
+    seen_urls: set[str] = set()
+    sources_summary: list[str] = []
+    merge_kinds: list[str] = []
+    source_links_raw: list[tuple[str, str]] = []  # (source_label, url)
+    is_reposted = False
+    primary_posting_id: Optional[int] = None
 
-    for _pid, merge_kind, source_label in link_rows:
+    for pid_raw, merge_kind, source_label, source_url, _merged_at in link_rows:
+        pid = int(pid_raw) if pid_raw is not None else None
+
+        # Track oldest posting as primary (rows are ASC by merged_at)
+        if primary_posting_id is None and pid is not None:
+            primary_posting_id = pid
+
         if source_label not in seen_sources:
-            sources.append(source_label)
+            sources_summary.append(source_label)
             seen_sources.add(source_label)
+
         if merge_kind and merge_kind not in seen_kinds:
             merge_kinds.append(merge_kind)
             seen_kinds.add(merge_kind)
 
-    return sources, merge_kinds
+        if merge_kind == "repost":
+            is_reposted = True
+
+        # Collect distinct (source_label, url) pairs for the sources[] row
+        key = f"{source_label}|{source_url}"
+        if source_url and key not in seen_urls:
+            source_links_raw.append((source_label, source_url))
+            seen_urls.add(key)
+
+    # Sort by precedence list
+    source_links_raw.sort(key=lambda t: _source_sort_key(t[0]))
+    sources: list[SourceLink] = [
+        SourceLink(
+            source=sl,
+            source_url=url,
+            display_name=_source_display_name(sl),
+        )
+        for sl, url in source_links_raw
+    ]
+
+    return sources_summary, merge_kinds, sources, is_reposted, primary_posting_id
 
 
 def _parse_json_list(raw: Optional[str]) -> Optional[list[str]]:

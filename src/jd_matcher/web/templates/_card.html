@@ -1,12 +1,38 @@
-{# Partial: single posting card for Main tab.
-   Variables: posting (dict with id, canonical_title, canonical_company,
-              canonical_location, hydration_status, first_seen, source_url?) #}
-<article class="card{% if posting.is_viewed %} card-viewed{% endif %}" id="card-{{ posting.id }}" data-posting-id="{{ posting.id }}"
-         data-url="{{ posting.source_url or '' }}">
+{# Partial: single canonical card for Main tab.
+   Variables:
+     posting (dict) with keys:
+       id               — primary posting_id (used for POST /postings/{id}/... endpoints)
+       canonical_id     — canonical_postings.canonical_id (DOM data-canonical-id)
+       canonical_title, canonical_company, canonical_location
+       hydration_status — 'complete' | 'partial' | 'failed'
+       first_seen       — ISO timestamp string or None
+       full_jd          — str or None
+       sources          — list[dict] with keys: source, source_url, display_name
+       is_reposted      — bool; True when any posting_canonical_links row has merge_kind='repost'
+       is_viewed        — bool
+#}
+<article class="card{% if posting.is_viewed %} card-viewed{% endif %}"
+         id="card-{{ posting.canonical_id }}"
+         data-posting-id="{{ posting.id or '' }}"
+         data-canonical-id="{{ posting.canonical_id }}"
+         data-url="{{ posting.sources[0].source_url if posting.sources else '' }}">
   <div class="card-line1">
     <span class="card-title">{{ posting.canonical_title or "Untitled" }}</span>
     {% if posting.canonical_company %}
       — <strong>{{ posting.canonical_company }}</strong>
+    {% endif %}
+    {% if posting.sources | length > 1 %}
+      <span class="badge-source-count" title="{{ posting.sources | length }} source(s)">{{ posting.sources | length }} sources</span>
+    {% endif %}
+    {% if posting.is_reposted %}
+      {%- set days_ago = "" -%}
+      {%- if posting.first_seen -%}
+        {%- set fs = posting.first_seen[:10] -%}
+        <span class="badge-reposted"
+              title="This role was first seen on {{ fs }} and reposted under a new job ID">Reposted</span>
+      {%- else -%}
+        <span class="badge-reposted" title="This role was reposted under a new job ID">Reposted</span>
+      {%- endif -%}
     {% endif %}
     {% if posting.hydration_status in ('partial', 'failed') %}
       <span class="warning" title="JD hydration incomplete — open at source for full description.">&#x26A0; JD incomplete</span>
@@ -16,9 +42,17 @@
     {% if posting.canonical_location %}
       <span class="card-location">{{ posting.canonical_location }}</span>
     {% endif %}
-    {% if posting.source_url %}
+    {% if posting.sources %}
       {% if posting.canonical_location %} · {% endif %}
-      <a class="card-apply-link" href="{{ posting.source_url }}" target="_blank" rel="noopener noreferrer">Apply</a>
+      <span class="card-sources-row">Sources:
+        {% for src in posting.sources %}
+          <a class="card-apply-link card-apply-link-{{ loop.index0 }}"
+             href="{{ src.source_url }}"
+             target="_blank"
+             rel="noopener noreferrer"
+             data-source="{{ src.source }}">Apply on {{ src.display_name }}</a>{% if not loop.last %} {% endif %}
+        {% endfor %}
+      </span>
     {% endif %}
   </div>
   <div class="card-line3">
@@ -26,8 +60,8 @@
   </div>
   <!-- Action buttons: hidden by default; keyboard-driven; present for accessibility -->
   <div class="card-actions">
-    <button class="btn-apply" data-posting-id="{{ posting.id }}" hidden>Mark Applied</button>
-    <button class="btn-dismiss" data-posting-id="{{ posting.id }}" hidden>Dismiss</button>
+    <button class="btn-apply" data-posting-id="{{ posting.id or '' }}" data-canonical-id="{{ posting.canonical_id }}" hidden>Mark Applied</button>
+    <button class="btn-dismiss" data-posting-id="{{ posting.id or '' }}" data-canonical-id="{{ posting.canonical_id }}" hidden>Dismiss</button>
   </div>
   <!-- Expanded body — hidden until `e` is pressed -->
   {% include "_card_jd_body.html" %}

@@ -1,0 +1,100 @@
+TASK-M2-011 Demo Artifact — Web UI updates: multi-source rendering + Reposted badge
+=====================================================================================
+Date: 2026-04-29
+DB:   ~/.jd-matcher/jd-matcher.db (LinkedIn-only PoC corpus)
+Test: Programmatic via FastAPI TestClient + live DB
+
+LIVE DB SNAPSHOT
+----------------
+  canonical_postings rows : 148
+  posting_canonical_links : 8 content_dedup merges (0 reposts — LinkedIn-only corpus)
+  posting_sources rows    : 366
+
+MAIN VIEW RENDER RESULTS (GET /)
+---------------------------------
+  HTTP 200  ✓
+  HTML size : 1,137,550 bytes
+  Canonical cards rendered : 148  ✓
+
+M2 ELEMENT CHECKS
+------------------
+  [PASS] "Sources:" label present in HTML
+  [PASS] "Apply on LinkedIn" apply link present
+  [PASS] "card-apply-link" CSS class present on apply links
+  [PASS] "data-canonical-id" attribute present on card elements
+  [PASS] "badge-source-count" element present (all 148 cards have 2 sources:
+          linkedin_email + linkedin_hydrator — both resolve to "LinkedIn")
+
+REPOSTED BADGE
+--------------
+  Reposted badges rendered : 0 (expected)
+  Rationale: PoC corpus is LinkedIn-only; all merges are content_dedup.
+             Repost detection activates when the pipeline re-ingests a role
+             under a new job ID. Badge rendering is validated by test suite.
+
+SAMPLE CARD (canonical_id=1, Senior Quantitative Risk Specialist @ Coast Capital)
+----------------------------------------------------------------------------------
+  Sources:
+    - SourceLink(source='linkedin_email',    display_name='LinkedIn',
+                 source_url='https://www.linkedin.com/comm/jobs/view/4401688500/...')
+    - SourceLink(source='linkedin_hydrator', display_name='LinkedIn',
+                 source_url='https://linkedin.com/jobs/view/4401688500')
+  is_reposted     : False
+  hydration_status: complete
+  primary_posting_id: 156
+
+  Card DOM:
+    <article id="card-{canonical_id}" data-canonical-id="{canonical_id}"
+             data-posting-id="{primary_posting_id}">
+      Sources: [Apply on LinkedIn] [Apply on LinkedIn]
+      <span class="badge-source-count" ...>2 sources</span>
+      <!-- No badge-reposted (merge_kind='new_canonical' only) -->
+
+MERGED CANONICAL SAMPLE (content_dedup merge — canonical_id=312)
+-----------------------------------------------------------------
+  Title:   Applied Scientist II
+  Company: Coalition
+  Linked postings: 2  (merge_kind: new_canonical + content_dedup)
+  Sources row: Shows 2 "Apply on LinkedIn" links + "2 sources" badge
+  Reposted: No (content_dedup, not repost)
+
+TEST SUITE RESULTS
+------------------
+  Total tests     : 871 passed, 10 skipped, 0 failed
+  New M2 UI tests : 17 (test_m2_ui.py)
+  M1 regression   : 0 failures (all 854 pre-existing tests pass)
+
+  New tests cover:
+    - canonical_id as card DOM id (data-canonical-id attr)
+    - data-posting-id present for state POST endpoint compat
+    - Single-source apply link rendering
+    - Multi-source apply link rendering (LinkedIn + Indeed)
+    - Source precedence: LinkedIn before Indeed
+    - Source-count badge (>1 source shows "N sources")
+    - Source-count badge absent for single-source
+    - Reposted badge renders for merge_kind='repost'
+    - Reposted badge absent for new_canonical / content_dedup
+    - Reposted badge has title= tooltip
+    - Apply-one-suppress-all: applying suppresses canonical card
+    - Dismiss-one-suppress-all: dismissing suppresses canonical card
+    - Cheatsheet has O shortcut (open all URLs)
+    - Cheatsheet has o shortcut updated (first apply URL)
+    - .badge-reposted CSS rule defined
+    - .badge-source-count CSS rule defined
+    - Failed-hydration canonical renders with .warning (no-filter invariant)
+
+KEYBOARD SHORTCUTS (M2 additions)
+-----------------------------------
+  o : Open FIRST source apply URL (LinkedIn precedence)
+  O : Open ALL source apply URLs in new tabs
+  Both validated in existing test_keyboard_handler.py + cheatsheet assertions.
+
+ACCEPTANCE CRITERIA STATUS
+---------------------------
+  [x] Cards render Sources: [Apply on LinkedIn] when canonical has single source
+  [x] Cards render Sources: [Apply on LinkedIn] [Apply on Indeed] for multi-source
+  [x] Reposted badge renders for canonicals with merge_kind='repost' link history
+  [x] Apply/dismiss endpoints work on canonical-level state (suppress-all invariant)
+  [x] card-viewed / opacity-0.6 correct with canonical-id (one card per canonical)
+  [x] DOM tests for multi-source list and Reposted badge (17 new tests)
+  [x] No regression in M1 UI tests (854 → 871 passing, 0 failures)

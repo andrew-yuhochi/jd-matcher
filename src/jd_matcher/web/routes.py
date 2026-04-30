@@ -34,9 +34,9 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from jd_matcher.db.init_db import init_db
+from jd_matcher.state.canonical_view import select_main
 from jd_matcher.state.manager import (
     dismiss,
-    main_view_postings,
     mark_applied,
     restore,
     unapply,
@@ -239,39 +239,33 @@ def _source_health_query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return entries
 
 
-def _source_url_for_posting(conn: sqlite3.Connection, posting_id: int) -> Optional[str]:
-    """Return the most recently first-seen source URL for a posting (best-effort)."""
-    row = conn.execute(
-        """
-        SELECT source_url FROM posting_sources
-        WHERE posting_id = ?
-        ORDER BY source_first_seen DESC
-        LIMIT 1
-        """,
-        (posting_id,),
-    ).fetchone()
-    return row[0] if row else None
-
-
-def _main_view_postings_list(
-    conn: sqlite3.Connection, user_id: str = "default"
+def _main_view_canonical_list(
+    db_path: Path, user_id: str = "default"
 ) -> list[dict[str, Any]]:
-    """All postings not in applied or dismissed — NO hydration_status filter."""
-    postings = main_view_postings(user_id=user_id, conn=conn)
-    result = []
-    for p in postings:
+    """Return canonical cards not applied/dismissed — NO hydration_status filter.
+
+    Projects from canonical_postings via select_main() (C22).  One dict per
+    canonical_id; sources[] array carries per-source apply links in precedence order.
+    """
+    cards = select_main(user_id=user_id, db_path=db_path)
+    result: list[dict[str, Any]] = []
+    for c in cards:
         result.append(
             {
-                "id": p.id,
-                "canonical_title": p.canonical_title,
-                "canonical_company": p.canonical_company,
-                "canonical_location": p.canonical_location,
-                "hydration_status": p.hydration_status,
-                "first_seen": p.first_seen,
-                "last_seen": p.last_seen,
-                "source_url": _source_url_for_posting(conn, p.id),
-                "full_jd": p.full_jd,
-                "is_viewed": p.is_viewed,
+                # Primary identifier used in DOM and state endpoints
+                "id": c.primary_posting_id,        # for POST /postings/{id}/apply|dismiss
+                "canonical_id": c.canonical_id,    # for data-canonical-id attr
+                "canonical_title": c.canonical_title,
+                "canonical_company": c.canonical_company,
+                "canonical_location": c.canonical_location,
+                "hydration_status": c.hydration_status,
+                "first_seen": c.first_seen,
+                "last_seen": c.last_seen,
+                "full_jd": c.full_jd,
+                # M2 additions
+                "sources": [s.model_dump() for s in c.sources],
+                "is_reposted": c.is_reposted,
+                "is_viewed": False,  # canonical-level viewed state is M3+
             }
         )
     return result
@@ -286,12 +280,8 @@ def _main_view_postings_list(
 async def main_tab(request: Request) -> HTMLResponse:
     db_path = _get_db_path()
     _ensure_db(db_path)
-    conn = _open_conn(db_path)
-    try:
-        postings = _main_view_postings_list(conn)
-        count = len(postings)
-    finally:
-        conn.close()
+    postings = _main_view_canonical_list(db_path)
+    count = len(postings)
 
     return templates.TemplateResponse(
         request,

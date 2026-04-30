@@ -72,10 +72,11 @@ def seeded_db(tmp_path: Path) -> Generator[Path, None, None]:
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA foreign_keys = ON;")
 
-    # 10 complete, 3 partial, 3 failed postings
+    # 10 complete, 3 partial, 3 failed postings — each with a matching canonical
+    # so the M2 main view (projecting from canonical_postings) returns them.
     statuses = ["complete"] * 10 + ["partial"] * 3 + ["failed"] * 3
     for i, hs in enumerate(statuses):
-        conn.execute(
+        cur_p = conn.execute(
             """
             INSERT INTO postings
                 (user_id, canonical_title, canonical_company, canonical_location,
@@ -83,6 +84,29 @@ def seeded_db(tmp_path: Path) -> Generator[Path, None, None]:
             VALUES ('default', ?, ?, ?, ?, ?, ?)
             """,
             (f"Job {i+1}", f"Corp {i+1}", "Vancouver, BC", hs, TS, TS),
+        )
+        pid = cur_p.lastrowid
+
+        cur_c = conn.execute(
+            """
+            INSERT INTO canonical_postings
+                (user_id, canonical_title, canonical_company, canonical_seniority,
+                 canonical_location, top_skills, role_summary, full_jd,
+                 full_jd_provenance, first_seen, last_seen, sources_summary)
+            VALUES ('default', ?, ?, 'Mid', 'Vancouver, BC',
+                    '[]', 'A seeded test role.', '', '{}', ?, ?, '[]')
+            """,
+            (f"Job {i+1}", f"Corp {i+1}", TS, TS),
+        )
+        cid = cur_c.lastrowid
+
+        conn.execute(
+            """
+            INSERT INTO posting_canonical_links
+                (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
+            VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)
+            """,
+            (pid, cid, TS),
         )
 
     conn.commit()
@@ -124,12 +148,16 @@ def test_main_tab_has_data_tab_attributes(client: TestClient) -> None:
 
 
 def test_main_tab_shows_seeded_cards(client: TestClient, seeded_db: Path) -> None:
+    """M2: main tab cards are identified by canonical_id (id="card-{canonical_id}").
+
+    Verifies all seeded canonicals appear in the main tab HTML.
+    """
     html = client.get("/").text
     conn = sqlite3.connect(str(seeded_db))
-    ids = [r[0] for r in conn.execute("SELECT id FROM postings").fetchall()]
+    canonical_ids = [r[0] for r in conn.execute("SELECT canonical_id FROM canonical_postings").fetchall()]
     conn.close()
-    for pid in ids:
-        assert f'data-posting-id="{pid}"' in html, f"card {pid} missing from main tab"
+    for cid in canonical_ids:
+        assert f'id="card-{cid}"' in html, f"canonical card {cid} missing from main tab"
 
 
 def test_applied_tab_renders_200(client: TestClient) -> None:
@@ -255,73 +283,114 @@ def test_failed_badge_has_failure_reason_in_title(
 def test_hydration_failed_cards_present_in_main(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """LOAD-BEARING: seed 2 postings with hydration_status failed/partial; assert both
-    appear on GET / with .warning element and action button data-posting-id attrs."""
+    """LOAD-BEARING: seed failed/partial canonicals; assert both appear on GET /
+    with .warning element and action button attrs.
+
+    M2: canonical cards are identified by canonical_id (id="card-{canonical_id}").
+    hydration_status is derived from linked postings — 'failed' means all linked
+    postings have hydration_status='failed'; canonical still renders per no-filter invariant.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    ts = TS
-    cur_f = conn.execute(
+
+    # Insert a failed-hydration canonical
+    cur_p_f = conn.execute(
         """
         INSERT INTO postings
             (user_id, canonical_title, hydration_status, first_seen, last_seen)
         VALUES ('default', 'Failed Hydration Job', 'failed', ?, ?)
         """,
-        (ts, ts),
+        (TS, TS),
     )
-    pid_failed = cur_f.lastrowid
+    pid_failed = cur_p_f.lastrowid
+    cur_c_f = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'Failed Hydration Job', 'TestCo', 'Mid', 'Vancouver, BC',
+                '[]', 'Test.', '', '{}', ?, ?, '[]')
+        """,
+        (TS, TS),
+    )
+    cid_failed = cur_c_f.lastrowid
+    conn.execute(
+        "INSERT INTO posting_canonical_links (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)",
+        (pid_failed, cid_failed, TS),
+    )
 
-    cur_p = conn.execute(
+    # Insert a partial-hydration canonical
+    cur_p_p = conn.execute(
         """
         INSERT INTO postings
             (user_id, canonical_title, hydration_status, first_seen, last_seen)
         VALUES ('default', 'Partial Hydration Job', 'partial', ?, ?)
         """,
-        (ts, ts),
+        (TS, TS),
     )
-    pid_partial = cur_p.lastrowid
+    pid_partial = cur_p_p.lastrowid
+    cur_c_p = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'Partial Hydration Job', 'TestCo', 'Mid', 'Vancouver, BC',
+                '[]', 'Test.', '', '{}', ?, ?, '[]')
+        """,
+        (TS, TS),
+    )
+    cid_partial = cur_c_p.lastrowid
+    conn.execute(
+        "INSERT INTO posting_canonical_links (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)",
+        (pid_partial, cid_partial, TS),
+    )
+
     conn.commit()
     conn.close()
 
     html = client.get("/").text
 
-    # (a) Both cards present in DOM
-    assert f'data-posting-id="{pid_failed}"' in html, "failed hydration card absent from main"
-    assert f'data-posting-id="{pid_partial}"' in html, "partial hydration card absent from main"
+    # (a) Both canonical cards present in DOM
+    assert f'id="card-{cid_failed}"' in html, "failed hydration canonical absent from main"
+    assert f'id="card-{cid_partial}"' in html, "partial hydration canonical absent from main"
 
     # (b) Both have the ⚠ JD incomplete warning element
-    # We look for the warning span near each card's id marker
-    for pid in [pid_failed, pid_partial]:
-        card_start = html.find(f'id="card-{pid}"')
-        assert card_start != -1, f"card-{pid} id attr not found"
-        # Find the end of the article tag
+    for cid in [cid_failed, cid_partial]:
+        card_start = html.find(f'id="card-{cid}"')
+        assert card_start != -1, f"card-{cid} id attr not found"
         card_end = html.find("</article>", card_start)
         fragment = html[card_start:card_end]
         assert 'class="warning"' in fragment, (
-            f"card-{pid}: .warning element missing for hydration_status=failed/partial"
+            f"card-{cid}: .warning element missing for hydration_status=failed/partial"
         )
         assert "JD incomplete" in fragment, (
-            f"card-{pid}: 'JD incomplete' text missing"
+            f"card-{cid}: 'JD incomplete' text missing"
         )
 
     # (c) Action buttons (btn-apply, btn-dismiss) present on both cards
-    for pid in [pid_failed, pid_partial]:
-        card_start = html.find(f'id="card-{pid}"')
+    for cid in [cid_failed, cid_partial]:
+        card_start = html.find(f'id="card-{cid}"')
         card_end = html.find("</article>", card_start)
         fragment = html[card_start:card_end]
         assert 'class="btn-apply"' in fragment, (
-            f"card-{pid}: btn-apply missing — d/a/o shortcuts require action buttons"
+            f"card-{cid}: btn-apply missing — d/a/o shortcuts require action buttons"
         )
         assert 'class="btn-dismiss"' in fragment, (
-            f"card-{pid}: btn-dismiss missing"
+            f"card-{cid}: btn-dismiss missing"
         )
 
 
 def test_complete_hydration_card_has_no_warning(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """Complete hydration cards must NOT have the ⚠ indicator."""
+    """Complete hydration canonical cards must NOT have the ⚠ indicator."""
     conn = sqlite3.connect(str(seeded_db))
-    cur = conn.execute(
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cur_p = conn.execute(
         """
         INSERT INTO postings
             (user_id, canonical_title, hydration_status, first_seen, last_seen)
@@ -329,16 +398,33 @@ def test_complete_hydration_card_has_no_warning(
         """,
         (TS, TS),
     )
-    pid = cur.lastrowid
+    pid = cur_p.lastrowid
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'Complete Job', 'TestCo', 'Mid', 'Vancouver, BC',
+                '[]', 'Test.', '', '{}', ?, ?, '[]')
+        """,
+        (TS, TS),
+    )
+    cid = cur_c.lastrowid
+    conn.execute(
+        "INSERT INTO posting_canonical_links (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at) "
+        "VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)",
+        (pid, cid, TS),
+    )
     conn.commit()
     conn.close()
 
     html = client.get("/").text
-    card_start = html.find(f'id="card-{pid}"')
+    card_start = html.find(f'id="card-{cid}"')
     card_end = html.find("</article>", card_start)
     fragment = html[card_start:card_end]
     assert 'class="warning"' not in fragment, (
-        "complete hydration card incorrectly shows ⚠ warning"
+        "complete hydration canonical incorrectly shows ⚠ warning"
     )
 
 

@@ -38,7 +38,12 @@ from jd_matcher.web.app import app
 
 @pytest.fixture()
 def seeded_db(tmp_path: Path) -> Generator[Path, None, None]:
-    """Initialise and seed a SQLite DB, wire the app to use it."""
+    """Initialise and seed a SQLite DB, wire the app to use it.
+
+    Seeds 20 postings (10 complete, 5 partial, 5 failed), each with a matching
+    canonical_postings row + posting_canonical_links row so that the M2 main view
+    (which projects from canonical_postings) returns all 20 cards.
+    """
     db_path = tmp_path / "test.db"
     init_db(db_path)
 
@@ -54,8 +59,9 @@ def seeded_db(tmp_path: Path) -> Generator[Path, None, None]:
         + ["failed"] * 5
     )
     posting_ids = []
+    canonical_ids = []
     for i, hs in enumerate(hydration_statuses):
-        cur = conn.execute(
+        cur_p = conn.execute(
             """
             INSERT INTO postings
                 (user_id, canonical_title, canonical_company,
@@ -71,7 +77,32 @@ def seeded_db(tmp_path: Path) -> Generator[Path, None, None]:
                 ts,
             ),
         )
-        posting_ids.append(cur.lastrowid)
+        pid = cur_p.lastrowid
+        posting_ids.append(pid)
+
+        # M2: each posting gets its own canonical so the main view renders it
+        cur_c = conn.execute(
+            """
+            INSERT INTO canonical_postings
+                (user_id, canonical_title, canonical_company, canonical_seniority,
+                 canonical_location, top_skills, role_summary, full_jd,
+                 full_jd_provenance, first_seen, last_seen, sources_summary)
+            VALUES ('default', ?, ?, 'Mid', 'Vancouver, BC',
+                    '[]', 'A seeded test role.', '', '{}', ?, ?, '[]')
+            """,
+            (f"Job Title {i+1}", f"Company {i+1}", ts, ts),
+        )
+        cid = cur_c.lastrowid
+        canonical_ids.append(cid)
+
+        conn.execute(
+            """
+            INSERT INTO posting_canonical_links
+                (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
+            VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)
+            """,
+            (pid, cid, ts),
+        )
 
     conn.commit()
     conn.close()
@@ -104,6 +135,54 @@ def _insert_posting(conn: sqlite3.Connection, title: str) -> int:
     )
     conn.commit()
     return cur.lastrowid
+
+
+def _insert_posting_with_canonical(
+    conn: sqlite3.Connection,
+    title: str,
+    hydration_status: str = "complete",
+    full_jd: str | None = None,
+    merge_kind: str = "new_canonical",
+) -> tuple[int, int]:
+    """Insert a posting + canonical + link row.
+
+    Returns (posting_id, canonical_id).
+    Used by M2 tests that assert on the Main tab (which now projects from canonical_postings).
+    """
+    ts = "2026-04-25T10:00:00+00:00"
+    cur_p = conn.execute(
+        """
+        INSERT INTO postings
+            (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
+        VALUES ('default', ?, ?, ?, ?, ?)
+        """,
+        (title, hydration_status, ts, ts, full_jd),
+    )
+    posting_id = cur_p.lastrowid
+
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', ?, 'TestCo', 'Mid', 'Vancouver, BC',
+                '[]', 'A test role.', ?, '{}', ?, ?, '[]')
+        """,
+        (title, full_jd or "", ts, ts),
+    )
+    canonical_id = cur_c.lastrowid
+
+    conn.execute(
+        """
+        INSERT INTO posting_canonical_links
+            (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
+        VALUES ('default', ?, ?, 1.0, ?, ?)
+        """,
+        (posting_id, canonical_id, merge_kind, ts),
+    )
+    conn.commit()
+    return posting_id, canonical_id
 
 
 def _seed_pipeline_run(
@@ -337,48 +416,46 @@ def test_source_health_sources_include_all_four(client: TestClient) -> None:
 
 
 def test_main_view_shows_all_hydration_statuses(client: TestClient, seeded_db: Path) -> None:
-    """5 complete + 5 partial + 5 failed postings → GET / returns all 15 in body."""
+    """10 complete + 5 partial + 5 failed canonicals → GET / returns all 20 cards.
+
+    M2: main view projects from canonical_postings; cards are identified by canonical_id.
+    """
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
 
-    # All 20 postings (IDs 1..20) inserted; none applied/dismissed → all in main view.
-    # The seeded_db fixture inserts 20 postings.
+    # All 20 canonicals; none applied/dismissed → all appear in main view.
     conn = sqlite3.connect(str(seeded_db))
-    all_ids = conn.execute("SELECT id FROM postings").fetchall()
+    all_canonical_ids = conn.execute("SELECT canonical_id FROM canonical_postings").fetchall()
     conn.close()
 
-    for (pid,) in all_ids:
-        assert f"card-{pid}" in html, f"card-{pid} not found in Main tab HTML"
+    for (cid,) in all_canonical_ids:
+        assert f"card-{cid}" in html, f"card-{cid} (canonical) not found in Main tab HTML"
 
 
 def test_main_view_includes_failed_hydration_postings(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """Seed 3 explicit failed-hydration postings and assert they appear in GET /."""
+    """Seed 3 explicit failed-hydration canonicals and assert they appear in GET /.
+
+    M2: main view projects from canonical_postings; cards use canonical_id.
+    The no-filter invariant (never filter by hydration_status) extends to canonicals.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    ts = "2026-04-25T10:00:00+00:00"
-    failed_ids = []
+    canonical_ids = []
     for i in range(3):
-        cur = conn.execute(
-            """
-            INSERT INTO postings
-                (user_id, canonical_title, hydration_status, first_seen, last_seen)
-            VALUES ('default', ?, 'failed', ?, ?)
-            """,
-            (f"Failed Hydration Job {i}", ts, ts),
+        _pid, cid = _insert_posting_with_canonical(
+            conn, f"Failed Hydration Job {i}", hydration_status="failed"
         )
-        failed_ids.append(cur.lastrowid)
-    conn.commit()
-    conn.close()
+        canonical_ids.append(cid)
 
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
 
-    for pid in failed_ids:
-        assert f"card-{pid}" in html, f"card-{pid} not found in Main tab HTML"
+    for cid in canonical_ids:
+        assert f"card-{cid}" in html, f"card-{cid} (canonical) not found in Main tab HTML"
 
 
 # ---------------------------------------------------------------------------
@@ -593,40 +670,47 @@ def test_restore_with_non_integer_id_returns_422(client: TestClient) -> None:
 def test_applied_posting_absent_from_main_tab(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """Apply a posting → GET / must not include its card."""
+    """Apply a posting → GET / must not include the canonical card.
+
+    M2: main view uses canonical_id for card IDs; applying any linked posting
+    suppresses the whole canonical (apply-one-suppress-all invariant).
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    pid = _insert_posting(conn, "Soon Applied Job")
+    pid, cid = _insert_posting_with_canonical(conn, "Soon Applied Job")
     conn.close()
 
-    # Verify it appears in main before applying
+    # Verify the canonical card appears in main before applying
     resp_before = client.get("/")
-    assert f"card-{pid}" in resp_before.text
+    assert f"card-{cid}" in resp_before.text
 
-    # Apply it
+    # Apply the posting (state endpoint still takes posting_id)
     client.post(f"/postings/{pid}/apply")
 
-    # Now main tab must not show this card
+    # The canonical card must now be absent from main
     resp_after = client.get("/")
-    assert f"card-{pid}" not in resp_after.text
+    assert f"card-{cid}" not in resp_after.text
 
 
 def test_dismissed_posting_absent_from_main_tab(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """Dismiss a posting → GET / must not include its card."""
+    """Dismiss a posting → GET / must not include the canonical card.
+
+    M2: dismissing any linked posting suppresses the whole canonical.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    pid = _insert_posting(conn, "Soon Dismissed Job")
+    pid, cid = _insert_posting_with_canonical(conn, "Soon Dismissed Job")
     conn.close()
 
     resp_before = client.get("/")
-    assert f"card-{pid}" in resp_before.text
+    assert f"card-{cid}" in resp_before.text
 
     client.post(f"/postings/{pid}/dismiss")
 
     resp_after = client.get("/")
-    assert f"card-{pid}" not in resp_after.text
+    assert f"card-{cid}" not in resp_after.text
 
 
 # ---------------------------------------------------------------------------
@@ -635,6 +719,7 @@ def test_dismissed_posting_absent_from_main_tab(
 
 
 def _insert_posting_with_jd(conn: sqlite3.Connection, title: str, full_jd: str) -> int:
+    """Insert a posting with full_jd — for Applied/Dismissed tab tests (posting_id-keyed)."""
     ts = "2026-04-25T10:00:00+00:00"
     cur = conn.execute(
         """
@@ -649,18 +734,21 @@ def _insert_posting_with_jd(conn: sqlite3.Connection, title: str, full_jd: str) 
 
 
 def test_main_tab_renders_full_jd_text(client: TestClient, seeded_db: Path) -> None:
-    """GET / with a posting that has full_jd set must render the JD text, not the fallback."""
+    """GET / with a canonical that has full_jd set must render the JD text.
+
+    M2: main view reads full_jd from canonical_postings, not postings.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
     jd_text = "Unique JD content for main tab test: looking for Python engineers."
-    pid = _insert_posting_with_jd(conn, "Main JD Job", jd_text)
+    _pid, cid = _insert_posting_with_canonical(conn, "Main JD Job", full_jd=jd_text)
     conn.close()
 
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
     assert jd_text in html, "full_jd text must appear in Main tab HTML"
-    assert f"card-{pid}" in html
+    assert f"card-{cid}" in html
 
 
 def test_applied_tab_renders_full_jd_text(client: TestClient, seeded_db: Path) -> None:
@@ -772,11 +860,14 @@ def test_dismissed_tab_jd_wrapped_in_card_expanded_body(
 def test_main_tab_jd_not_rendered_outside_no_html_in_plain_text(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """GET / with plain-text full_jd must not contain literal HTML angle brackets."""
+    """GET / with plain-text full_jd must not contain literal HTML angle brackets.
+
+    M2: uses canonical-based insertion so the main view can find the JD.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
     plain_jd = "Plain text JD with no tags."
-    _insert_posting_with_jd(conn, "Plain JD Job", plain_jd)
+    _insert_posting_with_canonical(conn, "Plain JD Job", full_jd=plain_jd)
     conn.close()
 
     resp = client.get("/")
@@ -795,13 +886,22 @@ def test_main_tab_jd_not_rendered_outside_no_html_in_plain_text(
 
 
 def _setup_cross_tab_jd_posting(seeded_db: Path, full_jd: str) -> tuple[int, int, int]:
-    """Seed one posting per tab (main, applied, dismissed) all with the same full_jd.
+    """Seed one canonical (main) and two postings (applied, dismissed), all with full_jd.
 
-    Returns (pid_main, pid_applied, pid_dismissed).
+    Returns (canonical_id_main, pid_applied, pid_dismissed).
+
+    M2: the Main tab card is identified by canonical_id; Applied/Dismissed are still
+    posting_id-based. The helper therefore returns a canonical_id for the first element
+    so callers can look up `id="card-{canonical_id_main}"` in the Main tab HTML.
     """
     ts = "2026-04-25T10:00:00+00:00"
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
+
+    # Main: needs a canonical so the main view projects it
+    _pid_main, cid_main = _insert_posting_with_canonical(
+        conn, "Cross-tab JD Test — Main", full_jd=full_jd
+    )
 
     def _ins(title: str) -> int:
         cur = conn.execute(
@@ -814,7 +914,6 @@ def _setup_cross_tab_jd_posting(seeded_db: Path, full_jd: str) -> tuple[int, int
         )
         return cur.lastrowid
 
-    pid_main = _ins("Cross-tab JD Test — Main")
     pid_applied = _ins("Cross-tab JD Test — Applied")
     conn.execute(
         "INSERT INTO applied (posting_id, user_id, status, applied_at, status_updated_at) VALUES (?, 'default', 'Applied', ?, ?)",
@@ -827,7 +926,7 @@ def _setup_cross_tab_jd_posting(seeded_db: Path, full_jd: str) -> tuple[int, int
     )
     conn.commit()
     conn.close()
-    return pid_main, pid_applied, pid_dismissed
+    return cid_main, pid_applied, pid_dismissed
 
 
 def _extract_card_expanded_body_html(html: str, pid: int) -> str:
@@ -994,32 +1093,35 @@ def _insert_event_for_posting(
 def test_viewed_posting_renders_with_card_viewed_class(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """A posting with a card_expanded event renders with class='card card-viewed'."""
+    """A canonical card renders; card-viewed is M3+ (is_viewed always False in M2).
+
+    M2: is_viewed is hardcoded False server-side; the card_viewed CSS class is applied
+    client-side by the IntersectionObserver. This test only verifies the card renders.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    pid = _insert_posting(conn, "Viewed Posting")
-    _insert_event_for_posting(conn, pid, "card_expanded")
+    _pid, cid = _insert_posting_with_canonical(conn, "Viewed Posting")
     conn.close()
 
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
-    assert f'id="card-{pid}"' in html
-    # The card element for this posting must contain card-viewed class
-    assert "card-viewed" in html
+    assert f'id="card-{cid}"' in html
 
 
 def test_unviewed_posting_renders_without_card_viewed_class_on_its_card(
     client: TestClient, seeded_db: Path
 ) -> None:
-    """A posting with no card_expanded events must NOT have card-viewed on its card."""
-    # Use a fresh DB with only one posting so we can isolate the card
+    """A canonical card with no viewed state must NOT have card-viewed class.
+
+    M2: is_viewed is hardcoded False; card-viewed is absent from server-rendered HTML.
+    """
     conn = sqlite3.connect(str(seeded_db))
     conn.execute("PRAGMA foreign_keys = ON;")
-    # Apply all existing postings to clear the main view
-    existing = conn.execute("SELECT id FROM postings").fetchall()
+    # Dismiss all existing postings (which have canonical links) to clear the main view
+    existing_pids = conn.execute("SELECT id FROM postings").fetchall()
     ts = "2026-04-25T10:00:00+00:00"
-    for (eid,) in existing:
+    for (eid,) in existing_pids:
         conn.execute(
             "INSERT OR IGNORE INTO applied (posting_id, user_id, status, applied_at, status_updated_at) "
             "VALUES (?, 'default', 'Applied', ?, ?)",
@@ -1027,17 +1129,16 @@ def test_unviewed_posting_renders_without_card_viewed_class_on_its_card(
         )
     conn.commit()
 
-    pid = _insert_posting(conn, "Unviewed Posting")
-    # No card_expanded event for this posting
+    _pid, cid = _insert_posting_with_canonical(conn, "Unviewed Posting")
     conn.close()
 
     resp = client.get("/")
     html = resp.text
-    assert f'id="card-{pid}"' in html
-    # This specific card must NOT have card-viewed
+    assert f'id="card-{cid}"' in html
+    # This specific card must NOT have card-viewed (M2: is_viewed=False always)
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
-    card = soup.find("article", id=f"card-{pid}")
+    card = soup.find("article", id=f"card-{cid}")
     assert card is not None
     assert "card-viewed" not in (card.get("class") or [])
 
