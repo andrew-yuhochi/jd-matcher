@@ -442,7 +442,7 @@
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C9 (Web UI: frontend) — TDD §C9
-- **Description**: Surface M2-available LLM-extracted fields on canonical cards per BA verdict 2026-04-29 (ALIGNMENT-LOG.md). Triaged inclusion: `canonical_seniority` (chip top-right of title), `team_or_department` (italic muted on line 2b, conditional null-safe), `role_summary` first-sentence teaser (~120 chars under location row), `top_skills` chip strip in **expanded** view between JD body and action buttons. Excluded per BA: salary range and `role_orientation`/DS-fit (M3 — require companion logic).
+- **Description**: Surface M2-available LLM-extracted fields on canonical cards per BA verdict 2026-04-29 (ALIGNMENT-LOG.md). Triaged inclusion: `canonical_seniority` (chip top-right of title), `team_or_department` (italic muted on line 2b, conditional null-safe), `role_summary` first-sentence teaser (~120 chars under location row), `top_skills` chip strip in **expanded** view before the JD body. Excluded per BA: salary range and `role_orientation`/DS-fit (M3 — require companion logic).
 - **Dependencies**: TASK-M2-011
 - **Implementation Checklist**:
   - Schema: reads `canonical_postings` (no schema changes)
@@ -455,7 +455,7 @@
   - [x] `canonical_seniority` renders as chip top-right of title (or absent if null)
   - [x] `team_or_department` renders italic muted on its own line, null-safe (line absent when null)
   - [x] `role_summary` first sentence (truncated ~120 chars, ellipsis on overflow) renders below location row
-  - [x] `top_skills` chips render in expanded view between JD body and action buttons (up to 10 chips)
+  - [x] `top_skills` chips render in expanded view before the JD body (up to 10 chips) — placement matches TDD §C9 (skills as a scannable triage signal before the JD prose)
   - [x] All four fields are READ-ONLY display — no new state, no new endpoints, no probabilistic logic
   - [x] DOM tests for each new element (chip presence, conditional null rendering, truncation)
   - [x] No regression in existing 876 tests (886 pass, 10 skipped after adding 10 new tests)
