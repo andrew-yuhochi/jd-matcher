@@ -7,15 +7,15 @@
 
 ## Progress Summary
 
-**Active milestone**: M2 — Content-aware dedup + repost detection (+ title pre-filter) — opened 2026-04-27.
+**Active milestone**: None — M2 closed 2026-04-29. Run `/milestone-plan jd-matcher` to plan M3.
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 14 | 28 |
-| In Progress | 0 | 0 |
-| To Do | 1 | 1 |
-| Blocked | 0 | 0 |
-| Completed milestones | — | 1 (M1) |
+| Done | — | 44 |
+| In Progress | — | 0 |
+| To Do | — | 0 |
+| Blocked | — | 0 |
+| Completed milestones | — | 2 (M1, M2) |
 | Invalidated tasks | — | 0 |
 
 ---
@@ -529,7 +529,7 @@
 
 ##### TASK-M2-013 — M2 demo + user approval
 
-- **Status**: To Do
+- **Status**: Done (2026-04-29)
 - **Blocked reason**:
 - **Agent**: manual (user)
 - **Component**: M2 milestone deliverable acceptance — references all M2 C-components
@@ -544,20 +544,58 @@
 - **Demo Artifact**: User-approved milestone closure (recorded in TASK-M2-013 quality log).
 - **Quality log**: `docs/poc/quality-logs/TASK-M2-013.md`
 - **Acceptance Criteria**:
-  - [ ] User runs full sync; observes merged card behavior on Main. Cross-source attribution may be LinkedIn-only during PoC (per PRD §9 R3 realized risk); the multi-source mechanic is demonstrated via the synthetic C21 fixture review. SC-8 verification proceeds via the synthetic-fixture path.
-  - [ ] User dismisses a merged card; refreshes; canonical stays out of Main on next render (state inheritance)
-  - [ ] All 6 ROADMAP §M2 ACs verified by user:
-    - ≥90% accuracy on 30 hand-labeled pairs
-    - ZERO false-merges on different-team cases (per M2-012)
-    - Cross-source merge verified on ≥3 real pairs
-    - State inheritance: dismissing one suppresses canonical
-    - Repost detection: ≥3 real-or-synthetic cases
-    - Auto-merge threshold calibrated and recorded
-  - [ ] User explicit approval logged
+  - [x] User reviewed live UI on the 148-canonical LinkedIn corpus across multiple iterations (M2-014 → M2-015 → M2-016 → role_summary follow-up → tab-count badges). Cross-source attribution deferred to MVP-M1 per PRD §9 R3; multi-source mechanic verified via synthetic C21 fixtures (M2-008 + M2-012).
+  - [x] User dismissed/applied merged cards during M2-013 review; tab-count badges live-update + persist across navigation (verified post tab-badge fix-forward `6de087f`).
+  - [x] All 6 ROADMAP §M2 ACs verified:
+    - ≥90% accuracy on 30 hand-labeled pairs — TASK-M2-012 final calibration: P=1.000, R=0.857, F1=0.923 ✓
+    - ZERO false-merges on different-team cases — TASK-M2-012 SC-7 hard gate held ✓
+    - Cross-source merge verified — synthetic-fixture path per PoC LinkedIn-only scope ✓
+    - State inheritance: dismissing one suppresses canonical — verified live during demo + apply-one-suppress-all unit tests ✓
+    - Repost detection: synthetic cases verified (M2-009/010); no real reposts in current corpus (badge logic test-validated) ✓
+    - Auto-merge threshold calibrated and recorded — `gatekeeper_threshold=0.75` pinned in `config/dedup.yaml` ✓
+  - [x] User explicit approval logged: 2026-04-29 ("approve" message at M2-013 close, per ALIGNMENT-LOG.md and milestone-complete log)
 
 ---
 
 ## Completed Milestones Log
+
+### Milestone 2 — Content-aware dedup + repost detection (+ title pre-filter)
+
+- **Closed**: 2026-04-29
+- **Outcome**: APPROVED with notes (architecture + test-suite review directive logged at BACKLOG `68440bc` for next /milestone-plan)
+- **Tasks**: 16 Done (TASK-M2-001 through TASK-M2-016, with M2-013 manual demo as the closing approval gate). Plus 2 follow-up commits during demo: tab count badges + role_summary in full.
+- **Quality summary**:
+  - C18 LLM extraction (heuristic per-field accuracy): company 100%, seniority 99.3%, location 90.7%, team 97.7% on 131 currently-passing C19 postings — PASS
+  - C19 Title filter (deterministic, ≥95%/≥98% bar): 31/183 dropped (16.9%); precision ≥95%, recall ≥98% per heuristic estimate — PASS
+  - C21 Dedup decide() + C32 Gatekeeper (real-data calibration on 15 user-labeled pairs): P=1.000, R=0.857, F1=0.923 — PASS
+  - SC-7 different-team regression gate: ZERO false-merges across all synthetic + real cases — PASS (regression-blocking)
+  - Synthetic 30-pair set: P=R=F1=1.000 across all 5 thresholds — PASS
+  - Unit tests: 982 passed, 10 skipped, 0 failed
+- **Major auto-fixes during milestone**: 4
+  - M2-010 Phase 5/6 batching bug — combined per-posting decide→detect→apply loop (commit `f8bc69d`)
+  - M2-010 column-name mismatch — postings.canonical_seniority vs seniority_band (commit `5797b4e`)
+  - M2-012 gatekeeper prompt v1→v2 — added hiring-agent guard for staffing firms (commit `962cf05`)
+  - M2-012 Jobright extraction_cache propagation gap — direct UPDATE from cache (commit `962cf05`); BACKLOG entry filed for systemic audit
+- **Directional decisions during milestone**: 7
+  - role_orientation classification deferred to M3 (DRIFTING → user accepted Recommendation B)
+  - LLM gatekeeper promoted from BACKLOG to M2-012 scope (refined design with 2-tier rule)
+  - Component-level 4-feature exact-match short-circuit (vs FUSE-threshold) — user-chosen Path C
+  - fail-CLOSED on gatekeeper exception with retry-once — over-merge protection
+  - Master-detail UI bundle (2-pane + pagination + search + filter) deferred to MVP-M1
+  - Skills tiering as M2-016 (match + category color + ordering) — ALIGNED in-scope UX
+  - Card UI enrichment as M2-014 + layout reshuffle as M2-015 — ALIGNED in-scope UX
+- **Scope additions during M2** (all user-approved through Gate 2): TASK-M2-014 card UI enrichment, TASK-M2-015 collapsed-card layout reshuffle, TASK-M2-016 skills tiering, TASK-M2-012 LLM gatekeeper bundle, tab-count badges fix-forward (during M2-013 demo)
+- **Alignment verdict**: ALIGNED (BA Mode B, see ALIGNMENT-LOG.md 2026-04-29 closure entry — explicit anchors PRD §5/§6 Scope IN, §7 SC-6/7/8, §3 Commercial Thesis hedges 4 reinforced, §9 R3 documented)
+- **Quality logs**: docs/poc/quality-logs/TASK-M2-001.md through TASK-M2-016.md (plus calibration report at TASK-M2-012-calibration-report.md)
+- **User notes carried into M3 planning** (BACKLOG `68440bc`): architect + test-validator + data-pipeline must perform an architecture + test-suite review BEFORE drafting M3 tasks (982 tests is a sign refactor opportunities exist)
+
+#### M2 Task Entries (full audit trail)
+
+**Goal**: Recognize same job posted twice (cross-source or repost); merge into one card. Cheap title-deny-list pre-filter saves ~30-50% of LLM tokens by dropping obviously-irrelevant postings before LLM extraction.
+**Deliverable**: Browser shows merged cards with multi-source apply links, enriched LLM fields (seniority, team, role_summary, tiered skills), reposted JDs flagged. Backend dedup engine validated to P=1.000 / R=0.857 with LLM gatekeeper protecting against over-merges.
+**Review checkpoint**: User approved deliverable on 2026-04-29 with notes (architecture review for next milestone).
+
+---
 
 ### Milestone 1 — Raw pipe + URL dedup + applied/dismissed state
 

@@ -379,8 +379,8 @@ Alternative landing zones in decreasing preference:
 - **C**: DRIFTING — recommended landing zone is BACKLOG MVP-M1, bundled with D/E/F. Two-pane, pagination, search, and filter are natural companions in a master-detail layout — plan them together in MVP-M1 where the TDD C9 contract can be revised with full scope. If user overrides: architect must update TDD §1.0 and UX-SPEC §1/§6 before TASK-M2-016 is drafted (keyboard scheme changes, HTMX strategy changes, C9 contract rewrite). Recommend against override — the M2 closure risk is non-trivial and the companion features (D/E/F) make MVP-M1 the cleaner home.
 - **D, E, F**: ALIGNED with MVP-M1 deferral (user-confirmed). Add to BACKLOG.md as MVP-M1 items, bundled with C if C is also deferred.
 
-**User decision**: [Pending]
-**Outcome**: [To be filled after user decides]
+**User decision**: A + B approved (TASK-M2-015 added to M2 scope). C (two-pane) deferred to BACKLOG MVP-M1, bundled with D/E/F. D, E, F deferred to MVP-M1.
+**Outcome**: TASK-M2-015 implemented (layout reshuffle + skills moved to collapsed view). Two-pane, pagination, search, filter added to BACKLOG.md as MVP-M1 items. M2 proceeds.
 
 ---
 
@@ -407,5 +407,38 @@ Pattern note from prior log: three M2 proposals expanded the LLM layer beyond no
 
 **M3 CV-fit boundary note** (specific answer to the concern raised): Match-against-user-stack ends at the chip-rendering layer. It reads `top_skills` from `canonical_postings`, intersects with a static YAML list, and emits a render-payload. It produces no score column, no DB write beyond the existing schema, and no input to the M3 LLM prompt. M3 CV-fit begins when the LLM prompt receives a job description and outputs `fit_score`/`fit_reasoning` — a generative scoring step that reasons over the full JD. M4 CV-fit begins when CV embeddings are compared to role_summary+top_skills via cosine similarity. The three mechanisms are non-overlapping and non-competing: `user_profile.yaml` does not anchor, constrain, or conflict with the M3 or M4 implementation. There is no coupling risk.
 
-**User decision**: [Pending]
-**Outcome**: [To be filled after user decides]
+**User decision**: Approved (TASK-M2-016 added to M2 scope — completed 2026-04-29, commit 7ea5674)
+**Outcome**: TASK-M2-016 implemented: skills tiering with match-against-user-stack, category color coding (4 buckets: DS/ML purple, Languages blue, Platforms/Tools green, Other gray), ordering rule (matching first by category priority), and `Skills match: X/Y` footer. Two new config files: `config/user_profile.yaml` (31-entry core_skills list) and `config/skill_categories.yaml` (alias map included). 905 tests passing. Committed and pushed.
+
+---
+
+## 2026-04-29 — M2 closure: Content-aware dedup + repost detection + UX enrichment (all 16 tasks Done)
+
+**Verdict**: ALIGNED
+**Mode**: B
+**Anchors**:
+- PRD §5 Scope IN M2: "LLM extraction call producing `canonical_company / canonical_seniority / canonical_location / team_or_department / top_skills / role_summary` (used here for normalisation only — full classification deferred to M3)"
+- PRD §5 Scope IN M2: "Two-stage dedup: block by `(canonical_company, canonical_seniority, canonical_location)`; fuse cosine + structured similarity at 50/50"
+- PRD §5 Scope IN M2: "Repost detection (same JD, new jobId, 30+ days later — threshold config-driven, default 30)"
+- PRD §7 Success Criteria SC-6: "Content-aware dedup overall — ≥90% on 30 hand-labeled pairs — M2"
+- PRD §7 Success Criteria SC-7: "Content-aware dedup — different-team false-merge rate — ZERO — regression-blocking — M2"
+- PRD §7 Success Criteria SC-8: "Cross-source merge — Verified — synthetic cross-source pairs acceptable where live Indeed unavailable per PRD §9 R3 — M2"
+- PRD §3 Commercial Thesis: five architectural hedges (namespace-aware schema, events instrumentation, taxonomy portability, classify-always, open-source) — all intact at M2 closure.
+- PRD §9 R3: "Realized 2026-04-28 at PoC M2: IP-level Cloudflare enforcement on user's employer-managed Mac. Indeed extraction deferred to MVP-M1." (Override BA accepted 2026-04-28)
+
+**Analysis**: All 16 M2 tasks Done; all 6 ROADMAP §M2 ACs pass. SC-6 exceeded: gatekeeper-augmented P=1.000, R=0.857, F1=0.923 on 15 real-data labeled pairs. SC-7 holds at ZERO different-team false-merges (regression-blocking). SC-8 satisfied via synthetic cross-source fixtures per PRD §9 R3 revised scope. PRD §3 Commercial Thesis is strengthened: the canonical-taxonomy + dedup-quality differentiator is now backed by empirical evidence — calibrated FUSE engine + LLM gatekeeper demonstrating zero different-team false-merges. Hedge 4 (taxonomy portability) is actively extended by `skill_categories.yaml`. No PRD §6 Scope OUT clause was breached. Beta gates are untouched.
+
+**Significant scope additions during M2 and their alignment status:**
+
+1. **TASK-M2-012 — LLM dedup gatekeeper (BACKLOG promotion)**: Originally proposed as DRIFTING (LLM-fallback for borderline pairs); user accepted BA recommendation to defer decision to M2-012 calibration. Calibration data (fuzzy-zone hit rate on 30-pair set) supported promoting the gatekeeper into M2-012 scope. Provider-abstracted (C28), cost-metered, fail-CLOSED. Not a scope violation — a data-driven promotion through the prescribed calibration gate (PRD §10 Open Question #4).
+
+2. **TASKS-M2-014/015/016 — Card UI enrichment, layout reshuffle, skills tiering**: All three ALIGNED at verdict. Pure display-policy decisions over already-extracted `canonical_postings` fields — zero new schema columns, zero new LLM calls, zero probabilistic components. Consistent with PRD §4 Phase Objectives (user-observable deliverable per milestone). The two-pane layout (DRIFTING) was correctly parked to MVP-M1; user self-triaged pagination/search/filter to MVP-M1 as well.
+
+3. **Tab-count badges fix (surfaced during TASK-M2-013 demo)**: Bug-fix-forward — tab counters not live-updating after apply/dismiss. Corrected as minor fix within the demo task. No scope implications.
+
+**Pattern note**: Four DRIFTING verdicts in M2, zero VIOLATES. The user's pressure toward richer LLM extraction and UX was real but routed through Gate 2 each time. The calibration-first containment valve held. Self-triage of D/E/F (pagination, search, filter) to MVP-M1 demonstrates scope discipline at the boundary that matters commercially.
+
+**Recommendation**: Proceed to M3 (Smart layer — fit_score / primary_focus / classification / PR filter). No signal for premature phase transition. M3 and M4 are required to satisfy PoC exit criteria 1 (all four components meet thresholds) and 2 (end-to-end on real data through M4). BACKLOG items ripe for M3 input: taxonomy expansion (tail-skill additions), `role_orientation` classification field, staffing-firm repost recognition.
+
+**User decision**: M2 approved (explicit "approve" 2026-04-29).
+**Outcome**: M2 formally closed 2026-04-29. All 16 tasks Done; all 6 ROADMAP §M2 ACs PASS; user-approved verbatim. PoC phase continues — next: /milestone-plan jd-matcher for Milestone 3 (Smart layer).
