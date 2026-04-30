@@ -207,6 +207,20 @@ if (btnSync) {
 }
 
 // ---------------------------------------------------------------------------
+// Nav badge live-update helper
+// ---------------------------------------------------------------------------
+
+function updateNavBadge(tabName, delta) {
+  const tab = document.querySelector('.tab[data-tab="' + tabName + '"]');
+  if (!tab) return;
+  const badge = tab.querySelector(".badge");
+  if (!badge) return;
+  const current = parseInt(badge.textContent, 10);
+  if (isNaN(current)) return;
+  badge.textContent = Math.max(0, current + delta);
+}
+
+// ---------------------------------------------------------------------------
 // Dismiss (d)
 // ---------------------------------------------------------------------------
 
@@ -232,6 +246,8 @@ function dismissCard(card) {
     setTimeout(function () {
       card.remove();
       moveFocus(1);
+      updateNavBadge("main", -1);
+      updateNavBadge("dismissed", +1);
     }, 100);
   }, 180);
 
@@ -257,6 +273,8 @@ function applyCard(card) {
   setTimeout(function () {
     card.remove();
     moveFocus(1);
+    updateNavBadge("main", -1);
+    updateNavBadge("applied", +1);
   }, 150);
 
   emitEvent("card_marked_applied", pid, {
@@ -280,6 +298,8 @@ document.querySelectorAll(".btn-restore").forEach(function (btn) {
       .then(function () {
         const card = document.getElementById("card-" + pid);
         if (card) card.remove();
+        updateNavBadge("dismissed", -1);
+        updateNavBadge("main", +1);
       })
       .catch(function () {});
   });
@@ -298,6 +318,8 @@ document.querySelectorAll(".btn-unapply").forEach(function (btn) {
       .then(function () {
         const card = document.getElementById("card-" + pid);
         if (card) card.remove();
+        updateNavBadge("applied", -1);
+        updateNavBadge("main", +1);
       })
       .catch(function () {});
   });

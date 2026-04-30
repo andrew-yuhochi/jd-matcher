@@ -10,8 +10,8 @@
   <header>
     <nav class="tabs">
       <a href="/" class="tab {% block tab_main %}{% endblock %}" data-tab="main">Main {% block main_badge %}{% endblock %}</a>
-      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}" data-tab="applied">Applied</a>
-      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}" data-tab="dismissed">Dismissed</a>
+      <a href="/applied" class="tab {% block tab_applied %}{% endblock %}" data-tab="applied">Applied {% block applied_badge %}{% endblock %}</a>
+      <a href="/dismissed" class="tab {% block tab_dismissed %}{% endblock %}" data-tab="dismissed">Dismissed {% block dismissed_badge %}{% endblock %}</a>
     </nav>
 
     <div class="sub-bar" id="sub-bar">

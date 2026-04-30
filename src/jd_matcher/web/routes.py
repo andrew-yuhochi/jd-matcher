@@ -307,11 +307,12 @@ async def applied_tab(request: Request) -> HTMLResponse:
         postings = _get_applied_postings(conn)
     finally:
         conn.close()
+    count = len(postings)
 
     return templates.TemplateResponse(
         request,
         "applied.html",
-        {"postings": postings},
+        {"postings": postings, "count": count},
     )
 
 
@@ -324,11 +325,12 @@ async def dismissed_tab(request: Request) -> HTMLResponse:
         postings = _get_dismissed_postings(conn)
     finally:
         conn.close()
+    count = len(postings)
 
     return templates.TemplateResponse(
         request,
         "dismissed.html",
-        {"postings": postings},
+        {"postings": postings, "count": count},
     )
 
 

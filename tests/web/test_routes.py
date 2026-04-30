@@ -1178,3 +1178,164 @@ def test_card_dom_order_identical_across_tabs(
             f"{tab_name} tab: last two divs must be card-actions then card-expanded-body.\n"
             f"Got: {div_classes}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tab count badges (follow-up to M2-013 review)
+# ---------------------------------------------------------------------------
+
+
+def _apply_posting(conn: sqlite3.Connection, posting_id: int) -> None:
+    ts = "2026-04-29T12:00:00+00:00"
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO applied (user_id, posting_id, status, applied_at, status_updated_at)
+        VALUES ('default', ?, 'Applied', ?, ?)
+        """,
+        (posting_id, ts, ts),
+    )
+    conn.commit()
+
+
+def _dismiss_posting(conn: sqlite3.Connection, posting_id: int) -> None:
+    ts = "2026-04-29T12:00:00+00:00"
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO dismissed (user_id, posting_id, dismissed_at)
+        VALUES ('default', ?, ?)
+        """,
+        (posting_id, ts),
+    )
+    conn.commit()
+
+
+def test_applied_tab_renders_count_badge(client: TestClient, seeded_db: Path) -> None:
+    """GET /applied must render a badge with the count of applied postings."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, _ = _insert_posting_with_canonical(conn, "Applied Job 1")
+    pid2, _ = _insert_posting_with_canonical(conn, "Applied Job 2")
+    pid3, _ = _insert_posting_with_canonical(conn, "Applied Job 3")
+    _apply_posting(conn, pid1)
+    _apply_posting(conn, pid2)
+    _apply_posting(conn, pid3)
+    conn.close()
+
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    # Applied tab nav anchor must carry a badge with text "3"
+    assert 'data-tab="applied"' in resp.text
+    # Find badge in applied tab anchor — simple substring check is sufficient
+    # The badge renders as: Applied <span class="badge">3</span>
+    assert '<span class="badge">3</span>' in resp.text
+
+
+def test_dismissed_tab_renders_count_badge(client: TestClient, seeded_db: Path) -> None:
+    """GET /dismissed must render a badge with the count of dismissed postings."""
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    pid1, _ = _insert_posting_with_canonical(conn, "Dismissed Job 1")
+    pid2, _ = _insert_posting_with_canonical(conn, "Dismissed Job 2")
+    _dismiss_posting(conn, pid1)
+    _dismiss_posting(conn, pid2)
+    conn.close()
+
+    resp = client.get("/dismissed")
+    assert resp.status_code == 200
+    assert 'data-tab="dismissed"' in resp.text
+    assert '<span class="badge">2</span>' in resp.text
+
+
+def test_empty_applied_tab_renders_zero_badge(client: TestClient, seeded_db: Path) -> None:
+    """GET /applied with no applied postings must render badge with 0."""
+    resp = client.get("/applied")
+    assert resp.status_code == 200
+    assert '<span class="badge">0</span>' in resp.text
+
+
+def test_empty_dismissed_tab_renders_zero_badge(client: TestClient, seeded_db: Path) -> None:
+    """GET /dismissed with no dismissed postings must render badge with 0."""
+    resp = client.get("/dismissed")
+    assert resp.status_code == 200
+    assert '<span class="badge">0</span>' in resp.text
+
+
+def test_main_tab_badge_reflects_canonical_count_not_posting_count(
+    client: TestClient, seeded_db: Path
+) -> None:
+    """Main badge must count canonical cards, not raw postings.
+
+    Two postings merged into one canonical → Main badge shows 1, not 2.
+    """
+    conn = sqlite3.connect(str(seeded_db))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    ts = "2026-04-25T10:00:00+00:00"
+
+    # Create a canonical
+    cur_c = conn.execute(
+        """
+        INSERT INTO canonical_postings
+            (user_id, canonical_title, canonical_company, canonical_seniority,
+             canonical_location, top_skills, role_summary, full_jd,
+             full_jd_provenance, first_seen, last_seen, sources_summary)
+        VALUES ('default', 'Merged Role', 'MergedCo', 'Mid', 'Vancouver, BC',
+                '[]', 'Merged.', '', '{}', ?, ?, '[]')
+        """,
+        (ts, ts),
+    )
+    canonical_id = cur_c.lastrowid
+
+    # Two postings linked to the same canonical
+    for i in range(2):
+        cur_p = conn.execute(
+            """
+            INSERT INTO postings
+                (user_id, canonical_title, hydration_status, first_seen, last_seen)
+            VALUES ('default', ?, 'complete', ?, ?)
+            """,
+            (f"Merged Role {i}", ts, ts),
+        )
+        pid = cur_p.lastrowid
+        conn.execute(
+            """
+            INSERT INTO posting_canonical_links
+                (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
+            VALUES ('default', ?, ?, 1.0, 'merged', ?)
+            """,
+            (pid, canonical_id, ts),
+        )
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    # The seeded_db fixture seeds 20 postings (each with its own canonical),
+    # plus we just added 1 more canonical (with 2 postings).
+    # The Main badge must equal the number of canonical cards rendered.
+    # We verify the badge is present and its text matches the canonical card count.
+    html = resp.text
+    # Main tab anchor carries the badge
+    assert 'data-tab="main"' in html
+    # Extract badge value from the Main tab nav anchor
+    import re
+    match = re.search(r'data-tab="main"[^>]*>Main\s*<span class="badge">(\d+)</span>', html)
+    assert match is not None, "Main nav badge not found"
+    badge_count = int(match.group(1))
+    # Count canonical card IDs rendered in the HTML (id="card-<cid>")
+    card_count = len(re.findall(r'id="card-\d+"', html))
+    # badge_count must equal card_count (the number of main-tab canonical cards)
+    assert badge_count == card_count, (
+        f"Main badge ({badge_count}) does not match rendered card count ({card_count})"
+    )
+
+
+def test_applied_tab_data_tab_attribute_present(client: TestClient, seeded_db: Path) -> None:
+    """Applied tab nav anchor must carry data-tab='applied' for JS badge updates."""
+    resp = client.get("/applied")
+    assert 'data-tab="applied"' in resp.text
+
+
+def test_dismissed_tab_data_tab_attribute_present(client: TestClient, seeded_db: Path) -> None:
+    """Dismissed tab nav anchor must carry data-tab='dismissed' for JS badge updates."""
+    resp = client.get("/dismissed")
+    assert 'data-tab="dismissed"' in resp.text
