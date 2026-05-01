@@ -1,4 +1,4 @@
-"""Tests for TASK-M3-002 — C18 v4 prompt + Pydantic extension + cache key bump.
+"""Tests for TASK-M3-002 — C18 v5 prompt + Pydantic extension + cache key bump.
 
 Coverage:
   - v3 prompt file exists and contains required field sections (AC #1)
@@ -105,50 +105,50 @@ def tmp_db(tmp_path: Path) -> Path:
 class TestPromptFileV2:
     def test_prompt_file_exists(self):
         project_root = Path(__file__).parents[2]
-        prompt_path = project_root / "prompts" / "canonical_extraction_v4.txt"
-        assert prompt_path.exists(), f"v4 prompt not found at {prompt_path}"
+        prompt_path = project_root / "prompts" / "canonical_extraction_v5.txt"
+        assert prompt_path.exists(), f"v5 prompt not found at {prompt_path}"
 
     def test_prompt_version_constant_is_v4(self):
-        assert _PROMPT_VERSION == "v4"
+        assert _PROMPT_VERSION == "v5"
 
     def test_prompt_contains_fit_score_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "FIT SCORE" in content
 
     def test_prompt_contains_fit_reasoning_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "FIT REASONING" in content
 
     def test_prompt_contains_industry_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "INDUSTRY" in content
 
     def test_prompt_contains_role_orientation_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "ROLE ORIENTATION" in content
 
     def test_prompt_contains_salary_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "SALARY" in content
 
     def test_prompt_contains_citizenship_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "CITIZENSHIP" in content
 
     def test_prompt_contains_can_hire_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         assert "CAN HIRE IN CANADA" in content
 
     def test_prompt_json_schema_has_all_new_fields(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v4.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v5.txt").read_text()
         for field in [
             "fit_score",
             "fit_reasoning",
@@ -325,10 +325,10 @@ class TestCacheKeyV2:
         key = next(iter(_PROCESS_CACHE.keys()))
         assert len(key) == 3, f"Expected 3-tuple key, got: {key}"
         text_hash, model_name, prompt_version = key
-        assert prompt_version == "v4"
+        assert prompt_version == "v5"
 
     def test_v1_db_entry_does_not_satisfy_v3_lookup(self, tmp_db):
-        """A v1 cache entry (prompt_version='v1') should be a miss for v3 lookup."""
+        """A v1 cache entry (prompt_version='v1') should be a miss for v5 lookup."""
         from jd_matcher.llm.extract import _jd_hash
 
         jd_text = "A senior DS role at Acme Corp."
@@ -348,12 +348,12 @@ class TestCacheKeyV2:
         finally:
             conn.close()
 
-        # v4 lookup should miss
-        result = _db_cache_get(tmp_db, text_hash, model_name, "v4")
-        assert result is None, "v1 cache entry should not satisfy v4 lookup"
+        # v5 lookup should miss
+        result = _db_cache_get(tmp_db, text_hash, model_name, "v5")
+        assert result is None, "v1 cache entry should not satisfy v5 lookup"
 
     def test_v4_db_entry_is_found_by_v4_lookup(self, tmp_db):
-        """A v4 cache entry is found by a v4 lookup."""
+        """A v5 cache entry is found by a v5 lookup."""
         from jd_matcher.llm.extract import _jd_hash
 
         jd_text = "An ML Engineer role at Stripe."
@@ -361,9 +361,9 @@ class TestCacheKeyV2:
         model_name = "gpt-4o-mini"
 
         extraction = CanonicalExtraction.model_validate_json(_VALID_V2_JSON)
-        _db_cache_put(tmp_db, text_hash, model_name, "v4", extraction)
+        _db_cache_put(tmp_db, text_hash, model_name, "v5", extraction)
 
-        result = _db_cache_get(tmp_db, text_hash, model_name, "v4")
+        result = _db_cache_get(tmp_db, text_hash, model_name, "v5")
         assert result is not None
         assert result.fit_score == extraction.fit_score
         assert result.industry == extraction.industry

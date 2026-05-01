@@ -732,3 +732,132 @@ The v3 prompt's conservative default rule ("when ambiguous between 3 and 4, drop
 4. **Accept v3 with CIBC at 4** — If CIBC=4 is defensible (macroeconomic/investment research is analytically adjacent to DS), then v3's only divergence is Dropbox=5 vs expected 4, which is a one-level mismatch. This may be acceptable for Gate 4 probabilistic approval.
 
 Cache state after v4 test: v1|253, v4|6. Rolling back to v3 requires only the one-line `_PROMPT_VERSION` change in extract.py.
+
+---
+
+## v5 Hybrid Iteration — 2026-04-30
+
+### Design Intent
+
+v4 regressed 3 of 6 postings because replacing v3's per-score rubric with the in-scope/out-of-scope framework removed the hard calibration anchors (conservative default, quant=3 note, worked examples at each score level). v5 takes the hybrid approach:
+
+- **Base**: v3 exactly (all 5 per-score definitions, conservative default, sister team signal, manager-role caveat, quant note, 8 worked examples — unchanged)
+- **Augmentation**: Each worked example gains explicit `In-scope: items X,Y` / `Out-of-scope: items A,B` / `Distribution: ...` lines
+- **New subsection**: "How to apply the rubric: in-scope vs out-of-scope DS responsibilities" added AFTER the worked examples, with the full 8 IN-SCOPE and 9 OUT-OF-SCOPE lists and a 6-step application reasoning loop
+
+The lists are positioned as a *tool to make the rubric application precise*, not a replacement for the per-score thresholds. The `Step 4` sub-rubric in the application reasoning is an intentional redundant restatement of the per-score rubric — giving the LLM two angles on the same decision.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `prompts/canonical_extraction_v5.txt` | New file — v3 base with augmented examples + "How to apply" subsection |
+| `src/jd_matcher/llm/extract.py` | `_PROMPT_VERSION = "v5"`, `_PROMPT_PATH` updated |
+| `tests/llm/test_extract_m3.py` | All v4 references updated to v5 |
+
+### Test Results (post-v5)
+
+**Full suite (SKIP_LIVE=1)**: 1031 passed, 0 failed, 10 skipped
+**test_extract_m3.py**: 38/38 passed
+
+### 6-Posting v5 Smoke Test
+
+**Date**: 2026-04-30
+**Model**: gpt-4o-mini
+**Prompt version**: v5
+**DB snapshot before test**: `~/.jd-matcher/snapshots/20260430-HHMM-pre-m3-002-v5-prompt.db`
+**Cache state after**: v1|253, v5|6
+
+---
+
+#### v3 → v4 → v5 → Expected comparison table
+
+| Posting | Company | v3 | v4 | v5 | Expected | v5 Match? |
+|---------|---------|----|----|-----|----------|-----------|
+| 102 | Rockwell | 5 | 5 | **5** | 5 | PASS ✓ |
+| 107 | DarkVision | 2 | 4 | **2** | 2 | PASS ✓ |
+| 11 | TELUS | 3 | 5 | **3** | 3 | PASS ✓ |
+| 10 | Coalition | 5 | 5 | **5** | 5 | PASS ✓ |
+| 114 | CIBC | 4 | 5 | **3** | 3 | PASS ✓ (fixed from v3) |
+| 8 | Dropbox | 5 | 4 | **5** | 4 | FAIL ✗ |
+
+**Total: 5/6 pass**. v3's 4 passes preserved. CIBC fixed (4→3 ✓). Dropbox remains at 5 (expected 4).
+
+---
+
+#### Posting-by-posting v5 detail
+
+**posting_id=102, canonical_id=315: Rockwell Senior DS Agentic AI**
+- fit_score=5 ✓
+- fit_reasoning: "The role focuses on building predictive models and applying statistical methods, which are core data science responsibilities. The collaboration with product managers and AI engineers further emphasizes the problem-solving aspect of data science."
+- Cost: $0.001439 (8285 in / 327 out tokens)
+
+**posting_id=107, canonical_id=320: DarkVision Data Engineer** — preserved from v3
+- fit_score=2 ✓
+- fit_reasoning: "The role primarily focuses on data pipeline development and validation, with limited data science modeling responsibilities. The emphasis on engineering tasks such as pipeline optimization and report integrity suggests a fit score of 2."
+- Cost: $0.001406 (8290 in / 271 out tokens)
+- Analysis: The in-scope/out-of-scope items + v3's worked example (with "no modeling as primary duty" anchor) together prevented the regression that v4 had.
+
+**posting_id=11, canonical_id=323: TELUS Senior Developer AI/ML** — preserved from v3
+- fit_score=3 ✓
+- fit_reasoning: "The role involves significant technical leadership and full stack development, but also includes stakeholder management and cross-functional collaboration, which introduces non-DS elements. While there is a focus on AI/ML solutions, the broader scope of responsibilities leads to a fit score of 3."
+- Cost: $0.001413 (8128 in / 323 out tokens)
+- Analysis: Out-of-scope items 4 (full-stack) + 5 (architecture) + 9 (cross-team leadership) in the TELUS example correctly anchored this at 3.
+
+**posting_id=10, canonical_id=312: Coalition Applied Scientist II**
+- fit_score=5 ✓
+- fit_reasoning: "Core duties involve developing and deploying ML models for underwriting, including data exploration and statistical analysis, which aligns closely with data science responsibilities. The role emphasizes experimentation and model monitoring, confirming a pure data science focus."
+- Cost: $0.001555 (9086 in / 320 out tokens)
+
+**posting_id=114, canonical_id=327: CIBC Senior Research Analyst** — TARGET FIX ACHIEVED
+- fit_score=3 ✓ (was 4 in v3, now correctly 3)
+- fit_reasoning: "The role involves significant macroeconomic analysis and investment research, but also includes elements of financial modeling and market analysis that extend beyond pure data science responsibilities."
+- Cost: $0.001455 (8462 in / 309 out tokens)
+- Analysis: The explicit labeling of CIBC's example with `Out-of-scope: item 8 (financial modeling as PRIMARY professional discipline)` + the CIBC example's "Distribution: financial modeling is the PRIMARY work" annotation caused the LLM to correctly apply the quant=3 note.
+
+**posting_id=8, canonical_id=439: Dropbox Data Scientist** — REMAINING MISS
+- fit_score=5 (expected 4)
+- fit_reasoning: "The role focuses on data exploration, statistical analysis, and experimentation design, which are core data science responsibilities. The emphasis on user behavior analysis and collaboration with various teams confirms a pure data science scope."
+- Cost: $0.001455 (8458 in / 311 out tokens)
+- Analysis: LLM engaged with the in-scope items (EDA, stats, experimentation) but dismissed automated dashboards as out-of-scope item 2. The Dropbox worked example does explicitly call out `Out-of-scope: item 2 (automated reporting dashboards)` — the model may be failing to apply this to the actual JD text when the dashboarding language is embedded in a broader "analytics" description. This is the same miss as v3. Iteration budget exhausted.
+
+---
+
+### v5 Cost Summary
+
+| Posting | Company | Input tokens | Output tokens | Cost (USD) |
+|---------|---------|-------------|--------------|------------|
+| 102 | Rockwell | 8,285 | 327 | $0.001439 |
+| 107 | DarkVision | 8,290 | 271 | $0.001406 |
+| 11 | TELUS | 8,128 | 323 | $0.001413 |
+| 10 | Coalition | 9,086 | 320 | $0.001555 |
+| 114 | CIBC | 8,462 | 309 | $0.001455 |
+| 8 | Dropbox | 8,458 | 311 | $0.001455 |
+| **Total** | | **50,709** | **1,861** | **$0.008723** |
+
+Note: v5 prompt is ~1,800 tokens longer than v3 (the augmented examples + "How to apply" subsection). This is reflected in higher input token counts (~8.3k vs ~5.4k in v3).
+
+---
+
+### Summary: v3 vs v5
+
+| Issue | v3 | v5 | Delta |
+|-------|----|----|-------|
+| Rockwell fit=5 | ✓ | ✓ | preserved |
+| DarkVision fit=2 | ✓ | ✓ | preserved |
+| TELUS fit=3 | ✓ | ✓ | preserved |
+| Coalition fit=5 | ✓ | ✓ | preserved |
+| CIBC fit=3 | ✗ (returned 4) | ✓ (returns 3) | FIXED |
+| Dropbox fit=4 | ✗ (returned 5) | ✗ (returns 5) | unchanged miss |
+
+v5 is strictly better than v3 (5/6 vs 4/6). Iteration budget (3 attempts) exhausted.
+
+### Items for User Review (Gate 4 — v5)
+
+**Iteration budget exhausted.** This is attempt 3 of 3. User must choose one of:
+
+1. **Accept v5 (5/6)** — v5 is the best achieved result. Dropbox fit=5 (expected 4) is a one-level miss on a defensible DS role. Proceed to TASK-M3-003 with v5 active.
+
+2. **Accept v3 with CIBC at 4** — Revert to v3 (4/6); CIBC at 4 and Dropbox at 5 are both defensible one-level misses. The `[Show anyway]` override button in M3 can surface any mis-scored card during personal use.
+
+No iteration 4 will be attempted regardless of the outcome — per `/implement` Step 3 budget rule.
