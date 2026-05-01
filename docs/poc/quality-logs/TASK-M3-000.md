@@ -98,3 +98,37 @@ Gate 4 standard: deterministic component (propagation, test pass rate). Result: 
 **Post-fix test suite**: 976 passed, 10 skipped, 0 failures
 
 **Post-fix live verification**: `gmail_linkedin` health_status = healthy (71 emails fetched, 0 new postings — all already in DB from prior dry-run). No `DefaultCredentialsError`. CLI exit 0.
+
+---
+
+## Post-Commit Bug Fix — Orchestrator Silent Death After Gmail Phase (2026-04-30)
+
+**Bug surfaced during**: live sync run `be8e8ae2` on 2026-05-01 (07:41 UTC) — 121 new LinkedIn postings ingested, 0 downstream phases ran.
+
+**Root cause (Major-tier, Gate 5 diagnosed before fix):**
+
+With 64 pending-hydration URLs and no `SKIP_LIVE`, the hydrator calls `_fetch_live()` → `HYDRATOR_RATE_LIMITER.wait()` → `time.sleep(30)` for each URL. Total sleep time: 64 × 30s = 32 minutes. The user killed the process (SIGTERM/Ctrl+C → `KeyboardInterrupt`) while it was blocked in `time.sleep()`. `KeyboardInterrupt` is `BaseException` (not `Exception`), so it bypassed:
+- The per-URL `except Exception` handler in `run_hydrator_source`
+- The outer `except Exception` handler in `run_hydrator_source`
+- The `run_pipeline` function (no handler at all)
+
+Process died after the `source_complete` log for gmail — no `pipeline_runs` rows written for hydrator, extract, embed, dedup, hardfilter, or rank. JSONL log was only 3 lines / 528 bytes. C11 mandatory-persistence invariant violated for 6 sources.
+
+**Why this wasn't caught by previous tests**: The pre-fix test runs `f8cc3e3f` (07:47) and `a0429a90` (07:52) that the earlier data-pipeline agent used for verification both had `new_postings=0` (dedup'd), so `get_pending_hydration_urls` returned 0 URLs and the hydrator completed immediately. The bug only manifests when there are ≥1 pending hydration URLs in a live run.
+
+**Pre-refactor behavior**: The 1480-line monolith had the same BaseException gap (no `except BaseException` in the URL loop), but before M3-000 the DB had fewer accumulated partial postings so the rate-limiter sleep was short (1-2 URLs) and users didn't kill the process.
+
+**Fix (commit: see below):**
+
+1. **`pipeline/__init__.py`** — wrapped the hydrator loop in `except (KeyboardInterrupt, SystemExit)` to defer the signal; wrapped each downstream phase (extract, embed, dedup, hardfilter, rank) in `except BaseException` that writes a `failed` pipeline_runs row and continues to the next phase; added `_deferred_interrupt` re-raise at the end of `run_pipeline` after `pipeline_complete` is logged.
+
+2. **`pipeline/phases/hydrate.py`** — added `except (KeyboardInterrupt, SystemExit)` handler in the URL loop; calls `_flush_partial_hydrator_result()` (new helper) to write the hydrator's pipeline_runs row before re-raising, ensuring C11 is satisfied even when the process is interrupted mid-URL.
+
+**Regression tests added** (3 tests in `TestOrchestratorContinuesPastHydratorFailure`):
+- `test_regular_exception_from_hydrator_does_not_skip_downstream_phases` — hydrator raises `RuntimeError`, verifies all 7 downstream pipeline_runs rows written
+- `test_keyboard_interrupt_from_hydrator_persists_all_phase_rows` — hydrator raises `KeyboardInterrupt`, verifies extract/embed/dedup/hardfilter/rank rows written before re-raise
+- `test_pipeline_complete_event_written_after_hydrator_failure` — verifies `pipeline_complete` appears in JSONL log after hydrator crash
+
+**Post-fix test suite**: 979 passed, 10 skipped, 0 failures
+
+**Directional flag**: The 30s/URL rate limit (TDD §C5) is correct for normal volume but impractical for catch-up runs of 64+ URLs (32 min blocking). Adding a configurable `max_hydration_per_run` cap (e.g. 20 URLs per sync) is logged as a backlog item — implementing it requires a TDD §C5 amendment. Not fixed here (out of scope for this bug fix).

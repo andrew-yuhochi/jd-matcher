@@ -83,6 +83,53 @@ def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
         conn.close()
 
 
+def _flush_partial_hydrator_result(
+    *,
+    resolved_db: "Path",
+    run_id: str,
+    source_name: str,
+    started_at: "datetime",
+    results: list,
+    prev_status: str,
+    failure_reason: str,
+) -> None:
+    """Write a pipeline_runs row for a partially-completed hydration batch.
+
+    Called when KeyboardInterrupt/SystemExit interrupts the URL loop mid-flight
+    so the C11 mandatory-persistence invariant is never violated.  A second
+    write_pipeline_run call in the outer except block would conflict (UNIQUE
+    constraint on run_id+source), so this helper is the sole write for
+    interrupted runs.
+    """
+    try:
+        finished_at = datetime.now(timezone.utc)
+        health_status, hr = compute_source_health(results) if results else ("failed", None)
+        effective_failure = failure_reason if results else (hr or failure_reason)
+        lsf = started_at if health_status == "healthy" else last_successful_fetch_at(resolved_db, source_name)
+        write_pipeline_run(
+            resolved_db,
+            run_id=run_id,
+            source=source_name,
+            health_status="failed",
+            failure_reason=effective_failure,
+            started_at=started_at,
+            finished_at=finished_at,
+            last_successful_fetch_at=lsf,
+        )
+        emit_transition_event_if_needed(
+            resolved_db, source_name, prev_status, "failed", effective_failure, run_id
+        )
+    except Exception as flush_exc:
+        logger.error(
+            json.dumps({
+                "event": "hydrator_partial_flush_failed",
+                "run_id": run_id,
+                "source": source_name,
+                "error": f"{type(flush_exc).__name__}: {flush_exc}",
+            })
+        )
+
+
 def run_hydrator_source(
     *,
     source_name: str,
@@ -130,6 +177,25 @@ def run_hydrator_source(
                 exception_count += 1
                 last_exception_reason = f"db_lock:{exc}"
                 continue
+            except (KeyboardInterrupt, SystemExit):
+                # Unrecoverable signal — write partial result so pipeline_runs row
+                # is never missing (C11 mandatory-persistence invariant), then re-raise
+                # so the orchestrator's BaseException handler can continue downstream phases.
+                logger.warning(
+                    json.dumps({
+                        "event": "hydrator_interrupted",
+                        "run_id": run_id,
+                        "source": source_name,
+                        "urls_attempted": len(urls),
+                        "hydrated_before_interrupt": len(results),
+                    })
+                )
+                _flush_partial_hydrator_result(
+                    resolved_db=resolved_db, run_id=run_id, source_name=source_name,
+                    started_at=started_at, results=results, prev_status=prev_status,
+                    failure_reason="interrupted",
+                )
+                raise
             except Exception as exc:
                 logger.error(
                     "Hydration failed for url=%s: %s", url, exc, exc_info=True

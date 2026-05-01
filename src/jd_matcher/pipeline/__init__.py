@@ -155,54 +155,172 @@ def run_pipeline(
     all_postings: list[ParsedPosting] = [p for r in source_results for p in r.postings]
 
     # Phase: hydrate
+    # Wrapped in BaseException handler so that an interrupt mid-hydration
+    # (which _run_hydrator_source re-raises after flushing its own row) is
+    # caught here and allows downstream phases to still write their rows before
+    # the signal is propagated.  KeyboardInterrupt/SystemExit are deferred to
+    # after all pipeline_runs rows are persisted.
+    _deferred_interrupt: Optional[BaseException] = None
     for i, sender in enumerate(_HYDRATOR_SOURCES):
         source_name = f"hydrator_{sender}"
         step_label = f"Hydrating JDs ({sender})… ({i + 3}/4)"
         steps_emitted.append(step_label)
-        result = _run_hydrator_source(source_name=source_name, sender=sender, run_id=run_id,
-                                      resolved_db=resolved_db,
-                                      urls=get_pending_hydration_urls(resolved_db, sender),
-                                      all_postings=all_postings,
-                                      hydrate_linkedin_fn=linkedin_hydrate,
-                                      hydrate_indeed_fn=indeed_hydrate)
-        source_results.append(result)
-        logger.info(json.dumps({"event": "source_complete", "run_id": run_id,
-                                "source": source_name, "health_status": result.health_status,
-                                "hydrated": result.hydrated, "step": step_label}))
+        try:
+            result = _run_hydrator_source(source_name=source_name, sender=sender, run_id=run_id,
+                                          resolved_db=resolved_db,
+                                          urls=get_pending_hydration_urls(resolved_db, sender),
+                                          all_postings=all_postings,
+                                          hydrate_linkedin_fn=linkedin_hydrate,
+                                          hydrate_indeed_fn=indeed_hydrate)
+            source_results.append(result)
+            logger.info(json.dumps({"event": "source_complete", "run_id": run_id,
+                                    "source": source_name, "health_status": result.health_status,
+                                    "hydrated": result.hydrated, "step": step_label}))
+        except (KeyboardInterrupt, SystemExit) as exc:
+            # _run_hydrator_source already wrote the partial pipeline_runs row.
+            # Defer the signal so downstream phases can still persist their rows.
+            logger.warning(json.dumps({
+                "event": "hydrator_signal_deferred", "run_id": run_id,
+                "source": source_name,
+                "signal": type(exc).__name__,
+                "note": "downstream phases will write their pipeline_runs rows before signal propagates",
+            }))
+            _deferred_interrupt = exc
+            source_results.append(SourceResult(
+                source=source_name, health_status="failed",
+                failure_reason=f"interrupted:{type(exc).__name__}",
+            ))
+            break
+        except Exception as exc:
+            failure_reason = f"{type(exc).__name__}: {exc}"
+            logger.error(json.dumps({
+                "event": "hydrator_source_exception", "run_id": run_id,
+                "source": source_name, "failure_reason": failure_reason,
+            }))
+            write_pipeline_run(
+                resolved_db, run_id=run_id, source=source_name,
+                health_status="failed", failure_reason=failure_reason,
+                started_at=started_at, finished_at=datetime.now(timezone.utc),
+                last_successful_fetch_at=None,
+            )
+            source_results.append(SourceResult(
+                source=source_name, health_status="failed", failure_reason=failure_reason,
+            ))
 
     # Phase: extract (C18)
+    # Per-phase isolation: catch BaseException so KeyboardInterrupt/SystemExit cannot
+    # silently skip downstream phases. Each phase writes its own pipeline_runs row
+    # regardless of outcome (mandatory-persistence invariant C11).
     steps_emitted.append("LLM extraction (C18)…")
-    extract_result = _extract_run(
-        run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
-        write_pipeline_run=write_pipeline_run, get_pending_ids=get_pending_extraction_ids,
-        fetch_posting=fetch_posting_row, get_max_ledger_id=get_max_ledger_id,
-        ledger_delta=ledger_delta,
-    )
+    extract_result: dict = {}
+    try:
+        extract_result = _extract_run(
+            run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
+            write_pipeline_run=write_pipeline_run, get_pending_ids=get_pending_extraction_ids,
+            fetch_posting=fetch_posting_row, get_max_ledger_id=get_max_ledger_id,
+            ledger_delta=ledger_delta,
+        )
+    except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(json.dumps({
+            "event": "phase_aborted", "run_id": run_id, "phase": "llm_extraction",
+            "failure_reason": failure_reason,
+        }))
+        write_pipeline_run(
+            resolved_db, run_id=run_id, source="llm_extraction",
+            health_status="failed", failure_reason=failure_reason,
+            started_at=started_at, finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=None,
+        )
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
 
     # Phase: embed (C20)
     steps_emitted.append("Embedding postings (C20)…")
-    embed_result = _embed_run(
-        run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
-        write_pipeline_run=write_pipeline_run, get_pending_ids=get_pending_embedding_ids,
-        get_max_ledger_id=get_max_ledger_id, ledger_delta=ledger_delta,
-    )
+    embed_result: dict = {}
+    try:
+        embed_result = _embed_run(
+            run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
+            write_pipeline_run=write_pipeline_run, get_pending_ids=get_pending_embedding_ids,
+            get_max_ledger_id=get_max_ledger_id, ledger_delta=ledger_delta,
+        )
+    except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(json.dumps({
+            "event": "phase_aborted", "run_id": run_id, "phase": "embedding",
+            "failure_reason": failure_reason,
+        }))
+        write_pipeline_run(
+            resolved_db, run_id=run_id, source="embedding",
+            health_status="failed", failure_reason=failure_reason,
+            started_at=started_at, finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=None,
+        )
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
 
     # Phase: dedup + merge (C21/C29/C30)
     steps_emitted.append("Dedup decisions (C21)…")
     steps_emitted.append("Merge apply (C29+C30)…")
-    dedup_merge_result = _dedup_run(
-        run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
-        write_pipeline_run=write_pipeline_run, get_embedded_ids=get_embedded_posting_ids,
-        get_already_linked=get_already_linked_posting_ids,
-    )
+    dedup_merge_result: dict = {}
+    try:
+        dedup_merge_result = _dedup_run(
+            run_id=run_id, resolved_db=resolved_db, started_at=started_at, logger=logger,
+            write_pipeline_run=write_pipeline_run, get_embedded_ids=get_embedded_posting_ids,
+            get_already_linked=get_already_linked_posting_ids,
+        )
+    except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(json.dumps({
+            "event": "phase_aborted", "run_id": run_id, "phase": "dedup_c21",
+            "failure_reason": failure_reason,
+        }))
+        write_pipeline_run(
+            resolved_db, run_id=run_id, source="dedup_c21",
+            health_status="failed", failure_reason=failure_reason,
+            started_at=started_at, finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=None,
+        )
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
 
     # Phase: hardfilter (C33) — stub until TASK-M3-006
-    _hardfilter_run(run_id=run_id, resolved_db=resolved_db, started_at=started_at,
-                    logger=logger, write_pipeline_run=write_pipeline_run)
+    try:
+        _hardfilter_run(run_id=run_id, resolved_db=resolved_db, started_at=started_at,
+                        logger=logger, write_pipeline_run=write_pipeline_run)
+    except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(json.dumps({
+            "event": "phase_aborted", "run_id": run_id, "phase": "hardfilter",
+            "failure_reason": failure_reason,
+        }))
+        write_pipeline_run(
+            resolved_db, run_id=run_id, source="hardfilter",
+            health_status="failed", failure_reason=failure_reason,
+            started_at=started_at, finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=None,
+        )
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
 
     # Phase: rank (C34) — stub until TASK-M3-007
-    _rank_run(run_id=run_id, resolved_db=resolved_db, started_at=started_at,
-              logger=logger, write_pipeline_run=write_pipeline_run)
+    try:
+        _rank_run(run_id=run_id, resolved_db=resolved_db, started_at=started_at,
+                  logger=logger, write_pipeline_run=write_pipeline_run)
+    except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        logger.error(json.dumps({
+            "event": "phase_aborted", "run_id": run_id, "phase": "rank",
+            "failure_reason": failure_reason,
+        }))
+        write_pipeline_run(
+            resolved_db, run_id=run_id, source="rank",
+            health_status="failed", failure_reason=failure_reason,
+            started_at=started_at, finished_at=datetime.now(timezone.utc),
+            last_successful_fetch_at=None,
+        )
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
 
     _check_llm_cost(resolved_db, run_id)
 
@@ -228,6 +346,10 @@ def run_pipeline(
                             "total_new_postings": total_new,
                             "failed_sources": summary.failed_sources,
                             "log_path": str(log_path)}))
+
+    if _deferred_interrupt is not None:
+        raise _deferred_interrupt  # noqa: RSE102 — intentional deferred re-raise
+
     return summary
 
 

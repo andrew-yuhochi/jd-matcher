@@ -460,3 +460,201 @@ class TestDedupMergeInterleave:
         assert summary.merges_applied == 1, (
             f"PipelineRunSummary.merges_applied should be 1, got {summary.merges_applied}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression guard: orchestrator must continue past hydrator failure / interrupt
+# (introduced 2026-04-30 — TASK-M3-000b follow-up)
+#
+# Root cause: with SKIP_LIVE=0 and 64+ pending URLs, the hydrator's 30s
+# rate-limiter caused the live pipeline to appear "frozen" after gmail.
+# The user killed the process (SIGTERM/Ctrl+C → KeyboardInterrupt), which
+# bypassed both the per-URL `except Exception` handler AND the outer
+# `except Exception` in run_hydrator_source (KeyboardInterrupt is BaseException),
+# propagated un-caught through run_pipeline, and killed the process without
+# writing pipeline_runs rows for hydrator, extract, embed, dedup, hardfilter, rank.
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorContinuesPastHydratorFailure:
+    """Orchestrator must keep running downstream phases even when hydrator crashes.
+
+    Covers two failure modes:
+      1. Regular Exception from hydrator (run_hydrator_source raises RuntimeError)
+      2. KeyboardInterrupt from hydrator (simulates process kill mid-sleep)
+    """
+
+    # gmail_linkedin is mocked (returns SourceResult directly without writing pipeline_runs),
+    # so we only assert on sources the orchestrator writes directly.
+    REQUIRED_SOURCES = {
+        "hydrator_linkedin",
+        "llm_extraction",
+        "embedding",
+        "dedup_c21",
+        "dedup_merge_c29",
+        "hardfilter",
+        "rank",
+    }
+
+    def _run_with_crashing_hydrator(
+        self,
+        test_db: Path,
+        logs_dir: Path,
+        exc_to_raise: BaseException,
+    ) -> tuple[Any, list[dict]]:
+        """Run pipeline with gmail returning 1 new posting and hydrator raising exc_to_raise."""
+        one_posting = SourceResult(
+            source="gmail_linkedin",
+            health_status="healthy",
+            new_postings=1,
+        )
+
+        def _crashing_hydrator(*args: Any, **kwargs: Any) -> SourceResult:
+            raise exc_to_raise
+
+        with (
+            patch("jd_matcher.pipeline._run_gmail_source", return_value=one_posting),
+            patch("jd_matcher.pipeline._run_hydrator_source", side_effect=_crashing_hydrator),
+        ):
+            try:
+                summary = run_pipeline(db_path=test_db)
+            except (KeyboardInterrupt, SystemExit):
+                # Expected re-raise for signal interrupts — pipeline_runs rows
+                # must already be written for all phases at this point.
+                summary = None
+
+        rows = _pipeline_runs_for_run(test_db, _get_latest_run_id(test_db))
+        return summary, rows
+
+    def test_regular_exception_from_hydrator_does_not_skip_downstream_phases(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """If run_hydrator_source raises RuntimeError, all downstream phases still run.
+
+        Regression: before the fix, a hydrator RuntimeError would propagate un-caught
+        through run_pipeline, leaving extract/embed/dedup/hardfilter/rank with no
+        pipeline_runs rows — violating the C11 mandatory-persistence invariant.
+        """
+        _summary, rows = self._run_with_crashing_hydrator(
+            test_db, logs_dir, RuntimeError("simulated hydrator crash")
+        )
+        sources = {r["source"] for r in rows}
+        missing = self.REQUIRED_SOURCES - sources
+        assert not missing, (
+            f"Mandatory-persistence violated after hydrator RuntimeError: "
+            f"missing pipeline_runs rows for {missing}. "
+            f"All 8 sources must always be written regardless of hydrator outcome."
+        )
+        hydrator_row = next((r for r in rows if r["source"] == "hydrator_linkedin"), None)
+        assert hydrator_row is not None, "hydrator_linkedin row missing"
+        assert hydrator_row["health_status"] == "failed", (
+            f"hydrator_linkedin must be marked failed, got '{hydrator_row['health_status']}'"
+        )
+        assert hydrator_row["failure_reason"] is not None, (
+            "hydrator_linkedin failure_reason must be non-null"
+        )
+
+    def test_keyboard_interrupt_from_hydrator_persists_all_phase_rows(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """If run_hydrator_source raises KeyboardInterrupt, all downstream phases still
+        write their pipeline_runs rows before the interrupt is propagated.
+
+        Regression: this is the actual failure mode from run be8e8ae2 — the user's
+        Ctrl+C mid-hydration killed the process without persisting any rows for
+        extract/embed/dedup/hardfilter/rank.
+        """
+        one_posting = SourceResult(
+            source="gmail_linkedin",
+            health_status="healthy",
+            new_postings=1,
+        )
+
+        # Hydrator raises KeyboardInterrupt — simulates Ctrl+C mid-sleep
+        # in HYDRATOR_RATE_LIMITER.wait()
+        def _interrupted_hydrator(*args: Any, **kwargs: Any) -> SourceResult:
+            # Simulate what _flush_partial_hydrator_result would do:
+            # the real run_hydrator_source catches KeyboardInterrupt, writes
+            # a partial row, and re-raises. Here we just raise directly to
+            # test the orchestrator's deferred-interrupt logic.
+            raise KeyboardInterrupt("simulated Ctrl+C during rate-limiter sleep")
+
+        with (
+            patch("jd_matcher.pipeline._run_gmail_source", return_value=one_posting),
+            patch("jd_matcher.pipeline._run_hydrator_source", side_effect=_interrupted_hydrator),
+        ):
+            with pytest.raises(KeyboardInterrupt):
+                run_pipeline(db_path=test_db)
+
+        rows = _pipeline_runs_for_run(test_db, _get_latest_run_id(test_db))
+        sources = {r["source"] for r in rows}
+
+        # Hydrator row is NOT written here because the mock bypasses
+        # _flush_partial_hydrator_result — the orchestrator writes it via the
+        # except Exception handler (which catches RuntimeError but NOT
+        # KeyboardInterrupt). The orchestrator's KeyboardInterrupt handler
+        # defers the signal and continues downstream phases before re-raising.
+        # Key assertion: downstream phases wrote their rows.
+        downstream_required = {
+            "llm_extraction",
+            "embedding",
+            "dedup_c21",
+            "dedup_merge_c29",
+            "hardfilter",
+            "rank",
+        }
+        missing = downstream_required - sources
+        assert not missing, (
+            f"C11 mandatory-persistence violated after hydrator KeyboardInterrupt: "
+            f"downstream phases {missing} did not write pipeline_runs rows. "
+            f"These phases must always run regardless of how the hydrator was interrupted."
+        )
+
+    def test_pipeline_complete_event_written_after_hydrator_failure(
+        self, test_db: Path, skip_live: None, logs_dir: Path
+    ) -> None:
+        """After a regular hydrator exception, pipeline_complete event must appear in JSONL log."""
+        one_posting = SourceResult(
+            source="gmail_linkedin",
+            health_status="healthy",
+            new_postings=1,
+        )
+
+        with (
+            patch("jd_matcher.pipeline._run_gmail_source", return_value=one_posting),
+            patch(
+                "jd_matcher.pipeline._run_hydrator_source",
+                side_effect=RuntimeError("simulated hydrator crash"),
+            ),
+        ):
+            summary = run_pipeline(db_path=test_db)
+
+        # Find the JSONL log for this run
+        log_files = list(logs_dir.glob(f"pipeline-{summary.run_id}.jsonl"))
+        assert log_files, f"No JSONL log found for run_id={summary.run_id}"
+        log_content = log_files[0].read_text()
+        events = [json.loads(line) for line in log_content.splitlines() if line.strip()]
+        event_names = [e.get("event") for e in events]
+        assert "pipeline_complete" in event_names, (
+            f"pipeline_complete event missing from JSONL log after hydrator failure. "
+            f"Events found: {event_names}"
+        )
+        # phase_aborted or hydrator_source_exception must also be present
+        assert any(
+            e in event_names for e in ("phase_aborted", "hydrator_source_exception")
+        ), (
+            f"No failure event logged for hydrator crash. Events: {event_names}"
+        )
+
+
+def _get_latest_run_id(db_path: Path) -> str:
+    """Return the run_id of the most recently started pipeline run."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT run_id FROM pipeline_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert row is not None, "No pipeline_runs rows found"
+        return row[0]
+    finally:
+        conn.close()
