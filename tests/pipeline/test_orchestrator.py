@@ -560,3 +560,124 @@ def test_gmail_sources_constant_is_linkedin_only_in_poc():
         "Indeed deferred to MVP-M1; if re-activating, also update "
         "ALIGNMENT-LOG and PRD §9 R3 status"
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI credential wiring — regression tests for TASK-M3-000 follow-up bug
+# (pipeline/__main__.py must pass OAuth credentials to run_pipeline, not None)
+# ---------------------------------------------------------------------------
+
+
+class TestCliCredentialWiring:
+    """Regression guard: the CLI entry point must load and forward OAuth credentials.
+
+    Root cause that was fixed: __main__.py called run_pipeline(db_path=db_path) with
+    no credentials argument, defaulting to None.  None propagated into _GmailIngester
+    which then fell back to google.auth.default() → DefaultCredentialsError.
+    """
+
+    def test_main_module_passes_credentials_to_run_pipeline(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """run_pipeline must be called with the sentinel returned by get_credentials."""
+        import runpy
+        from unittest.mock import MagicMock, patch, sentinel
+
+        fake_client = tmp_path / "credentials.json"
+        fake_client.write_text("{}")  # must exist so the exists() check passes
+
+        monkeypatch.setenv("SKIP_LIVE", "0")
+        monkeypatch.setenv("GMAIL_OAUTH_CLIENT_PATH", str(fake_client))
+        monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+        fake_creds = sentinel.credentials
+        fake_summary = MagicMock()
+        fake_summary.run_id = "run-test"
+        fake_summary.started_at = fake_summary.finished_at = MagicMock()
+        fake_summary.finished_at.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=0.1))
+        )
+        fake_summary.total_new_postings = 0
+        fake_summary.sources = []
+
+        with (
+            patch(
+                "jd_matcher.auth.gmail_oauth.get_credentials",
+                return_value=fake_creds,
+            ) as mock_get_creds,
+            patch(
+                "jd_matcher.pipeline.run_pipeline",
+                return_value=fake_summary,
+            ) as mock_run,
+        ):
+            runpy.run_module("jd_matcher.pipeline", run_name="__main__")
+
+        mock_get_creds.assert_called_once()
+        call_kwargs = mock_run.call_args
+        assert call_kwargs.kwargs.get("credentials") is fake_creds, (
+            "run_pipeline must receive the credentials object, not None"
+        )
+
+    def test_main_module_handles_oauth_invalid_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """OAuthTokenInvalid must produce a human-readable message and exit 1, not a traceback."""
+        import runpy
+        from unittest.mock import patch
+
+        from jd_matcher.auth.gmail_oauth import OAuthTokenInvalid
+
+        fake_client = tmp_path / "credentials.json"
+        fake_client.write_text("{}")
+
+        monkeypatch.setenv("SKIP_LIVE", "0")
+        monkeypatch.setenv("GMAIL_OAUTH_CLIENT_PATH", str(fake_client))
+        monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+        with patch(
+            "jd_matcher.auth.gmail_oauth.get_credentials",
+            side_effect=OAuthTokenInvalid("token revoked"),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                runpy.run_module("jd_matcher.pipeline", run_name="__main__")
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "jd_matcher.auth" in captured.out or "re-authenticate" in captured.out.lower(), (
+            "Exit message must mention the re-authentication command"
+        )
+
+    def test_main_module_skips_auth_under_skip_live(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Under SKIP_LIVE=1 no credential loading happens; credentials=None is acceptable."""
+        import runpy
+        from unittest.mock import MagicMock, patch
+
+        monkeypatch.setenv("SKIP_LIVE", "1")
+        monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+
+        fake_summary = MagicMock()
+        fake_summary.run_id = "run-skip"
+        fake_summary.started_at = fake_summary.finished_at = MagicMock()
+        fake_summary.finished_at.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=0.0))
+        )
+        fake_summary.total_new_postings = 0
+        fake_summary.sources = []
+
+        with (
+            patch(
+                "jd_matcher.auth.gmail_oauth.get_credentials",
+            ) as mock_get_creds,
+            patch(
+                "jd_matcher.pipeline.run_pipeline",
+                return_value=fake_summary,
+            ) as mock_run,
+        ):
+            runpy.run_module("jd_matcher.pipeline", run_name="__main__")
+
+        mock_get_creds.assert_not_called()
+        call_kwargs = mock_run.call_args
+        # Under SKIP_LIVE the web route also passes credentials=None — CLI must match
+        assert call_kwargs.kwargs.get("credentials") is None
