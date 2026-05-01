@@ -1,9 +1,9 @@
 # Product Requirements Document — jd-matcher (PoC)
 
-> **Status**: Draft
-> **Phase**: PoC
-> **Last Updated**: 2026-04-24
-> **Depends on**: DISCOVERY-NOTES.md, MARKET-ANALYSIS.md, ROADMAP.md, RESEARCH-REPORT.md, UX-SPEC.md (all approved)
+> **Status**: Active
+> **Phase**: PoC (M3 — Smart Layer active)
+> **Last Updated**: 2026-04-29 (§5 M3 + §7 SC-9/SC-10/SC-11/SC-13/SC-15a/b/c synced to /milestone-plan Step 1 locked scope: 7 new C18 fields, hard-filter post-LLM, 4-tuple deterministic ranker)
+> **Depends on**: DISCOVERY-NOTES.md, MARKET-ANALYSIS.md, ROADMAP.md, RESEARCH-REPORT.md, UX-SPEC.md (all approved); ARCHITECTURE-REVIEW-2026-04-29.md (M3 cleanup directives)
 
 ---
 
@@ -108,13 +108,26 @@ Four milestones, each with a user-observable deliverable. Mirrors ROADMAP.md §"
 - ~~Himalayas API source added~~ — **deferred to M4** (see BACKLOG.md → "PoC-M4 — Himalayas API source (deferred from M2)"). Bundles with M4's planned Job Bank/Remotive/Jobicy/HN multi-source expansion. **M2 cross-source merge ACs (2026-04-28 update — see PRD §9 R3 realized risk)**: merged cards with multi-source attribution where cross-source pairs exist. During PoC, real merged cards may show LinkedIn-only attribution (per §9 R3 realized risk); the multi-source UI mechanic is demonstrated via the synthetic C21 fixtures and Cross-source dedup is verified per revised SC-8.
 
 ### M3 — Smart layer
-- Single LLM extraction prompt (cloud-default OpenAI `gpt-4o-mini`, ~$0.60/mo at 20 postings/day; Ollama `qwen2.5:7b` config-swappable) producing all of: canonical fields + salary + tags + `primary_focus` + `fit_score` + `fit_reasoning` + `requires_pr_or_citizenship`
-- Hard-filter Layer 1 keyword pre-LLM list for PR/citizenship
-- Soft-rank composite scoring (salary + industry + recency, configurable weights)
-- Main view sort + filter as a view policy (hedge 1) — below-threshold postings remain queryable
-- Taxonomy revision pass after ~100 classified postings (rename/merge/split)
-- Generic role-family-language prompt (hedge 4)
-- Optional opt-in: local-vs-cloud LLM benchmark sub-task (Ollama vs `gpt-4o-mini`) — results (if the opt-in is run) are an input to the Beta Path B evaluation: whether local-Ollama quality is equivalent to `gpt-4o-mini` determines whether a free local + paid cloud-tier model is commercially viable.
+M3 extends C18 (single LLM extraction prompt, cloud-default OpenAI `gpt-4o-mini`, ~$0.60/mo at 20 postings/day; Ollama `qwen2.5:7b` config-swappable) with seven new fields and adds a new post-extraction hard-filter stage. Architectural change vs original M2 spec: the hard filter runs **after** C18 LLM extraction (NOT a pre-LLM keyword filter), and ranking is **deterministic tuple-based** (NOT a weighted-sum composite). Locked at /milestone-plan Step 1 (2026-04-29).
+
+- Extend C18 to extract these seven fields per posting:
+  1. `fit_score: int 1-5` — DS-duty fit (5 = pure DS; 1 = not a DS role). Threshold N is configurable (default 3 — hard-filter cuts everything below).
+  2. `fit_reasoning: str` — 1-2 sentence rationale for the score; surfaced in expanded card / tooltip on the fit-score chip.
+  3. `industry: str` — primary sector from a closed 16-element taxonomy (15 sectors + "Other"; no "Multi" — LLM picks one even when company spans multiple). Taxonomy listed in TDD §C18 Responsibility.
+  4. `role_orientation: list[str]` — 1-3 items from `{Engineering, Problem-Solving, Communication}`. Replaces the obsolete PRD term `primary_focus`.
+  5. `salary_min_cad: int | null` + `salary_max_cad: int | null` — parsed compensation range, normalized to CAD. Handles USD/CAD/range/spot/equity-mention. Null when JD doesn't state.
+  6. `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]` + `citizenship_reason: str` — 3-state field. LLM detects explicit PR/Citizenship asks AND implicit gates (security clearance, government work, ITAR-controlled tech, national-sensitive data). NOT a boolean.
+  7. `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]` — 4-state. Captures both Canadian-domiciled employers AND US/global employers with Canadian subsidiaries. NOT just employer-domicile.
+- New C33 — Hard Filter Engine. Runs as a new pipeline phase AFTER C18/C20/C21/C29 (extracted fields available). Reads `user_profile.yaml::hard_filters` (new section): `min_fit_score`, `min_salary_cad`, `acceptable_seniority` list, `citizenship_status` (consumer's status), `require_canadian_hiring` boolean. **Null-tolerant** — if LLM couldn't determine a field (e.g., salary not in JD), the posting is NOT filtered (innocent until proven guilty). Only confident `false`/`no`/`< threshold` triggers a hide. Result stored on `canonical_postings` (`is_filtered BOOLEAN`, `filter_reason TEXT`).
+- New C34 — Card Ranker. Computes a deterministic 4-tuple sort key for the Main view (all DESC): `fit_score`, `orientation_diversity` (computed: `(0 if Engineering ∈ role_orientation else 1) + count(non-Engineering items)`; pure-Engineering = 0 sorts last; `[Problem-Solving, Communication]` = 3 sorts first), `salary_max_cad` (numeric, null = midpoint default for sort purposes), `post_date`. Read-only — does not modify data, just computes order.
+- Filter as a view policy (hedge 1) — below-threshold postings remain queryable in DB; surface them on a new **Filtered tab** with `Filtered: <reason>` badges and a "Show anyway" override per card (`POST /postings/{id}/filter_override`, logged via C10 event `card_filter_overridden`).
+- UI extensions on the Main card layout per locked /milestone-plan Step 1 design: industry chip on the location row; fit-score chip + salary chip + role_orientation chip on a new line; citizenship and Canadian-hire badges in the source row; tooltip on fit_score chip showing `fit_reasoning`. Skills strip + match footer unchanged from M2.
+- Closing M3 task: industry taxonomy revision pass — run M3 first pass on the 148 canonicals, tabulate distribution, triage empty / overflow / merge / split cases with the user, apply approved changes to the prompt, re-extract affected canonicals.
+- Generic role-family-language prompt (hedge 4) preserved.
+- Schema additions to `canonical_postings` (extends C2): the seven LLM fields above plus `is_filtered BOOLEAN NOT NULL DEFAULT 0` and `filter_reason TEXT NULL`. Migration is idempotent ALTER TABLE per the C2 §"Migrations" pattern. ~148 existing canonicals back-filled by re-extraction at ~$0.15.
+- Architecture-review-driven cleanups (TASK-M3-000 scope, per ARCHITECTURE-REVIEW-2026-04-29): C18→postings propagation fix (closes Jobright bug class — 7 LLM fields now write back to `postings`); pipeline.py decomposition (1480 → per-phase modules under `pipeline/phases/`); TDD §C2/C5/C7/C8/C9/C11/C21 footnote consolidation; drop dead `dedup.auto_merge_threshold` config field; minor test cuts.
+- Optional opt-in: local-vs-cloud LLM benchmark sub-task (Ollama vs `gpt-4o-mini`) — runs only if user explicitly opts in. Results (if run) feed Beta Path B viability of a free-local + paid-cloud-tier commercial model.
+- Tags and `primary_focus` are explicitly removed from M3 scope (replaced by `role_orientation` + the structured fit/industry/orientation fields above).
 
 ### M4 — CV recommender + extended sources + analytics
 - CV text extraction (PyMuPDF or pdfplumber) at startup; CV embedding pipeline (same `text-embedding-3-small`); cosine rank against `role_summary + top_skills` embedding
@@ -182,13 +195,16 @@ Anchored to ROADMAP.md PoC exit criteria + per-milestone acceptance criteria.
 | SC-6 | Content-aware dedup overall | ≥90% on 30 hand-labeled pairs | 10 dup / 10 non-dup / 10 ambiguous | M2 |
 | SC-7 | Content-aware dedup — different-team false-merge rate | **0** | 10 different-team cases — regression-blocking | M2 |
 | SC-8 | Cross-source merge | Verified | ≥3 verified cross-source pairs collapse to one canonical card. Synthetic cross-source pairs are acceptable where live Indeed data is unavailable due to PRD §9 R3 realized risk. The C21 dedup mechanism is the validation target; synthetic pairs (per TDD §C21 sample selection) prove the mechanism identically. — Validated in M2 (revised 2026-04-28 per ALIGNMENT-LOG). | M2 |
-| SC-9 | LLM `primary_focus` agreement | ≥80% | ≥30 hand-labeled postings vs. user labels | M3 |
-| SC-10 | LLM multi-tag Jaccard | ≥70% | Same set as SC-9 | M3 |
-| SC-11 | LLM `fit_score` accept/reject agreement at threshold 50 | ≥90% | Same set as SC-9 | M3 |
-| SC-12 | Salary extraction (where stated) | ≥90% within ±10% | Hand-labeled subset | M3 |
-| SC-13 | Hard-filter PR/citizenship pre-LLM rejection | 0 false-negatives on 10 test cases | Synthetic + real | M3 |
-| SC-14 | Cloud-LLM cost over milestone window | ≤$1/mo | `quality-logs/llm-cost.md` | M3 |
-| SC-15 | Below-threshold postings remain queryable (hedge 1 proven) | Visible count in events/admin view | M3 acceptance check | M3 |
+| SC-9 | LLM `role_orientation` label agreement (multi-select 1-3 from Engineering/Problem-Solving/Communication) | ≥80% set-equality agreement | ≥30 hand-labeled postings vs. user labels | M3 |
+| SC-10 | _(removed — tags / multi-tag Jaccard dropped from M3 scope; replaced by `role_orientation` + `industry`)_ | — | — | — |
+| SC-11 | LLM `fit_score` accept/reject agreement at user-set threshold N (default N=3 on the 1-5 scale) | ≥90% | Same set as SC-9 | M3 |
+| SC-12 | Salary extraction (where stated) | ≥90% within ±10% on min/max range | Hand-labeled subset | M3 |
+| SC-13 | Hard-filter (post-LLM) — citizenship_requirement = required AND user is not eligible → posting filtered with reason | 0 false-negatives on 10 test cases (must catch all eligibility-blocking JDs the user labels) | Synthetic + real | M3 |
+| SC-14 | Cloud-LLM cost over milestone window (extraction + embedding + back-fill of 148 canonicals) | ≤$1/mo running, plus ~$0.15 one-shot back-fill | `quality-logs/llm-cost.md` | M3 |
+| SC-15 | Below-threshold postings remain queryable (hedge 1 proven) — visible on the Filtered tab with reason; "Show anyway" override works per card | Visible count in Filtered tab matches `WHERE is_filtered=1` row count | M3 acceptance check | M3 |
+| SC-15a | LLM `industry` classification agreement against the 16-sector closed taxonomy | ≥75% exact-match (lower bar than SC-9 because 16-class is a harder problem than 3-class) | ≥30 hand-labeled postings (same set as SC-9) | M3 |
+| SC-15b | LLM `citizenship_requirement` 3-state classification agreement | ≥90% exact-match across `required`/`preferred`/`not_mentioned` | Same set as SC-9 | M3 |
+| SC-15c | LLM `can_hire_in_canada` 4-state classification agreement | ≥85% exact-match across `yes`/`likely`/`no`/`unclear` | Same set as SC-9 | M3 |
 | SC-16 | CV recommender top-1 agreement | ≥80% on 20 hand-labeled postings (probabilistic — user approval gate) | Hand-label review | M4 |
 | SC-17 | Job Bank Canada email parsing | ≥90% URL extraction on ≥10 real emails | Risk 3 from RESEARCH-REPORT.md §8 — fragile | M4 |
 | SC-18 | Extended-source ingestion (Remotive, Jobicy, HN, Job Bank) | ≥1 real posting each, ≥95% structural success | Deterministic | M4 |
