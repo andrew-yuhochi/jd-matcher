@@ -306,10 +306,10 @@ def _seed_posting(
         """
         INSERT INTO postings
             (user_id, canonical_company, canonical_title, canonical_location,
-             seniority_band, top_skills, hydration_status, first_seen, last_seen)
-        VALUES ('default', ?, ?, ?, ?, ?, 'complete', ?, ?)
+             seniority_band, canonical_seniority, top_skills, hydration_status, first_seen, last_seen)
+        VALUES ('default', ?, ?, ?, ?, ?, ?, 'complete', ?, ?)
         """,
-        (company, title, location, seniority, skills_json, now, now),
+        (company, title, location, seniority, seniority, skills_json, now, now),
     )
     conn.commit()
     return cur.lastrowid  # type: ignore[return-value]

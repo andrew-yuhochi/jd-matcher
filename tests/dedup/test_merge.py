@@ -727,32 +727,31 @@ class TestDemoIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Regression test: canonical_seniority must be populated from seniority_band
+# Regression test: canonical_seniority must be populated from postings.canonical_seniority
+# (TASK-M3-000: merge.py now reads postings.canonical_seniority directly, not seniority_band)
 # ---------------------------------------------------------------------------
 
 
-def test_canonical_seniority_populated_from_posting_seniority_band(tmp_path: Path) -> None:
-    """_fetch_posting() must read postings.seniority_band (not canonical_seniority).
+def test_canonical_seniority_populated_from_posting_canonical_seniority(tmp_path: Path) -> None:
+    """_fetch_posting() must read postings.canonical_seniority (written by C18 extraction).
 
-    Before the fix, merge.py selected postings.canonical_seniority which is always NULL
-    (LLM extractor writes to seniority_band; canonical_seniority is a vestigial column).
-    The result: every canonical_postings row had empty canonical_seniority, so
-    seniority_match() returned 0.0 for all pairs, and the max achievable FUSE score
-    was 0.90 — causing 5 of 7 expected merges to miss based on float32 rounding.
+    TASK-M3-000: merge.py switched from reading seniority_band AS canonical_seniority
+    to reading the live canonical_seniority column that _write_postings_extracted() populates.
+    This test asserts the post-fix behavior: canonical_seniority written by LLM extraction
+    flows correctly into canonical_postings.canonical_seniority via merge.
     """
     db = _make_db(tmp_path)
 
-    # Insert posting with seniority_band='Senior' (canonical_seniority left NULL/empty
-    # to replicate the real schema state where LLM never writes to that column).
+    # Insert posting with canonical_seniority='Senior' (the live column written by C18).
     conn = sqlite3.connect(str(db))
     cur = conn.execute(
         """
         INSERT INTO postings
             (user_id, canonical_company, canonical_title, canonical_location,
-             seniority_band, team_or_department, top_skills,
+             canonical_seniority, seniority_band, team_or_department, top_skills,
              role_summary, full_jd, hydration_status, first_seen, last_seen)
         VALUES ('default', 'Acme Corp', 'Data Scientist', 'Vancouver',
-                'Senior', NULL, '["python"]',
+                'Senior', NULL, NULL, '["python"]',
                 'Role summary.', 'Full JD.', 'complete',
                 '2024-03-01T00:00:00+00:00', '2024-03-01T00:00:00+00:00')
         """,
@@ -779,6 +778,6 @@ def test_canonical_seniority_populated_from_posting_seniority_band(tmp_path: Pat
 
     assert row is not None, "canonical_postings should have exactly one row after action='new'"
     assert row[0] == "Senior", (
-        f"canonical_postings.canonical_seniority should be 'Senior' (from seniority_band), "
-        f"got {row[0]!r}. This means _fetch_posting() is still reading the wrong column."
+        f"canonical_postings.canonical_seniority should be 'Senior' (from postings.canonical_seniority), "
+        f"got {row[0]!r}. This means _fetch_posting() is reading the wrong column."
     )

@@ -681,6 +681,116 @@ class TestExtractionCacheTable:
 
 
 # ---------------------------------------------------------------------------
+# TestCacheHitPropagation — asserts that postings fields are populated on cache hit
+# (closes the coverage gap that allowed the M2-012 Jobright bug class to ship)
+# ---------------------------------------------------------------------------
+
+
+class TestCacheHitPropagation:
+    """Verify that _write_postings_extracted() fires on BOTH fresh and cache-hit paths.
+
+    M2-012 root cause: extract_canonical() wrote to extraction_cache but never
+    to postings, so cache-hit paths left postings.top_skills / canonical_seniority /
+    role_summary NULL. TASK-M3-000 adds _write_postings_extracted() to all three
+    return paths (fresh, in-process cache, DB cache).
+    """
+
+    def test_fresh_extraction_populates_postings(self, tmp_db: Path) -> None:
+        """After a fresh extraction, postings.canonical_seniority and top_skills are non-null."""
+        provider = _make_provider()
+        posting = _make_posting(posting_id=100, full_jd="Fresh extraction JD text.")
+
+        # Insert the posting into the DB so _write_postings_extracted has a row to update
+        conn = sqlite3.connect(tmp_db)
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute(
+            """
+            INSERT INTO postings
+                (id, user_id, canonical_title, hydration_status, full_jd, first_seen, last_seen)
+            VALUES (100, 'default', 'Test Role', 'complete', 'Fresh extraction JD text.',
+                    '2026-04-01T00:00:00+00:00', '2026-04-01T00:00:00+00:00')
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        extract_canonical(posting, provider=provider, db_path=tmp_db)
+
+        conn = sqlite3.connect(tmp_db)
+        row = conn.execute(
+            "SELECT canonical_seniority, top_skills, role_summary FROM postings WHERE id = 100"
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        assert row[0] == "Senior", f"canonical_seniority should be 'Senior', got {row[0]!r}"
+        assert row[1] is not None, "top_skills should be non-null after extraction"
+        assert row[2] is not None, "role_summary should be non-null after extraction"
+
+    def test_db_cache_hit_propagates_to_postings(self, tmp_db: Path) -> None:
+        """On a DB cache hit, postings fields are updated from the cached extraction.
+
+        This is the exact class of bug from M2-012 (Jobright canonicals 316/395/396/458):
+        the cache was hit correctly but postings remained NULL.
+        """
+        provider = _make_provider()
+        # First call: fresh extraction; populates extraction_cache
+        posting_seed = _make_posting(posting_id=200, full_jd="Cache hit propagation JD text.")
+        conn = sqlite3.connect(tmp_db)
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute(
+            """
+            INSERT INTO postings
+                (id, user_id, canonical_title, hydration_status, full_jd, first_seen, last_seen)
+            VALUES (200, 'default', 'Seed Role', 'complete', 'Cache hit propagation JD text.',
+                    '2026-04-01T00:00:00+00:00', '2026-04-01T00:00:00+00:00')
+            """
+        )
+        conn.commit()
+        conn.close()
+        extract_canonical(posting_seed, provider=provider, db_path=tmp_db)
+
+        # Second posting with the SAME full_jd → DB cache hit path
+        conn = sqlite3.connect(tmp_db)
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute(
+            """
+            INSERT INTO postings
+                (id, user_id, canonical_title, hydration_status, full_jd, first_seen, last_seen)
+            VALUES (201, 'default', 'Cache Hit Role', 'complete', 'Cache hit propagation JD text.',
+                    '2026-04-01T00:00:00+00:00', '2026-04-01T00:00:00+00:00')
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        # Clear the in-process cache so the DB cache path is exercised
+        _PROCESS_CACHE.clear()
+
+        posting_hit = _make_posting(posting_id=201, full_jd="Cache hit propagation JD text.")
+        extract_canonical(posting_hit, provider=provider, db_path=tmp_db)
+
+        # Provider should have been called only ONCE (for the seed posting)
+        assert provider.extract.call_count == 1, (
+            "Provider should not be called on cache hit"
+        )
+
+        # The cache-hit posting must now have its fields populated
+        conn = sqlite3.connect(tmp_db)
+        row = conn.execute(
+            "SELECT canonical_seniority, top_skills, role_summary FROM postings WHERE id = 201"
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        assert row[0] == "Senior", (
+            f"postings.canonical_seniority should be 'Senior' on cache hit, got {row[0]!r}"
+        )
+        assert row[1] is not None, "postings.top_skills should be non-null on cache hit"
+        assert row[2] is not None, "postings.role_summary should be non-null on cache hit"
+
+
+# ---------------------------------------------------------------------------
 # AC #9 — Live test (one real posting, real OpenAI call)
 # ---------------------------------------------------------------------------
 

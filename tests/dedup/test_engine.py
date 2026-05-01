@@ -66,6 +66,7 @@ def _make_test_db() -> sqlite3.Connection:
             canonical_title     TEXT,
             canonical_location  TEXT,
             seniority_band      TEXT,
+            canonical_seniority TEXT,
             team_or_department  TEXT,
             top_skills          TEXT,
             role_summary        TEXT,
@@ -155,12 +156,12 @@ def _insert_posting(
         """
         INSERT INTO postings
             (user_id, canonical_company, canonical_title, canonical_location,
-             team_or_department, seniority_band, top_skills, role_summary, full_jd,
+             team_or_department, seniority_band, canonical_seniority, top_skills, role_summary, full_jd,
              hydration_status, first_seen, last_seen)
-        VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?, ?)
+        VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?, ?)
         """,
         (
-            company, title, location, team, seniority,
+            company, title, location, team, seniority, seniority,
             json.dumps(skills or []),
             role_summary,
             full_jd,
@@ -406,7 +407,6 @@ class TestFuseMath:
     @pytest.fixture
     def config(self) -> DedupConfig:
         return DedupConfig(
-            auto_merge_threshold=0.90,
             fuse_weight_embedding=0.4,
             fuse_weight_skills=0.3,
             fuse_weight_title=0.2,
@@ -594,7 +594,7 @@ class TestUserScenarios:
             disk.commit()
 
         # BLOCK separates: "Risk Analytics" != "Marketing Analytics" → no BLOCK candidates
-        config = DedupConfig(auto_merge_threshold=0.90)
+        config = DedupConfig()
         with patch("jd_matcher.dedup.engine.title_cosine", return_value=0.9):
             decision = decide(posting_id=candidate_pid, db_path=db_path, config=config)
 
@@ -646,7 +646,7 @@ class TestUserScenarios:
                     pass
             disk.commit()
 
-        config = DedupConfig(auto_merge_threshold=0.90)
+        config = DedupConfig()
         # title_cosine for "Credit" vs "Operational" → low (mock 0.4)
         # emb=0, title=0.4, skills=jaccard(credit+sql+sklearn, operational+sql+pandas)
         # intersection={python, sql}, union={python, credit risk, sql, sklearn, operational risk, pandas} → 2/6 ≈ 0.33
@@ -769,7 +769,7 @@ class TestUserScenarios:
                     pass
             disk.commit()
 
-        config = DedupConfig(auto_merge_threshold=0.90)
+        config = DedupConfig()
         with patch("jd_matcher.dedup.engine.title_cosine", return_value=1.0):
             decision = decide(posting_id=toronto_pid, db_path=db_path, config=config)
 
@@ -850,7 +850,7 @@ class TestDifferentTeamRegression:
                 disk.commit()
             conn.close()
 
-            config = DedupConfig(auto_merge_threshold=0.90)
+            config = DedupConfig()
             with patch("jd_matcher.dedup.engine.title_cosine", return_value=1.0):
                 decision = decide(posting_id=candidate_pid, db_path=db_path, config=config)
 
@@ -989,7 +989,7 @@ class TestInactiveExpiredBypass:
             disk.commit()
         conn.close()
 
-        config = DedupConfig(auto_merge_threshold=0.90)
+        config = DedupConfig()
         with patch("jd_matcher.dedup.engine.title_cosine", return_value=1.0):
             decision = decide(posting_id=candidate_pid, db_path=db_path, config=config)
 

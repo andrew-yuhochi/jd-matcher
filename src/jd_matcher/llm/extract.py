@@ -313,6 +313,73 @@ def _write_postings_failed(
         logger.warning("extract: postings failure update failed — %s", exc)
 
 
+def _write_postings_extracted(
+    *,
+    db_path: Path | None,
+    posting_id: int,
+    extraction: "CanonicalExtraction",
+) -> None:
+    """Propagate LLM-extracted M2 fields back to the postings row.
+
+    This closes the bug class documented in ARCHITECTURE-REVIEW-2026-04-29 §2/§4:
+    extract_canonical() was only writing to extraction_cache, leaving postings.*
+    stale so dedup/engine.py and dedup/merge.py fell back to reading seniority_band.
+
+    M3 fields (fit_score, fit_reasoning, industry, etc.) are NOT yet on the schema
+    at TASK-M3-000 — adding them is TASK-M3-001+. The UPDATE is built dynamically
+    from the columns that currently exist on the postings table so that TASK-M3-001
+    only needs to extend the schema; the propagation helper auto-picks them up.
+    """
+    if db_path is None:
+        return
+    try:
+        import json as _json
+
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA foreign_keys = ON;")
+            existing_cols = {
+                row[1] for row in conn.execute("PRAGMA table_info(postings);").fetchall()
+            }
+
+            # M2 fields always available on the CanonicalExtraction model
+            m2_candidates: list[tuple[str, object]] = [
+                ("canonical_company", extraction.canonical_company),
+                ("canonical_seniority", extraction.canonical_seniority),
+                ("canonical_title", extraction.canonical_title),
+                ("canonical_location", extraction.canonical_location),
+                ("team_or_department", extraction.team_or_department),
+                ("top_skills", _json.dumps(extraction.top_skills)),
+                ("role_summary", extraction.role_summary),
+            ]
+
+            # Only set columns that exist — forward-compatible: TASK-M3-001 adds
+            # the M3 columns; subsequent tasks extend extraction.model_fields and
+            # add them to m2_candidates above without touching this helper.
+            updates = [(col, val) for col, val in m2_candidates if col in existing_cols]
+            if not updates:
+                return
+
+            set_clause = ", ".join(f"{col} = ?" for col, _ in updates)
+            values = [val for _, val in updates]
+
+            # Ensure extraction_status column exists before writing
+            if "extraction_status" in existing_cols:
+                set_clause += ", extraction_status = ?"
+                values.append("success")
+
+            values.append(posting_id)
+            conn.execute(
+                f"UPDATE postings SET {set_clause} WHERE id = ?",  # noqa: S608
+                values,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("extract: postings propagation failed for posting %s — %s", posting_id, exc)
+
+
 # ---------------------------------------------------------------------------
 # System prompt loading
 # ---------------------------------------------------------------------------
@@ -422,6 +489,11 @@ def extract_canonical(
             posting_id=posting.id,
             model_name=model_name,
         )
+        _write_postings_extracted(
+            db_path=db_path,
+            posting_id=posting.id,
+            extraction=_PROCESS_CACHE[cache_key],
+        )
         return _PROCESS_CACHE[cache_key]
 
     # --- Persistent DB cache ---
@@ -439,6 +511,11 @@ def extract_canonical(
                 latency_ms=0,
                 posting_id=posting.id,
                 model_name=model_name,
+            )
+            _write_postings_extracted(
+                db_path=db_path,
+                posting_id=posting.id,
+                extraction=cached,
             )
             return cached
 
@@ -559,6 +636,11 @@ def extract_canonical(
             _PROCESS_CACHE[cache_key] = extraction
             if db_path is not None:
                 _db_cache_put(db_path, text_hash, model_name, extraction)
+            _write_postings_extracted(
+                db_path=db_path,
+                posting_id=posting.id,
+                extraction=extraction,
+            )
             return extraction
 
         else:

@@ -57,7 +57,7 @@ def _fetch_posting(posting_id: int, conn: sqlite3.Connection) -> dict[str, Any]:
     """Return posting row as a dict; raises ValueError if not found."""
     row = conn.execute(
         """
-        SELECT id, user_id, canonical_title, canonical_company, seniority_band AS canonical_seniority,
+        SELECT id, user_id, canonical_title, canonical_company, canonical_seniority,
                canonical_location, team_or_department, top_skills, role_summary,
                full_jd, first_seen, last_seen,
                COALESCE(source, 'linkedin') AS source

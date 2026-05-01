@@ -71,8 +71,6 @@ _EXACT_EPSILON = 1e-6
 
 @dataclass(frozen=True)
 class DedupConfig:
-    # LEGACY — kept for migration safety; no longer used in 3-tier decide() logic.
-    auto_merge_threshold: float = 0.90
     # Dispatch threshold: FUSE below this → action='new' without calling gatekeeper.
     gatekeeper_threshold: float = 0.75
     # Total gatekeeper attempts = 1 + gatekeeper_retry_count.
@@ -92,7 +90,6 @@ def _load_dedup_config(path: Path | None = None) -> DedupConfig:
         raw = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
         dedup_raw = raw.get("dedup", {})
         return DedupConfig(
-            auto_merge_threshold=float(dedup_raw.get("auto_merge_threshold", 0.90)),
             gatekeeper_threshold=float(dedup_raw.get("gatekeeper_threshold", 0.75)),
             gatekeeper_retry_count=int(dedup_raw.get("gatekeeper_retry_count", 1)),
             fuse_weight_embedding=float(dedup_raw.get("fuse_weight_embedding", 0.4)),
@@ -557,7 +554,7 @@ def decide(
         posting_row = conn.execute(
             """
             SELECT id, user_id, canonical_title, canonical_company, canonical_location,
-                   team_or_department, seniority_band, top_skills, full_jd
+                   team_or_department, canonical_seniority, top_skills, full_jd
             FROM postings
             WHERE id = ?
             """,

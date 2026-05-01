@@ -1,22 +1,17 @@
 """
 Pipeline orchestrator (C11) — sequences per-source ingestion, parsing, dedup, and hydration.
 
-Sources (M1):
+Sources (PoC — LinkedIn only):
   gmail_linkedin   — Gmail fetch + LinkedIn email parse + URL dedup
-  gmail_indeed     — Gmail fetch + Indeed email parse + URL dedup
   hydrator_linkedin — LinkedIn JD hydration for deduped postings
-  hydrator_indeed   — Indeed JD hydration for deduped postings
 
 Per-source isolation invariant: one source failing CANNOT cascade to others.
 Mandatory persistence invariant: regardless of outcome, exactly one pipeline_runs
 row is written per source per run with non-null health_status.
 
-Drift decisions (relative to TDD §C11):
-  - Log path: uses logs/pipeline-<run_id>.jsonl (project-relative, per-run file)
-    rather than ~/.jd-matcher/logs/jd-matcher.log (rolling). TASKS.md ACs take
-    precedence; architect to reconcile at MVP.
-  - C10 (events emitter): C10 has no implementation in M1; this module writes
-    source_failure events directly to the events table. Document as M1 simplification.
+M3 TASK-M3-000: pipeline.py decomposed into per-phase modules under phases/.
+Public API (run_pipeline, PipelineRunSummary, SourceResult, _GMAIL_SOURCES) is
+re-exported here so all existing imports remain valid.
 """
 
 from __future__ import annotations
@@ -53,17 +48,11 @@ logger = logging.getLogger(_LOGGER_NAME)
 
 _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 # parents[2] = projects/jd-matcher/ (one above src/)
-_LOGS_DIR = Path(__file__).parents[2] / "logs"
+_LOGS_DIR = Path(__file__).parents[3] / "logs"
 
 # M1 sources in execution order
 # PoC: LinkedIn only. Indeed deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28
-# / PRD §9 R3 — Cloudflare IP-level enforcement on user's employer-managed Mac
-# blocks all bypass paths (requests, curl_cffi, patchright headed, CDP-attach
-# disabled by MDM policy). Re-enable at MVP-M1 when user runs on personal
-# hardware OR procures commercial proxy. Infrastructure (browser_fetcher.py +
-# indeed.py escalation) remains in place — flip this list to re-activate.
-_GMAIL_SOURCES = ("linkedin",)  # was: ("linkedin", "indeed")
-# PoC LinkedIn-only — see _GMAIL_SOURCES comment above
+_GMAIL_SOURCES = ("linkedin",)
 _HYDRATOR_SOURCES = ("linkedin",)
 
 _STEP_LABELS = [
@@ -85,7 +74,6 @@ class SourceResult:
     new_postings: int = 0
     hydrated: int = 0
     filtered_count: int = 0
-    # All postings parsed during the Gmail phase; each carries its own gmail_message_id.
     postings: list[ParsedPosting] = field(default_factory=list)
 
 
@@ -97,17 +85,14 @@ class PipelineRunSummary:
     sources: list[SourceResult]
     steps: list[str]
     total_new_postings: int
-    # C20 embedding stats (populated after the embedding phase)
     embeddings_written: int = 0
     embedding_cache_hits: int = 0
     embedding_skipped: int = 0
-    # C21 dedup-decision stats (populated after the dedup phase)
     dedup_decisions_total: int = 0
     dedup_action_new: int = 0
     dedup_action_merge: int = 0
     dedup_full_jd_skipped: int = 0
     dedup_block_zero: int = 0
-    # C29/C30 merge-apply stats (populated after the merge phase)
     merges_applied: int = 0
     new_canonicals_created: int = 0
     reposts_detected: int = 0
@@ -127,7 +112,7 @@ def run_pipeline(
     credentials: object = None,
     since_days: int = 2,
 ) -> PipelineRunSummary:
-    """Run the full M1 pipeline for all four sources.
+    """Run the full pipeline for all configured sources.
 
     Args:
         db_path:     Path to SQLite DB; defaults to ~/.jd-matcher/jd-matcher.db.
@@ -157,8 +142,11 @@ def run_pipeline(
     steps_emitted: list[str] = []
 
     # -----------------------------------------------------------------------
-    # Phase 1: Gmail ingestion + parsing + URL dedup
+    # Phase: fetch + parse (gmail sources)
     # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.fetch import run as fetch_run
+    from jd_matcher.pipeline.phases.parse import run as parse_run
+
     for i, sender in enumerate(_GMAIL_SOURCES):
         source_name = f"gmail_{sender}"
         step_label = f"Fetching Gmail ({sender})… ({i + 1}/4)"
@@ -185,20 +173,15 @@ def run_pipeline(
             })
         )
 
-    # Collect all postings from Gmail phase; first-email-wins for duplicate URLs.
-    # Each ParsedPosting carries its own gmail_message_id — no side-mapping needed.
     all_postings: list[ParsedPosting] = []
     for gmail_result in source_results:
         all_postings.extend(gmail_result.postings)
 
-    # Collect canonical URLs for hydration — query DB after dedup so we only
-    # hydrate postings that were actually registered (dedup-respected).
     li_urls = _get_pending_hydration_urls(resolved_db, "linkedin")
     hydration_urls = {"linkedin": li_urls}
-    # Indeed deferred to MVP — see _GMAIL_SOURCES / _HYDRATOR_SOURCES comments
 
     # -----------------------------------------------------------------------
-    # Phase 2: Hydration
+    # Phase: hydrate
     # -----------------------------------------------------------------------
     for i, sender in enumerate(_HYDRATOR_SOURCES):
         source_name = f"hydrator_{sender}"
@@ -227,363 +210,90 @@ def run_pipeline(
         )
 
     # -----------------------------------------------------------------------
-    # Phase 3: C18 — LLM extraction (hydrated postings → canonical fields)
-    # Runs after hydration; cache hits are the common case on re-runs.
-    # Filtered postings (C19 drops) are excluded because they never entered
-    # the postings table — so they never appear in _get_pending_extraction_ids.
+    # Phase: extract (C18 — LLM extraction)
     # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.extract import run as extract_run
+
     step_label = "LLM extraction (C18)…"
     steps_emitted.append(step_label)
-
-    llm_extract_posting_count = 0
-    llm_extract_success_count = 0
-    llm_extract_failure_count = 0
-    llm_extract_cache_hits = 0
-    llm_extract_total_cost_usd = 0.0
-    llm_extract_health_status = "healthy"
-    llm_extract_failure_reason: Optional[str] = None
-
-    try:
-        pending_extract_ids = _get_pending_extraction_ids(resolved_db)
-        llm_extract_posting_count = len(pending_extract_ids)
-
-        if pending_extract_ids:
-            max_ledger_id_before_extract = _get_max_ledger_id(resolved_db)
-            for pid in pending_extract_ids:
-                posting = _fetch_posting_row(resolved_db, pid)
-                if posting is None:
-                    continue
-                try:
-                    extract_canonical(posting, db_path=resolved_db)
-                    llm_extract_success_count += 1
-                except Exception as exc:
-                    llm_extract_failure_count += 1
-                    logger.warning(
-                        json.dumps({
-                            "event": "llm_extraction_posting_failed",
-                            "run_id": run_id,
-                            "posting_id": pid,
-                            "error": f"{type(exc).__name__}: {exc}",
-                        })
-                    )
-            # Count cache hits from new ledger rows written during this phase
-            llm_extract_cache_hits = _count_extraction_cache_hits_since(
-                resolved_db, max_ledger_id_before_extract
-            )
-            llm_extract_total_cost_usd = _sum_extraction_cost_since(
-                resolved_db, max_ledger_id_before_extract
-            )
-
-            if llm_extract_failure_count > 0 and llm_extract_success_count == 0:
-                llm_extract_health_status = "failed"
-                llm_extract_failure_reason = f"{llm_extract_failure_count} extraction failures, 0 successes"
-            elif llm_extract_failure_count > 0:
-                llm_extract_health_status = "degraded"
-                llm_extract_failure_reason = f"{llm_extract_failure_count}/{llm_extract_posting_count} extraction failures"
-
-        logger.info(
-            json.dumps({
-                "event": "llm_extraction_phase_complete",
-                "run_id": run_id,
-                "posting_count": llm_extract_posting_count,
-                "success_count": llm_extract_success_count,
-                "failure_count": llm_extract_failure_count,
-                "cache_hits": llm_extract_cache_hits,
-                "total_cost_usd": llm_extract_total_cost_usd,
-            })
-        )
-    except Exception as exc:
-        llm_extract_health_status = "failed"
-        llm_extract_failure_reason = f"{type(exc).__name__}: {exc}"
-        logger.error(
-            json.dumps({
-                "event": "llm_extraction_phase_failed",
-                "run_id": run_id,
-                "error": llm_extract_failure_reason,
-            })
-        )
-
-    _write_pipeline_run(
-        resolved_db,
+    extract_result = extract_run(
         run_id=run_id,
-        source="llm_extraction",
-        health_status=llm_extract_health_status,
-        failure_reason=llm_extract_failure_reason,
+        resolved_db=resolved_db,
         started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-        last_successful_fetch_at=datetime.now(timezone.utc) if llm_extract_health_status == "healthy" else None,
-        counts={
-            "posting_count": llm_extract_posting_count,
-            "success_count": llm_extract_success_count,
-            "parse_failure_count": llm_extract_failure_count,
-            "cache_hit_count": llm_extract_cache_hits,
-            "total_cost_usd": llm_extract_total_cost_usd,
-        },
+        logger=logger,
+        write_pipeline_run=_write_pipeline_run,
+        get_pending_ids=_get_pending_extraction_ids,
+        fetch_posting=_fetch_posting_row,
+        get_max_ledger_id=_get_max_ledger_id,
+        ledger_delta=_ledger_delta,
     )
 
     # -----------------------------------------------------------------------
-    # Phase 4: C20 — Embedding (role_summary → text-embedding-3-small)
+    # Phase: embed (C20 — Embedding)
     # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.embed import run as embed_run
+
     step_label = "Embedding postings (C20)…"
     steps_emitted.append(step_label)
-
-    embeddings_written = 0
-    embedding_cache_hits = 0
-    embedding_skipped = 0
-    embed_health_status = "healthy"
-    embed_failure_reason: Optional[str] = None
-    embed_posting_count = 0
-    embed_batch_call_count = 0
-    embed_total_cost_usd = 0.0
-
-    try:
-        posting_ids = _get_pending_embedding_ids(resolved_db)
-        embed_posting_count = len(posting_ids)
-        if posting_ids:
-            max_ledger_id_before = _get_max_ledger_id(resolved_db)
-            embedded = embed_postings_batch(posting_ids, db_path=resolved_db)
-            embeddings_written = len(embedded)
-            embedding_cache_hits = _count_cache_hit_rows_since(resolved_db, max_ledger_id_before)
-            embedding_skipped = len(posting_ids) - len(embedded)
-            embed_batch_call_count = _count_embedding_api_calls_since(resolved_db, max_ledger_id_before)
-            embed_total_cost_usd = _sum_embedding_cost_since(resolved_db, max_ledger_id_before)
-            logger.info(
-                json.dumps({
-                    "event": "embedding_phase_complete",
-                    "run_id": run_id,
-                    "posted_ids_count": len(posting_ids),
-                    "embeddings_written": embeddings_written,
-                    "skipped": embedding_skipped,
-                    "cache_hits": embedding_cache_hits,
-                })
-            )
-        else:
-            logger.info(
-                json.dumps({
-                    "event": "embedding_phase_complete",
-                    "run_id": run_id,
-                    "posted_ids_count": 0,
-                    "note": "no postings pending embedding",
-                })
-            )
-    except Exception as exc:
-        embed_health_status = "failed"
-        embed_failure_reason = f"{type(exc).__name__}: {exc}"
-        logger.error(
-            json.dumps({
-                "event": "embedding_phase_failed",
-                "run_id": run_id,
-                "error": embed_failure_reason,
-            })
-        )
-
-    _write_pipeline_run(
-        resolved_db,
+    embed_result = embed_run(
         run_id=run_id,
-        source="embedding",
-        health_status=embed_health_status,
-        failure_reason=embed_failure_reason,
+        resolved_db=resolved_db,
         started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-        last_successful_fetch_at=datetime.now(timezone.utc) if embed_health_status == "healthy" else None,
-        counts={
-            "posting_count": embed_posting_count,
-            "batch_call_count": embed_batch_call_count,
-            "cache_hit_count": embedding_cache_hits,
-            "total_cost_usd": embed_total_cost_usd,
-        },
+        logger=logger,
+        write_pipeline_run=_write_pipeline_run,
+        get_pending_ids=_get_pending_embedding_ids,
+        get_max_ledger_id=_get_max_ledger_id,
+        ledger_delta=_ledger_delta,
     )
 
     # -----------------------------------------------------------------------
-    # Phase 5 (combined): C21 decide + C30 repost + C29 apply — per-posting loop
-    #
-    # Each posting's decide → detect_repost → apply runs atomically before the
-    # next posting's decide() executes.  This is critical: dedup_decide() reads
-    # canonical_postings to find block candidates.  If decide() were batched
-    # across all postings before any apply() wrote to canonical_postings (the
-    # original two-phase bug in commit 233e050), every decide() would see an
-    # empty canonical_postings table → every posting gets action='new' → 0
-    # merges.  The per-posting interleave ensures that posting B's decide() sees
-    # the canonical that posting A's apply() just created.
-    #
-    # Both pipeline_runs rows (dedup_c21 + dedup_merge_c29) are still written
-    # separately per TDD §C11 M2-update — they record stats from this combined
-    # loop and are preserved for cost/health observability.
-    #
-    # Idempotency: skips posting_ids that already have a posting_canonical_links
-    # row (re-running the pipeline doesn't double-link).
+    # Phase: dedup + merge (C21 + C30 + C29 — interleaved per-posting)
     # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.dedup import run as dedup_run
+    from jd_matcher.pipeline.phases.merge import run as merge_run
+
     step_label = "Dedup decisions (C21)…"
     steps_emitted.append(step_label)
     step_label = "Merge apply (C29+C30)…"
     steps_emitted.append(step_label)
-
-    dedup_total = 0
-    dedup_new = 0
-    dedup_merge = 0
-    dedup_full_jd_skipped = 0
-    dedup_block_zero = 0
-    merges_applied = 0
-    new_canonicals_created = 0
-    reposts_detected = 0
-
-    dedup_health_status = "healthy"
-    dedup_failure_reason: str | None = None
-    merge_health_status = "healthy"
-    merge_failure_reason: str | None = None
-
-    try:
-        embedded_ids = _get_embedded_posting_ids(resolved_db)
-        already_linked = _get_already_linked_posting_ids(resolved_db)
-        for pid in embedded_ids:
-            if pid in already_linked:
-                logger.debug(
-                    json.dumps({
-                        "event": "dedup_skip_already_linked",
-                        "run_id": run_id,
-                        "posting_id": pid,
-                    })
-                )
-                continue
-
-            # --- C21: decide ---
-            try:
-                decision: DedupDecision = dedup_decide(pid, db_path=resolved_db)
-                dedup_total += 1
-                if decision.action == "merge":
-                    dedup_merge += 1
-                elif decision.action == "pending_gatekeeper":
-                    # Fail-CLOSED: gatekeeper hard-failed — defer, no DB writes.
-                    logger.warning(
-                        json.dumps({
-                            "event": "dedup_pending_gatekeeper",
-                            "run_id": run_id,
-                            "posting_id": pid,
-                            "fuse_score": decision.stage2_top_match_score,
-                        })
-                    )
-                    continue
-                else:
-                    dedup_new += 1
-                if "extraction_failed_full_jd_fallback" in decision.blocked_by:
-                    dedup_full_jd_skipped += 1
-                if decision.stage1_block_size == 0:
-                    dedup_block_zero += 1
-                logger.info(
-                    json.dumps({
-                        "event": "dedup_decision",
-                        "run_id": run_id,
-                        "posting_id": pid,
-                        "action": decision.action,
-                        "merge_kind": decision.merge_kind,
-                        "similarity": decision.similarity,
-                        "stage1_block_size": decision.stage1_block_size,
-                        "stage2_top_match_score": decision.stage2_top_match_score,
-                        "target_canonical_id": decision.target_canonical_id,
-                    })
-                )
-            except Exception as exc:
-                logger.warning(
-                    json.dumps({
-                        "event": "dedup_decision_failed",
-                        "run_id": run_id,
-                        "posting_id": pid,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    })
-                )
-                continue  # can't apply without a decision
-
-            # --- C30: repost detection + C29: apply (immediately after decide) ---
-            try:
-                repost_decision = detect_repost(decision, pid, db_path=resolved_db)
-                if repost_decision.merge_kind == "repost":
-                    reposts_detected += 1
-
-                merge_result: MergeResult = dedup_apply(repost_decision, pid, db_path=resolved_db)
-                if merge_result.was_new:
-                    new_canonicals_created += 1
-                else:
-                    merges_applied += 1
-
-                logger.info(
-                    json.dumps({
-                        "event": "merge_applied",
-                        "run_id": run_id,
-                        "posting_id": pid,
-                        "canonical_id": merge_result.canonical_id,
-                        "was_new": merge_result.was_new,
-                        "merge_kind": merge_result.merge_kind,
-                        "fields_updated": merge_result.fields_updated,
-                    })
-                )
-            except Exception as exc:
-                logger.warning(
-                    json.dumps({
-                        "event": "merge_apply_failed",
-                        "run_id": run_id,
-                        "posting_id": pid,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    })
-                )
-
-    except Exception as exc:
-        dedup_health_status = "failed"
-        merge_health_status = "failed"
-        dedup_failure_reason = f"{type(exc).__name__}: {exc}"
-        merge_failure_reason = dedup_failure_reason
-        logger.error(
-            json.dumps({
-                "event": "dedup_merge_phase_failed",
-                "run_id": run_id,
-                "error": dedup_failure_reason,
-            })
-        )
-
-    _write_pipeline_run(
-        resolved_db,
+    dedup_merge_result = dedup_run(
         run_id=run_id,
-        source="dedup_c21",
-        health_status=dedup_health_status,
-        failure_reason=dedup_failure_reason,
+        resolved_db=resolved_db,
         started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-        last_successful_fetch_at=datetime.now(timezone.utc) if dedup_health_status == "healthy" else None,
-    )
-    logger.info(
-        json.dumps({
-            "event": "dedup_phase_complete",
-            "run_id": run_id,
-            "decisions_total": dedup_total,
-            "action_new": dedup_new,
-            "action_merge": dedup_merge,
-            "full_jd_skipped": dedup_full_jd_skipped,
-            "block_zero_short_circuit": dedup_block_zero,
-        })
+        logger=logger,
+        write_pipeline_run=_write_pipeline_run,
+        get_embedded_ids=_get_embedded_posting_ids,
+        get_already_linked=_get_already_linked_posting_ids,
     )
 
-    _write_pipeline_run(
-        resolved_db,
+    # -----------------------------------------------------------------------
+    # Phase: hardfilter (C33) — stub until TASK-M3-006
+    # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.hardfilter import run as hardfilter_run
+
+    hardfilter_run(
         run_id=run_id,
-        source="dedup_merge_c29",
-        health_status=merge_health_status,
-        failure_reason=merge_failure_reason,
+        resolved_db=resolved_db,
         started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-        last_successful_fetch_at=datetime.now(timezone.utc) if merge_health_status == "healthy" else None,
+        logger=logger,
+        write_pipeline_run=_write_pipeline_run,
     )
-    logger.info(
-        json.dumps({
-            "event": "merge_phase_complete",
-            "run_id": run_id,
-            "merges_applied": merges_applied,
-            "new_canonicals_created": new_canonicals_created,
-            "reposts_detected": reposts_detected,
-        })
+
+    # -----------------------------------------------------------------------
+    # Phase: rank (C34) — stub until TASK-M3-007
+    # -----------------------------------------------------------------------
+    from jd_matcher.pipeline.phases.rank import run as rank_run
+
+    rank_run(
+        run_id=run_id,
+        resolved_db=resolved_db,
+        started_at=started_at,
+        logger=logger,
+        write_pipeline_run=_write_pipeline_run,
     )
 
     # -----------------------------------------------------------------------
     # Cost-watchdog: emit WARNING if monthly LLM spend exceeds threshold.
-    # Does NOT block the pipeline run — informational only.
     # -----------------------------------------------------------------------
     try:
         llm_cfg = load_llm_config()
@@ -630,17 +340,17 @@ def run_pipeline(
         sources=source_results,
         steps=steps_emitted,
         total_new_postings=total_new,
-        embeddings_written=embeddings_written,
-        embedding_cache_hits=embedding_cache_hits,
-        embedding_skipped=embedding_skipped,
-        dedup_decisions_total=dedup_total,
-        dedup_action_new=dedup_new,
-        dedup_action_merge=dedup_merge,
-        dedup_full_jd_skipped=dedup_full_jd_skipped,
-        dedup_block_zero=dedup_block_zero,
-        merges_applied=merges_applied,
-        new_canonicals_created=new_canonicals_created,
-        reposts_detected=reposts_detected,
+        embeddings_written=embed_result.get("embeddings_written", 0),
+        embedding_cache_hits=embed_result.get("embedding_cache_hits", 0),
+        embedding_skipped=embed_result.get("embedding_skipped", 0),
+        dedup_decisions_total=dedup_merge_result.get("dedup_total", 0),
+        dedup_action_new=dedup_merge_result.get("dedup_new", 0),
+        dedup_action_merge=dedup_merge_result.get("dedup_merge", 0),
+        dedup_full_jd_skipped=dedup_merge_result.get("dedup_full_jd_skipped", 0),
+        dedup_block_zero=dedup_merge_result.get("dedup_block_zero", 0),
+        merges_applied=dedup_merge_result.get("merges_applied", 0),
+        new_canonicals_created=dedup_merge_result.get("new_canonicals_created", 0),
+        reposts_detected=dedup_merge_result.get("reposts_detected", 0),
     )
 
     logger.info(
@@ -671,17 +381,10 @@ def _run_gmail_source(
     credentials: object,
     since_days: int,
 ) -> SourceResult:
-    """Fetch Gmail + parse + dedup for one sender. ALWAYS writes pipeline_runs row.
-
-    The orchestrator is the single writer of the canonical pipeline_runs row for
-    this source+run_id.  GmailIngester.fetch_for_sender is called with a sub-run
-    ID so its internal writes do not conflict with the orchestrator's row.
-    """
+    """Fetch Gmail + parse + dedup for one sender. ALWAYS writes pipeline_runs row."""
     started_at = datetime.now(timezone.utc)
     prev_status = _get_previous_status(resolved_db, source_name)
 
-    # Sub-run ID keeps ingester's internal pipeline_runs rows separate from the
-    # orchestrator's canonical row for this source.
     ingester_run_id = f"{run_id}_ingest_{sender}"
 
     try:
@@ -712,16 +415,12 @@ def _run_gmail_source(
                 drop_reasons: list[str] = []
 
                 for posting in postings:
-                    # C19: title filter — checked BEFORE register_new / seen_urls write.
-                    # company= uses email-parsed name (best-effort from C4); deny_company
-                    # patterns fire here, before LLM extraction runs.
                     decision = filter_title(posting.title, company=posting.company)
                     if decision.action == "drop":
                         urls_filtered += 1
                         run_filtered_total += 1
                         if decision.matched_pattern:
                             drop_reasons.append(decision.matched_pattern)
-                        # Short-circuit: no register_new, no seen_urls write, no hydration.
                         continue
 
                     outcome, _ = register_new(posting, conn=conn, db_path=resolved_db)
@@ -730,9 +429,6 @@ def _run_gmail_source(
                         urls_new += 1
                         urls_created += 1
 
-                # C19 telemetry: only set filter_status='filtered' on the email row
-                # when EVERY posting from this email was dropped (Option C semantics).
-                # Partial-filter emails rely on the run-level filtered_by_title count.
                 if urls_extracted > 0 and urls_filtered == urls_extracted:
                     try:
                         mark_filtered(
@@ -748,7 +444,6 @@ def _run_gmail_source(
                             exc_info=True,
                         )
 
-                # C4 writer hook — update URL counts for this email's row.
                 try:
                     update_url_counts(
                         gmail_message_id=raw_email.id,
@@ -849,16 +544,10 @@ def _run_hydrator_source(
     urls: list[str],
     all_postings: list[ParsedPosting] | None = None,
 ) -> SourceResult:
-    """Hydrate all pending JDs for one sender. ALWAYS writes pipeline_runs row.
-
-    gmail_message_id is read directly from each ParsedPosting — no side-mapping dict.
-    First-email-wins: when the same URL appears in multiple emails, only the first
-    ParsedPosting's gmail_message_id is used for hydration credit attribution.
-    """
+    """Hydrate all pending JDs for one sender. ALWAYS writes pipeline_runs row."""
     started_at = datetime.now(timezone.utc)
     prev_status = _get_previous_status(resolved_db, source_name)
 
-    # Build url → gmail_message_id from postings (first-email-wins).
     url_to_gmail_id: dict[str, str] = {}
     for posting in (all_postings or []):
         if posting.url not in url_to_gmail_id:
@@ -875,9 +564,6 @@ def _run_hydrator_source(
                 results.append(jd)
                 _update_posting_hydration(resolved_db, url, jd)
             except sqlite3.OperationalError as exc:
-                # DB lock (most likely from concurrent web-UI read during rate-limiter
-                # sleep window). Skip this URL — it stays in 'partial' and will be
-                # retried on the next sync run.
                 logger.warning(
                     "DB lock on url=%s — skipping, will retry next sync: %s", url, exc
                 )
@@ -892,7 +578,6 @@ def _run_hydrator_source(
                 last_exception_reason = f"{type(exc).__name__}:{exc}"
                 continue
 
-            # C5 writer hook — increment hydration counter on the originating email row.
             gmail_id = url_to_gmail_id.get(url)
             if gmail_id:
                 try:
@@ -912,9 +597,6 @@ def _run_hydrator_source(
 
         health_status, failure_reason = compute_source_health(results)  # type: ignore[arg-type]
 
-        # When ALL URLs threw exceptions (no results produced at all), the source
-        # should be treated as failed rather than the default "healthy" that
-        # compute_source_health returns for an empty list.
         if urls and not results and exception_count == len(urls):
             health_status = "failed"
             failure_reason = last_exception_reason or "all_urls_raised_exception"
@@ -990,7 +672,7 @@ def _run_hydrator_source(
 
 
 # ---------------------------------------------------------------------------
-# DB helpers
+# DB helpers — shared across orchestrator and phase modules
 # ---------------------------------------------------------------------------
 
 
@@ -1033,7 +715,6 @@ def _write_pipeline_run(
 
 
 def _get_previous_status(db_path: Path, source: str) -> str:
-    """Return the most recent health_status for source, or 'never_run'."""
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
@@ -1077,7 +758,6 @@ def _emit_transition_event_if_needed(
     failure_reason: Optional[str],
     run_id: str,
 ) -> None:
-    """Write a source_failure event when status transitions to degraded/failed."""
     is_bad = new_status in ("degraded", "failed")
     was_ok = previous_status in ("healthy", "never_run")
     if not (is_bad and was_ok):
@@ -1117,7 +797,6 @@ def _emit_transition_event_if_needed(
 
 
 def _get_pending_hydration_urls(db_path: Path, sender: str) -> list[str]:
-    """Return canonical URLs for postings whose source matches sender and hydration_status='partial'."""
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
@@ -1137,10 +816,8 @@ def _get_pending_hydration_urls(db_path: Path, sender: str) -> list[str]:
 
 
 def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
-    """Update postings table with hydrated fields and write posting_sources row."""
     conn = sqlite3.connect(db_path)
     try:
-        # Look up posting_id via seen_urls
         row = conn.execute(
             "SELECT posting_id FROM seen_urls WHERE url = ? LIMIT 1",
             (url,),
@@ -1161,7 +838,6 @@ def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
         hydration_status = getattr(jd, "hydration_status", "failed")
         raw_html = getattr(jd, "raw_html", b"")
         failure_reason = getattr(jd, "failure_reason", None)
-        job_id = getattr(jd, "job_id", "")
 
         conn.execute(
             """
@@ -1177,7 +853,6 @@ def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
             (title, company, location, description, hydration_status, now, posting_id),
         )
 
-        # Determine source label from URL
         if "linkedin" in url:
             source_label = "linkedin_hydrator"
         else:
@@ -1198,11 +873,6 @@ def _update_posting_hydration(db_path: Path, url: str, jd: object) -> None:
 
 
 def _get_pending_embedding_ids(db_path: Path) -> list[int]:
-    """Return posting IDs that have not yet been embedded with the default model.
-
-    Postings without role_summary AND full_jd are intentionally included — the
-    embed step will log a WARNING and skip them; the pipeline does not pre-filter.
-    """
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
@@ -1224,7 +894,6 @@ def _get_pending_embedding_ids(db_path: Path) -> list[int]:
 
 
 def _get_max_ledger_id(db_path: Path) -> int:
-    """Return the current maximum ledger id (used as a before-snapshot for cache-hit counting)."""
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
@@ -1236,7 +905,6 @@ def _get_max_ledger_id(db_path: Path) -> int:
 
 
 def _get_embedded_posting_ids(db_path: Path) -> list[int]:
-    """Return posting IDs that have an embedding row (candidates for dedup decision)."""
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
@@ -1248,10 +916,6 @@ def _get_embedded_posting_ids(db_path: Path) -> list[int]:
 
 
 def _get_already_linked_posting_ids(db_path: Path) -> set[int]:
-    """Return posting IDs that already have a posting_canonical_links row.
-
-    Used by Phase 4 to skip re-processing postings on idempotent pipeline runs.
-    """
     conn = sqlite3.connect(db_path)
     try:
         rows = conn.execute(
@@ -1262,106 +926,42 @@ def _get_already_linked_posting_ids(db_path: Path) -> set[int]:
         conn.close()
 
 
-def _count_cache_hit_rows_since(db_path: Path, before_id: int) -> int:
-    """Count cache_hit embedding ledger rows written after before_id."""
+def _ledger_delta(db_path: Path, call_kind: str, before_id: int) -> dict:
+    """Return {count, cache_hits, cost_usd} for ledger rows with call_kind after before_id.
+
+    Replaces 6 near-identical _count_*_since / _sum_*_since helpers per
+    ARCHITECTURE-REVIEW-2026-04-29 §3 recommendation.
+    """
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
             """
-            SELECT COUNT(*) FROM llm_call_ledger
-            WHERE call_kind = 'embedding'
-              AND status = 'cache_hit'
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'cache_hit' THEN 1 ELSE 0 END) AS cache_hits,
+                COALESCE(SUM(cost_usd), 0.0) AS cost_usd
+            FROM llm_call_ledger
+            WHERE call_kind = ?
               AND id > ?
             """,
-            (before_id,),
+            (call_kind, before_id),
         ).fetchone()
-        return row[0] if row else 0
-    finally:
-        conn.close()
-
-
-def _count_embedding_api_calls_since(db_path: Path, before_id: int) -> int:
-    """Count non-cache-hit embedding ledger rows written after before_id."""
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) FROM llm_call_ledger
-            WHERE call_kind = 'embedding'
-              AND status != 'cache_hit'
-              AND id > ?
-            """,
-            (before_id,),
-        ).fetchone()
-        return row[0] if row else 0
-    finally:
-        conn.close()
-
-
-def _sum_embedding_cost_since(db_path: Path, before_id: int) -> float:
-    """Sum cost_usd for embedding ledger rows written after before_id."""
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            """
-            SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_call_ledger
-            WHERE call_kind = 'embedding'
-              AND id > ?
-            """,
-            (before_id,),
-        ).fetchone()
-        return float(row[0]) if row else 0.0
-    finally:
-        conn.close()
-
-
-def _count_extraction_cache_hits_since(db_path: Path, before_id: int) -> int:
-    """Count cache_hit extraction ledger rows written after before_id."""
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) FROM llm_call_ledger
-            WHERE call_kind = 'extraction'
-              AND status = 'cache_hit'
-              AND id > ?
-            """,
-            (before_id,),
-        ).fetchone()
-        return row[0] if row else 0
-    finally:
-        conn.close()
-
-
-def _sum_extraction_cost_since(db_path: Path, before_id: int) -> float:
-    """Sum cost_usd for extraction ledger rows written after before_id."""
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            """
-            SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_call_ledger
-            WHERE call_kind = 'extraction'
-              AND id > ?
-            """,
-            (before_id,),
-        ).fetchone()
-        return float(row[0]) if row else 0.0
+        if row is None:
+            return {"count": 0, "cache_hits": 0, "cost_usd": 0.0}
+        return {
+            "count": row[0] or 0,
+            "cache_hits": row[1] or 0,
+            "cost_usd": float(row[2] or 0.0),
+        }
     finally:
         conn.close()
 
 
 def _get_pending_extraction_ids(db_path: Path) -> list[int]:
-    """Return posting IDs that have full_jd but no extraction_status='success'.
-
-    These are postings that have been hydrated but not yet LLM-extracted.
-    Postings with extraction_status='failed' are included so they can be retried.
-    """
     conn = sqlite3.connect(db_path)
     try:
-        # Check if extraction_status column exists
         cols = {r[1] for r in conn.execute("PRAGMA table_info(postings)").fetchall()}
         if "extraction_status" not in cols:
-            # Column doesn't exist yet — all postings with full_jd need extraction
             rows = conn.execute(
                 """
                 SELECT id FROM postings
@@ -1384,7 +984,6 @@ def _get_pending_extraction_ids(db_path: Path) -> list[int]:
 
 
 def _fetch_posting_row(db_path: Path, posting_id: int) -> "PostingRow | None":
-    """Fetch minimal posting data needed for LLM extraction."""
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
@@ -1409,7 +1008,6 @@ def _fetch_posting_row(db_path: Path, posting_id: int) -> "PostingRow | None":
 
 
 def _get_monthly_llm_cost(db_path: Path) -> float:
-    """Return the sum of cost_usd from llm_call_ledger for the current calendar month."""
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
@@ -1430,10 +1028,6 @@ def _get_monthly_llm_cost(db_path: Path) -> float:
 
 
 def _setup_run_logger(run_id: str) -> Path:
-    """Configure a per-run JSONL file handler on the root pipeline logger.
-
-    Returns the path to the log file.
-    """
     _LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = _LOGS_DIR / f"pipeline-{run_id}.jsonl"
 
@@ -1441,10 +1035,7 @@ def _setup_run_logger(run_id: str) -> Path:
     file_handler.setLevel(logging.DEBUG)
 
     class _PassthroughFormatter(logging.Formatter):
-        """Emit the log message as-is (already JSON-encoded by callers)."""
-
         def format(self, record: logging.LogRecord) -> str:
-            # record.getMessage() gives the rendered message string
             return record.getMessage()
 
     file_handler.setFormatter(_PassthroughFormatter())

@@ -227,177 +227,134 @@ def test_substring_kind_matches_case_insensitively() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Iteration 2 calibration cases (2026-04-27)
+# Calibration regression suite (collapsed from iterations 2–5, 2026-04-27/28)
+#
+# Each case is non-obvious: it either overrides a deny via allow, tests an
+# ambiguous title the filter must consistently handle, or locked in a rule
+# change. Cases already covered by DENY_CASES / PASS_CASES / AMBIGUOUS_CASES
+# above are not repeated here.
 # ---------------------------------------------------------------------------
 
+REGRESSION_CASES: list[tuple[str, str, str]] = [
+    # (title, expected_action, reason)
 
-@pytest.mark.parametrize("title,expected_action", [
-    # Fixed false positive — #85 AI Automation Engineer (allow override fires before Automation deny)
-    ("AI Automation Engineer", "pass"),
-    ("ML QA Engineer", "pass"),
-    # Iteration 4: Director carve-outs removed — these now DROP (no allow overrides)
-    ("Associate Director, Asset Modelling - STG Life Solutions", "drop"),
-    ("Director, Risk Analytics", "drop"),
-    # New deny patterns
-    ("Flutter Developer", "drop"),
-    ("Environmental Scientist", "drop"),
-    ("Water Resources Engineer/Scientist/Modeller", "drop"),
-    ("Clinical Research Assistant", "drop"),
-    ("Senior Manager, Trial Operations", "drop"),
-    ("Personalized Internet Assessor - Persian speakers in Canada", "drop"),
-    ("Senior, Economic Advisory (Vancouver)", "drop"),
-    # Research Associate deny + AI/ML allow overrides
-    ("Research Associate", "drop"),
-    ("AI Research Associate", "pass"),
-    ("Research Engineer, Machine Learning", "pass"),
-])
-def test_iteration_2_calibration(title: str, expected_action: str) -> None:
-    from jd_matcher.filter.title_filter import filter_title
-    decision = filter_title(title)
-    assert decision.action == expected_action, (
-        f"{title!r}: expected {expected_action}, got {decision.action} "
-        f"(matched {decision.matched_pattern!r})"
-    )
+    # --- Allow overrides for non-obvious pass cases ---
+    ("AI Automation Engineer",               "pass",  "allow: AI keyword rescues Automation deny"),
+    ("ML QA Engineer",                       "pass",  "allow: ML keyword rescues QA deny"),
+    ("AI Research Associate",                "pass",  "allow: AI keyword rescues Research Associate deny"),
+    ("Research Engineer, Machine Learning",  "pass",  "allow: ML keyword rescues Research Engineer deny"),
 
+    # --- Director/VP/Head/Chief all drop (no carve-outs, pre_deny tier) ---
+    ("Associate Director, Asset Modelling - STG Life Solutions", "drop", "pre_deny: Director"),
+    ("Director, Risk Analytics",             "drop",  "pre_deny: Director"),
+    ("Director of Data Science",             "drop",  "pre_deny: Director"),
+    ("Director of Machine Learning",         "drop",  "pre_deny: Director"),
+    ("Director, Senior AI Engineer - Remote","drop",  "pre_deny: Director (IKS Health #90)"),
+    ("VP of Data",                           "drop",  "pre_deny: VP"),
+    ("VP of Machine Learning",               "drop",  "pre_deny: VP"),
+    ("Vice President of AI",                 "drop",  "pre_deny: Vice President"),
+    ("Head of AI",                           "drop",  "pre_deny: Head of"),
+    ("Head of Data Engineering",             "drop",  "pre_deny: Head of"),
+    ("Chief Data Officer",                   "drop",  "pre_deny: Chief"),
+    ("Chief AI Officer",                     "drop",  "pre_deny: Chief"),
 
-# ---------------------------------------------------------------------------
-# Iteration 3 calibration cases (2026-04-27)
-# ---------------------------------------------------------------------------
+    # --- Entry-level all drop (pre_deny tier) ---
+    ("Junior Data Scientist",                "drop",  "pre_deny: Junior"),
+    ("AI Intern",                            "drop",  "pre_deny: Intern"),
+    ("AI Summer Intern",                     "drop",  "pre_deny: Intern"),
+    ("Data Co-op Student",                   "drop",  "pre_deny: Co-op"),
+    ("Co-op Software Developer (AI Team)",   "drop",  "pre_deny: Co-op"),
+    ("Apprentice Data Engineer",             "drop",  "pre_deny: Apprentice"),
+    ("ML Trainee",                           "drop",  "pre_deny: Trainee"),
+    ("Graduate Data Analyst",               "drop",  "pre_deny: Graduate"),
+    ("New Grad Software Engineer (ML)",      "drop",  "pre_deny: New Grad"),
+    ("Fresher Data Analyst",                 "drop",  "pre_deny: Fresher (#34 in real DB)"),
+    ("Entry-Level Data Scientist",           "drop",  "pre_deny: Entry Level"),
+    ("Entry Level ML Engineer",              "drop",  "pre_deny: Entry Level"),
 
+    # --- Manager is NOT pre_deny (IC still applies, pass) ---
+    ("Manager, Data Science",               "pass",  "Manager is not Director — allow"),
+    ("Data Science Manager, Growth",        "pass",  "Manager is not Director — allow"),
+    ("Senior Manager, Machine Learning",    "pass",  "Senior Manager passes"),
 
-@pytest.mark.parametrize("title,expected_action", [
-    # User-flagged false negatives in iteration 3 — must now drop
-    ("Mechanical Engineer - Robotics ML",         "drop"),
-    ("Mechanical Engineering Manager",            "drop"),
-    ("Civil Engineer",                            "drop"),
-    ("Chemical Engineering Specialist",           "drop"),
-    ("Electrical Engineer",                       "drop"),
-    ("Investment Banking Analyst",                "drop"),
-    ("Senior Investment Banking Associate",       "drop"),
-    ("Tax Advisor",                               "drop"),
-    ("Tax Manager",                               "drop"),
-    ("Tax Consultant - Financial Services",       "drop"),
-    # And confirm the new patterns don't accidentally swallow DS adjacent roles
-    ("Software Engineer (ML)",                    "pass"),  # regression — was passing, still must
-    ("AI Engineer",                               "pass"),  # regression
-    ("Data Scientist - Tax Strategy",             "pass"),  # legit DS role with "Tax" word
-    ("Machine Learning Engineer",                 "pass"),  # regression
-])
-def test_iteration_3_calibration(title: str, expected_action: str) -> None:
-    from jd_matcher.filter.title_filter import filter_title
-    decision = filter_title(title)
-    assert decision.action == expected_action, (
-        f"{title!r}: expected {expected_action}, got {decision.action} "
-        f"(matched {decision.matched_pattern!r})"
-    )
+    # --- 'Associate' alone passes (NOT entry-level per user policy) ---
+    ("Data Associate",                      "pass",  "Associate is not entry-level"),
+    ("Senior Data Scientist Associate",     "pass",  "Associate is not entry-level"),
+    ("Research Associate",                  "drop",  "Research Associate deny exists separately"),
 
+    # --- Physical/domain engineering → drop ---
+    ("Mechanical Engineer - Robotics ML",   "drop",  "deny: Mechanical Engineer"),
+    ("Mechanical Engineering Manager",      "drop",  "deny: Mechanical Engineer"),
+    ("Civil Engineer",                      "drop",  "deny: Civil Engineer"),
+    ("Chemical Engineering Specialist",     "drop",  "deny: Chemical Engineer"),
+    ("Electrical Engineer",                 "drop",  "deny: Electrical Engineer"),
 
-# ---------------------------------------------------------------------------
-# Iteration 4 calibration cases (2026-04-27)
-# ---------------------------------------------------------------------------
+    # --- Finance/advisory → drop ---
+    ("Investment Banking Analyst",          "drop",  "deny: Investment Banking"),
+    ("Senior Investment Banking Associate", "drop",  "deny: Investment Banking"),
+    ("Tax Advisor",                         "drop",  "deny: Tax"),
+    ("Tax Manager",                         "drop",  "deny: Tax"),
+    ("Tax Consultant - Financial Services", "drop",  "deny: Tax"),
 
+    # --- Iteration 5: domain-qualified drops ---
+    ("Startup Event Representative (Tech / Web Summit Vancouver)", "drop", "deny: event rep"),
+    ("Email Operations Specialist (Klaviyo/AI/Figma/Claude)",      "drop", "deny: email ops"),
+    ("Creative Lead, Growth & Storytelling",                       "drop", "deny: creative"),
+    ("Partner Alliance Analyst",                                   "drop", "deny: alliance"),
+    ("Finance & Strategy Manager, Hopper/HTS (100% Remote - Canada)", "drop", "deny: finance"),
+    ("Finance and Strategy Manager",                               "drop", "deny: finance (and variant)"),
+    ("AI Trainer - Freelance Data Annotator",                      "drop", "deny: AI trainer/annotator"),
+    ("Ai Trainer / Ai Data Trainer - Remote",                      "drop", "deny: AI trainer"),
+    ("French Canada - AI Data Contributor",                        "drop", "deny: data contributor"),
+    ("R&D Scientist, Novel Ingredients",                           "drop", "deny: pharma R&D"),
+    ("Process Development Scientist, GMP Media",                   "drop", "deny: pharma process dev"),
+    ("Scientist II, Analytical Development",                       "drop", "deny: analytical dev (not the II)"),
+    ("Data Scientist, Early Career (Canada)",                      "drop", "deny: early career"),
+    ("Machine Learning Engineer - Early Career (Canada)",          "drop", "deny: early career"),
 
-@pytest.mark.parametrize("title,expected_action", [
-    # All leadership now drops, no carve-outs
-    ("Director of Data Science",                  "drop"),
-    ("Director of Machine Learning",              "drop"),
-    ("Associate Director, Asset Modelling",       "drop"),
-    ("Director, Risk Analytics",                  "drop"),
-    ("Director, Senior AI Engineer - Remote",     "drop"),  # IKS Health #90
-    ("VP of Data",                                "drop"),
-    ("VP of Machine Learning",                    "drop"),
-    ("Vice President of AI",                      "drop"),
-    ("Head of AI",                                "drop"),
-    ("Head of Data Engineering",                  "drop"),
-    ("Chief Data Officer",                        "drop"),
-    ("Chief AI Officer",                          "drop"),
-    # All entry-level drops
-    ("Junior Data Scientist",                     "drop"),
-    ("AI Intern",                                 "drop"),
-    ("AI Summer Intern",                          "drop"),
-    ("Data Co-op Student",                        "drop"),
-    ("Co-op Software Developer (AI Team)",        "drop"),
-    ("Apprentice Data Engineer",                  "drop"),
-    ("ML Trainee",                                "drop"),
-    ("Graduate Data Analyst",                     "drop"),
-    ("New Grad Software Engineer (ML)",           "drop"),
-    ("Fresher Data Analyst",                      "drop"),  # #34 in real DB
-    ("Entry-Level Data Scientist",                "drop"),
-    ("Entry Level ML Engineer",                   "drop"),
-    # Senior IC roles still pass — these are the user's target
-    ("Senior Data Scientist",                     "pass"),
-    ("Staff Machine Learning Engineer",           "pass"),
-    ("Lead Data Scientist",                       "pass"),
-    ("Principal AI Engineer",                     "pass"),
-    ("Manager, Data Science",                     "pass"),  # Manager is NOT Director — allow
-    ("Data Science Manager, Growth",              "pass"),
-    ("Senior Manager, Machine Learning",          "pass"),
-    # 'Associate' alone still passes (NOT entry-level per user)
-    ("Data Associate",                            "pass"),
-    ("Senior Data Scientist Associate",           "pass"),
-    ("Research Associate",                        "drop"),  # Research Associate deny exists separately — sanity check unchanged
-    ("AI Research Associate",                     "pass"),  # allow override on AI/ML + Research — sanity check unchanged
-])
-def test_iteration_4_calibration(title: str, expected_action: str) -> None:
-    from jd_matcher.filter.title_filter import filter_title
-    decision = filter_title(title)
-    assert decision.action == expected_action, (
-        f"{title!r}: expected {expected_action}, got {decision.action} "
-        f"(matched {decision.matched_pattern!r})"
-    )
+    # --- Level suffix I/II/III not a drop signal (policy: ambiguous) ---
+    ("Associate Data Scientist - User Fraud", "pass", "Associate not entry-level"),
+    ("Programmer Analyst I",                 "pass",  "I suffix not a drop signal"),
+    ("Intermediate II Software Developer - Artificial Intelligence", "pass", "II suffix not a drop; AI allow fires"),
+    ("Senior Data Analyst II",              "pass",  "II suffix not a drop"),
+    ("Data Scientist III",                  "pass",  "III suffix not a drop"),
+
+    # --- Domain-specialist roles that pass (let LLM decide or DS-adjacent) ---
+    ("Research And Development Specialist", "pass",  "too generic — let LLM see JD"),
+    ("Senior Web Developer",               "pass",  "might be ML platform — let LLM decide"),
+    ("Lead Platform Engineer",             "pass",  "might be ML platform"),
+    ("Quantitative Researcher, Fixed Income", "pass", "quant finance kept"),
+    ("Bioinformatics Scientist (Remote)",  "pass",  "computational biology = DS-adjacent"),
+
+    # --- Regression: deny patterns don't accidentally swallow DS-adjacent roles ---
+    ("Software Engineer (ML)",             "pass",  "allow: ML keyword rescues SWE deny"),
+    ("AI Engineer",                        "pass",  "allow: AI keyword passes"),
+    ("Data Scientist - Tax Strategy",      "pass",  "legit DS role with Tax word"),
+    ("Machine Learning Engineer",          "pass",  "core DS/ML role"),
+
+    # --- Misc deny patterns ---
+    ("Flutter Developer",                  "drop",  "deny: Flutter Developer"),
+    ("Environmental Scientist",            "drop",  "deny: Environmental Scientist"),
+    ("Water Resources Engineer/Scientist/Modeller", "drop", "deny: Water Resources"),
+    ("Clinical Research Assistant",        "drop",  "deny: Clinical Research"),
+    ("Senior Manager, Trial Operations",   "drop",  "deny: Trial Operations"),
+    ("Personalized Internet Assessor - Persian speakers in Canada", "drop", "deny: Assessor"),
+    ("Senior, Economic Advisory (Vancouver)", "drop", "deny: Economic Advisory"),
+]
 
 
-# ---------------------------------------------------------------------------
-# Iteration 5 calibration cases (2026-04-28)
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("title,expected_action,reason", REGRESSION_CASES)
+def test_calibration_regression(title: str, expected_action: str, reason: str) -> None:
+    """Collapsed calibration regression suite (iterations 2–5).
 
-
-@pytest.mark.parametrize("title,expected_action", [
-    # Iteration 5 — new drops (15 specific titles flagged from 156-posting review)
-    ("Startup Event Representative (Tech / Web Summit Vancouver)", "drop"),
-    ("Email Operations Specialist (Klaviyo/AI/Figma/Claude)", "drop"),
-    ("Creative Lead, Growth & Storytelling", "drop"),
-    ("Partner Alliance Analyst", "drop"),
-    ("Finance & Strategy Manager, Hopper/HTS (100% Remote - Canada)", "drop"),
-    ("Finance and Strategy Manager", "drop"),  # variant: "and" not "&"
-    ("AI Trainer - Freelance Data Annotator", "drop"),
-    ("Ai Trainer / Ai Data Trainer - Remote", "drop"),
-    ("French Canada - AI Data Contributor", "drop"),
-    ("R&D Scientist, Novel Ingredients", "drop"),
-    ("Process Development Scientist, GMP Media", "drop"),
-    ("Scientist II, Analytical Development", "drop"),  # drops on Analytical Development, NOT the "II"
-    ("Data Scientist, Early Career (Canada)", "drop"),
-    ("Machine Learning Engineer - Early Career (Canada)", "drop"),
-    # Critical regression checks — KEEP per user explicit direction
-    ("Associate Data Scientist - User Fraud", "pass"),  # Associate is not entry-level
-    ("Programmer Analyst I", "pass"),                    # "I" suffix NOT a drop signal
-    ("Intermediate II Software Developer - Artificial Intelligence", "pass"),  # "II" suffix NOT a drop signal
-    # Note: "Software Engineer II" / "Software Engineer III" still DROP on the
-    # base \bSoftware Engineer\b deny (no ML context); II/III don't change that.
-    # User's policy is "don't ADD deny patterns for I/II/III", not "always keep
-    # titles with those suffixes". Base denies still apply when no ML keyword
-    # is present. Not tested here — covered by the existing base SWE deny tests.
-    ("Senior Data Analyst II", "pass"),                  # same: II is ambiguous
-    ("Data Scientist III", "pass"),                      # same: III is ambiguous
-    ("Research And Development Specialist", "pass"),     # too generic — let LLM see JD
-    ("Senior Web Developer", "pass"),                    # might be ML platform, let LLM decide
-    ("Lead Platform Engineer", "pass"),                  # might be ML platform
-    ("Quantitative Researcher, Fixed Income", "pass"),   # quant finance kept
-    ("Bioinformatics Scientist (Remote)", "pass"),       # computational biology = DS-adjacent
-])
-def test_iteration_5_calibration(title: str, expected_action: str) -> None:
-    """Iteration 5 calibration: 14 new drops + 11 critical regression checks.
-
-    Per user direction 2026-04-28:
-    - Drop on domain qualifiers (Event/Email/Creative/Finance/Annotator/Pharma/Early Career)
-    - DO NOT drop on level suffixes (I/II/III) — those are ambiguous between
-      junior and senior at different companies. Use explicit "Junior"/"Intern"/
-      "Early Career" or look at JD content for level detection.
+    Each case is non-obvious and not already covered by DENY_CASES / PASS_CASES /
+    AMBIGUOUS_CASES. The 'reason' parameter documents the policy intent for
+    future reviewers.
     """
     from jd_matcher.filter.title_filter import filter_title
     decision = filter_title(title)
     assert decision.action == expected_action, (
-        f"{title!r}: expected {expected_action}, got {decision.action} "
+        f"{title!r} [{reason}]: expected {expected_action}, got {decision.action} "
         f"(matched {decision.matched_pattern!r})"
     )
 

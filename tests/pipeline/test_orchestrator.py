@@ -111,15 +111,15 @@ def _events_of_type(db_path: Path, event_type: str) -> list[dict]:
 
 
 class TestMandatoryPersistence:
-    def test_three_runs_produce_six_rows(
+    def test_three_runs_produce_eight_rows(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each of 3 pipeline runs writes exactly 6 rows — 18 total.
+        """Each of 3 pipeline runs writes exactly 8 rows — 24 total.
 
-        PoC sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
-                     + dedup_c21 + dedup_merge_c29.
-        llm_extraction + embedding added M2-010 (C11 orchestrator + C22 state view).
-        When Indeed is re-activated at MVP-M1, revert counts: 6 sources → 8, 18 rows → 24.
+        M3 sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
+                    + dedup_c21 + dedup_merge_c29 + hardfilter + rank.
+        TASK-M3-000 added hardfilter (stub) and rank (stub).
+        When Indeed is re-activated at MVP-M1, revert counts: 8 sources → 10, 24 rows → 30.
         """
         run_ids = []
         for _ in range(3):
@@ -129,8 +129,8 @@ class TestMandatoryPersistence:
         rows = _all_pipeline_runs(test_db)
         # Filter to rows with run_ids from the orchestrator (not sub-run ingester rows)
         orch_rows = [r for r in rows if r[0] in run_ids]
-        assert len(orch_rows) == 18, (
-            f"Expected 18 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
+        assert len(orch_rows) == 24, (
+            f"Expected 24 orchestrator pipeline_runs rows across 3 runs, got {len(orch_rows)}"
         )
 
     def test_all_rows_have_non_null_health_status(
@@ -147,15 +147,15 @@ class TestMandatoryPersistence:
             conn.close()
         assert null_rows == [], f"Found rows with NULL health_status: {null_rows}"
 
-    def test_two_sources_per_run(
+    def test_eight_sources_per_run(
         self, test_db: Path, skip_live: None, logs_dir: Path
     ) -> None:
-        """Each run produces exactly one row for each of the 6 PoC sources.
+        """Each run produces exactly one row for each of the 8 M3 sources.
 
-        PoC sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
-                     + dedup_c21 + dedup_merge_c29.
-        llm_extraction + embedding added M2-010 (C11 orchestrator + C22 state view).
-        When Indeed is re-activated at MVP-M1, expected set reverts to 8 sources.
+        M3 sources: gmail_linkedin + hydrator_linkedin + llm_extraction + embedding
+                    + dedup_c21 + dedup_merge_c29 + hardfilter + rank.
+        TASK-M3-000 added hardfilter (stub) and rank (stub).
+        When Indeed is re-activated at MVP-M1, expected set grows to 10 sources.
         """
         summary = run_pipeline(db_path=test_db)
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
@@ -164,6 +164,7 @@ class TestMandatoryPersistence:
             "gmail_linkedin", "hydrator_linkedin",
             "llm_extraction", "embedding",
             "dedup_c21", "dedup_merge_c29",
+            "hardfilter", "rank",
         }
         assert sources_written == expected, (
             f"Sources in pipeline_runs mismatch. Got: {sources_written}"
@@ -193,11 +194,12 @@ class TestPerSourceIsolation:
         rows = _pipeline_runs_for_run(test_db, summary.run_id)
         row_by_source = {r[0]: r for r in rows}
 
-        # Confirm all 6 PoC sources have rows (llm_extraction + embedding added M2-010)
+        # Confirm all 8 M3 sources have rows (hardfilter + rank added TASK-M3-000)
         assert set(row_by_source.keys()) == {
             "gmail_linkedin", "hydrator_linkedin",
             "llm_extraction", "embedding",
             "dedup_c21", "dedup_merge_c29",
+            "hardfilter", "rank",
         }
 
         # hydrator_linkedin: since Fix 2b added per-URL exception handling,
