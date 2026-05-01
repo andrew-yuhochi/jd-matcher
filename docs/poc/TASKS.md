@@ -154,26 +154,26 @@
 
 ##### TASK-M3-002 — C18 v2 prompt: 7 new fields + few-shot rubric
 
-- **Status**: To Do
-- **Blocked reason**:
+- **Status**: In Progress — pending user approval (Gate 4)
+- **Blocked reason**: Awaiting user review of 5-posting smoke test (Gate 4 probabilistic)
 - **Agent**: data-pipeline
 - **Component**: C18 (LLM Extraction) — TDD §C18
 - **Description**: Extend `prompts/canonical_extraction_v1.txt` → `v2.txt` with 7 new fields. Each field gets a brief rubric + 1-2 worked examples. Pydantic model `CanonicalExtraction` extended with new field types (Literals for enums, Optional ints for salary). Cache key bumped (includes prompt version) so v1→v2 triggers re-extraction.
 - **Dependencies**: TASK-M3-001
 - **Implementation Checklist**:
-  - New file: `prompts/canonical_extraction_v2.txt` — extends v1 with 7 new field sections + worked examples
-  - Pydantic model: `CanonicalExtraction` adds `fit_score: int Field(ge=1, le=5)`, `fit_reasoning: str`, `industry: Literal[16-sector list]`, `role_orientation: list[Literal[Engineering, Problem-Solving, Communication]] Field(min_items=1, max_items=3)`, `salary_min_cad: int | None`, `salary_max_cad: int | None`, `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]`, `citizenship_reason: str`, `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]`
-  - Cache: bump prompt version key so v1 cache entries don't satisfy v2 lookups
-  - Tests: spot-check on 5 sample postings shows extraction output validates against the new model
-  - Imports affected: `src/jd_matcher/extraction/extractor.py`, `src/jd_matcher/extraction/models.py`
+  - [x] New file: `prompts/canonical_extraction_v2.txt` — extends v1 with 7 new field sections + worked examples
+  - [x] Pydantic model: `CanonicalExtraction` adds `fit_score: int Field(ge=1, le=5)`, `fit_reasoning: str`, `industry: Literal[16-sector list]`, `role_orientation: list[Literal[Engineering, Problem-Solving, Communication]] Field(min_items=1, max_items=3)`, `salary_min_cad: int | None`, `salary_max_cad: int | None`, `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]`, `citizenship_reason: str`, `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]`
+  - [x] Cache: bump prompt version key so v1 cache entries don't satisfy v2 lookups
+  - [x] Tests: spot-check on 5 sample postings shows extraction output validates against the new model
+  - [x] Actual module paths: `src/jd_matcher/llm/extract.py` (model + cache), `src/jd_matcher/db/init_db.py` (schema migration), `src/jd_matcher/db/schema.sql` (new table definition)
 - **Demo Artifact**: Run extraction on 5 test postings (mix of clear-DS, mixed, non-DS); verify all 7 new fields populated and validate against Pydantic model. No JSON parse failures.
 - **Quality log**: `docs/poc/quality-logs/TASK-M3-002.md`
 - **Acceptance Criteria**:
-  - [ ] `prompts/canonical_extraction_v2.txt` exists with 7 new field sections + ≥1 worked example each
-  - [ ] Pydantic `CanonicalExtraction` has all 9 new fields with correct types/constraints
-  - [ ] Cache key includes prompt version (v2 cache miss on v1 entries)
-  - [ ] 5-posting smoke test produces valid v2 output for all 5; no parse failures
-  - [ ] Industry taxonomy hardcoded as Literal type matches the 16-sector list in TDD §C18
+  - [x] `prompts/canonical_extraction_v2.txt` exists with 7 new field sections + ≥1 worked example each
+  - [x] Pydantic `CanonicalExtraction` has all 9 new fields with correct types/constraints
+  - [x] Cache key includes prompt version (v2 cache miss on v1 entries)
+  - [ ] 5-posting smoke test produces valid v2 output for all 5; no parse failures [pending user review]
+  - [x] Industry taxonomy hardcoded as Literal type matches the 16-sector list in TDD §C18
 
 ---
 

@@ -52,6 +52,16 @@ def _valid_json(title: str = "Senior Data Scientist", company: str = "Shopify") 
                 "A senior data science role working on production ML systems. "
                 "The team focuses on data platform reliability and scale."
             ),
+            # M3 v2 required fields
+            "fit_score": 5,
+            "fit_reasoning": "Core DS role with production ML focus.",
+            "industry": "B2B SaaS",
+            "role_orientation": ["Problem-Solving", "Engineering"],
+            "salary_min_cad": None,
+            "salary_max_cad": None,
+            "citizenship_requirement": "not_mentioned",
+            "citizenship_reason": "",
+            "can_hire_in_canada": "yes",
         }
     )
 
@@ -316,8 +326,8 @@ class TestBustCacheForIds:
         finally:
             conn.close()
 
-        # Also plant it in the process cache
-        _PROCESS_CACHE[(text_hash_1, "gpt-4o-mini")] = None  # type: ignore[assignment]
+        # Also plant it in the process cache (3-tuple key since v2)
+        _PROCESS_CACHE[(text_hash_1, "gpt-4o-mini", "v2")] = None  # type: ignore[assignment]
 
         # Run bust for posting ID 1
         deleted = _bust_cache_for_ids(five_posting_db, [1])
@@ -332,8 +342,8 @@ class TestBustCacheForIds:
             conn2.close()
         assert remaining is None, "Cache row should be deleted after busting"
 
-        # Process cache entry should be evicted
-        assert (text_hash_1, "gpt-4o-mini") not in _PROCESS_CACHE
+        # Process cache entry should be evicted (bust evicts all keys with this hash)
+        assert (text_hash_1, "gpt-4o-mini", "v2") not in _PROCESS_CACHE
 
     def test_bust_does_not_remove_other_ids(self, five_posting_db: Path) -> None:
         import hashlib

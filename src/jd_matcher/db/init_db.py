@@ -144,6 +144,14 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
         "filter_reason",
         "ALTER TABLE canonical_postings ADD COLUMN filter_reason TEXT NULL;",
     ),
+    # M3-002: prompt_version on extraction_cache — new cache key dimension.
+    # Existing rows default to 'v1'; v2 lookups (WHERE prompt_version='v2') miss
+    # them, triggering re-extraction with the new prompt.
+    (
+        "extraction_cache",
+        "prompt_version",
+        "ALTER TABLE extraction_cache ADD COLUMN prompt_version TEXT NOT NULL DEFAULT 'v1';",
+    ),
 ]
 
 # Index-only migrations that don't need a column presence check.

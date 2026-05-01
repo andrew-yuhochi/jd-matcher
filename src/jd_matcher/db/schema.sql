@@ -260,14 +260,18 @@ CREATE INDEX IF NOT EXISTS idx_ledger_user_kind   ON llm_call_ledger (user_id, c
 
 -- -------------------------------------------------------------------------
 -- extraction_cache — cross-run cache for LLM extraction (M2 — TASK-M2-006 C18).
--- Key: SHA-256(full_jd) + model_name.  Allows skipping the LLM call when an
--- identical JD has been extracted before (even across pipeline runs).
+-- Key: SHA-256(full_jd) + model_name + prompt_version.  Allows skipping the
+-- LLM call when an identical JD has been extracted before with the same prompt
+-- version.  Bumping prompt_version (e.g. v1→v2) forces re-extraction of all
+-- existing entries — existing rows with the old version are never returned for
+-- the new version lookup, achieving zero-code-change cache invalidation.
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS extraction_cache (
     text_hash                  TEXT NOT NULL,
     model_name                 TEXT NOT NULL,
+    prompt_version             TEXT NOT NULL DEFAULT 'v1',
     user_id                    TEXT NOT NULL DEFAULT 'default' REFERENCES users(id),
     canonical_extraction_json  TEXT NOT NULL,
     cached_at                  TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    PRIMARY KEY (text_hash, model_name)
+    PRIMARY KEY (text_hash, model_name, prompt_version)
 );

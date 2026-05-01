@@ -39,10 +39,15 @@ _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 
 # Path from src/jd_matcher/llm/extract.py → parents[0]=llm, [1]=jd_matcher, [2]=src, [3]=jd-matcher (project root)
 _PROJECT_ROOT = Path(__file__).parents[3]
-_PROMPT_PATH = _PROJECT_ROOT / "prompts" / "canonical_extraction_v1.txt"
 
-# In-process extraction cache: (text_hash, model_name) -> CanonicalExtraction
-_PROCESS_CACHE: dict[tuple[str, str], "CanonicalExtraction"] = {}
+# Prompt version is part of the cache key — bumping to v2 forces re-extraction
+# of all existing cache entries (v1 entries keyed on "v1" will never satisfy
+# a v2 lookup, achieving zero-code-change invalidation of the M2 corpus).
+_PROMPT_VERSION = "v2"
+_PROMPT_PATH = _PROJECT_ROOT / "prompts" / f"canonical_extraction_{_PROMPT_VERSION}.txt"
+
+# In-process extraction cache: (text_hash, model_name, prompt_version) -> CanonicalExtraction
+_PROCESS_CACHE: dict[tuple[str, str, str], "CanonicalExtraction"] = {}
 
 # ---------------------------------------------------------------------------
 # Strict enum types
@@ -94,6 +99,38 @@ CanonicalLocation = Literal[
 _SENIORITY_VALUES = list(CanonicalSeniority.__args__)  # type: ignore[attr-defined]
 _LOCATION_VALUES = list(CanonicalLocation.__args__)  # type: ignore[attr-defined]
 
+# ---------------------------------------------------------------------------
+# M3 enum types (v2 prompt)
+# ---------------------------------------------------------------------------
+
+CanonicalIndustry = Literal[
+    "Financial Services / Asset Management",
+    "Insurance / Insurtech",
+    "Telecom / Digital Services",
+    "Gaming / Entertainment",
+    "Legal Tech / Compliance",
+    "Professional Services / Consulting",
+    "Construction / AEC",
+    "Energy / Oil & Gas / Cleantech",
+    "AI Training / Annotation Platforms",
+    "Staffing / Recruiting",
+    "AdTech / Marketing Tech",
+    "B2B SaaS",
+    "Healthcare / Healthtech",
+    "Retail / Ecommerce",
+    "Government / Public Sector / Crown Corp",
+    "Other",
+]
+
+CanonicalRoleOrientation = Literal["Engineering", "Problem-Solving", "Communication"]
+
+CanonicalCitizenshipRequirement = Literal["required", "preferred", "not_mentioned"]
+
+CanonicalCanHireInCanada = Literal["yes", "likely", "no", "unclear"]
+
+_INDUSTRY_VALUES = list(CanonicalIndustry.__args__)  # type: ignore[attr-defined]
+_ROLE_ORIENTATION_VALUES = list(CanonicalRoleOrientation.__args__)  # type: ignore[attr-defined]
+
 
 # ---------------------------------------------------------------------------
 # Pydantic model
@@ -105,6 +142,10 @@ class CanonicalExtraction(BaseModel):
 
     Seniority and location are strict Pydantic Literals — any value outside
     the enum causes a ValidationError, triggering a stricter-prompt retry.
+
+    M3 adds seven full-classification fields (fit_score, fit_reasoning,
+    industry, role_orientation, salary_min_cad, salary_max_cad,
+    citizenship_requirement, citizenship_reason, can_hire_in_canada).
     """
 
     canonical_title: str
@@ -114,6 +155,16 @@ class CanonicalExtraction(BaseModel):
     team_or_department: str | None = None
     top_skills: list[str] = Field(default_factory=list)
     role_summary: str
+    # M3 full-classification fields
+    fit_score: int = Field(ge=1, le=5)
+    fit_reasoning: str
+    industry: CanonicalIndustry
+    role_orientation: list[CanonicalRoleOrientation] = Field(min_length=1, max_length=3)
+    salary_min_cad: int | None = None
+    salary_max_cad: int | None = None
+    citizenship_requirement: CanonicalCitizenshipRequirement
+    citizenship_reason: str
+    can_hire_in_canada: CanonicalCanHireInCanada
 
     @field_validator("canonical_company")
     @classmethod
@@ -185,7 +236,7 @@ def _jd_hash(full_jd: str) -> str:
 
 
 def _db_cache_get(
-    db_path: Path, text_hash: str, model_name: str
+    db_path: Path, text_hash: str, model_name: str, prompt_version: str
 ) -> CanonicalExtraction | None:
     """Return a cached CanonicalExtraction from the DB, or None on miss."""
     try:
@@ -193,8 +244,8 @@ def _db_cache_get(
         try:
             row = conn.execute(
                 "SELECT canonical_extraction_json FROM extraction_cache "
-                "WHERE text_hash = ? AND model_name = ?",
-                (text_hash, model_name),
+                "WHERE text_hash = ? AND model_name = ? AND prompt_version = ?",
+                (text_hash, model_name, prompt_version),
             ).fetchone()
         finally:
             conn.close()
@@ -215,6 +266,7 @@ def _db_cache_put(
     db_path: Path,
     text_hash: str,
     model_name: str,
+    prompt_version: str,
     extraction: CanonicalExtraction,
 ) -> None:
     try:
@@ -222,8 +274,8 @@ def _db_cache_put(
         try:
             conn.execute(
                 "INSERT OR REPLACE INTO extraction_cache "
-                "(text_hash, model_name, canonical_extraction_json) VALUES (?, ?, ?)",
-                (text_hash, model_name, extraction.model_dump_json()),
+                "(text_hash, model_name, prompt_version, canonical_extraction_json) VALUES (?, ?, ?, ?)",
+                (text_hash, model_name, prompt_version, extraction.model_dump_json()),
             )
             conn.commit()
         finally:
@@ -286,7 +338,12 @@ def _write_postings_failed(
     posting_id: int,
     raw_response: str,
 ) -> None:
-    """Mark postings.extraction_status='failed' and store the raw LLM response."""
+    """Mark postings.extraction_status='failed'.
+
+    The raw response is stored in extraction_cache.raw_response_text (M3 column).
+    The previous M2 hack of writing the raw response into fit_reasoning is
+    RETIRED at M3 — fit_reasoning is now a real LLM-extracted field.
+    """
     if db_path is None:
         return
     try:
@@ -302,9 +359,8 @@ def _write_postings_failed(
                     "ALTER TABLE postings ADD COLUMN extraction_status TEXT NULL;"
                 )
             conn.execute(
-                "UPDATE postings SET extraction_status = 'failed', fit_reasoning = ? "
-                "WHERE id = ?",
-                (raw_response[:4096], posting_id),
+                "UPDATE postings SET extraction_status = 'failed' WHERE id = ?",
+                (posting_id,),
             )
             conn.commit()
         finally:
@@ -342,8 +398,11 @@ def _write_postings_extracted(
                 row[1] for row in conn.execute("PRAGMA table_info(postings);").fetchall()
             }
 
-            # M2 fields always available on the CanonicalExtraction model
-            m2_candidates: list[tuple[str, object]] = [
+            # All extraction fields — only columns that exist on the postings table
+            # are written (forward-compatible: new columns added via _COLUMN_MIGRATIONS
+            # are automatically picked up without code changes here).
+            all_candidates: list[tuple[str, object]] = [
+                # M2 fields
                 ("canonical_company", extraction.canonical_company),
                 ("canonical_seniority", extraction.canonical_seniority),
                 ("canonical_title", extraction.canonical_title),
@@ -351,12 +410,19 @@ def _write_postings_extracted(
                 ("team_or_department", extraction.team_or_department),
                 ("top_skills", _json.dumps(extraction.top_skills)),
                 ("role_summary", extraction.role_summary),
+                # M3 full-classification fields
+                ("fit_score", extraction.fit_score),
+                ("fit_reasoning", extraction.fit_reasoning),
+                ("industry", extraction.industry),
+                ("role_orientation", _json.dumps(extraction.role_orientation)),
+                ("salary_min_cad", extraction.salary_min_cad),
+                ("salary_max_cad", extraction.salary_max_cad),
+                ("citizenship_requirement", extraction.citizenship_requirement),
+                ("citizenship_reason", extraction.citizenship_reason),
+                ("can_hire_in_canada", extraction.can_hire_in_canada),
             ]
 
-            # Only set columns that exist — forward-compatible: TASK-M3-001 adds
-            # the M3 columns; subsequent tasks extend extraction.model_fields and
-            # add them to m2_candidates above without touching this helper.
-            updates = [(col, val) for col, val in m2_candidates if col in existing_cols]
+            updates = [(col, val) for col, val in all_candidates if col in existing_cols]
             if not updates:
                 return
 
@@ -389,7 +455,7 @@ def _load_system_prompt() -> str:
     if not _PROMPT_PATH.exists():
         raise ConfigError(
             f"Extraction prompt template not found at {_PROMPT_PATH}. "
-            "Ensure prompts/canonical_extraction_v1.txt exists in the project root."
+            f"Ensure prompts/canonical_extraction_{_PROMPT_VERSION}.txt exists in the project root."
         )
     return _PROMPT_PATH.read_text(encoding="utf-8")
 
@@ -401,42 +467,57 @@ def _load_system_prompt() -> str:
 
 def _build_stricter_prompt(
     user_prompt: str,
-    bad_seniority: str | None,
-    bad_location: str | None,
+    bad_fields: dict[str, tuple[Any, list[str]]],
 ) -> str:
+    """Build a corrective user prompt listing all invalid field values.
+
+    Args:
+        user_prompt: The original user prompt to append the correction to.
+        bad_fields: Mapping of field_name → (bad_value, allowed_values_list).
+    """
     lines = [user_prompt]
     lines.append("\n\n=== IMPORTANT: YOUR PREVIOUS RESPONSE HAD INVALID VALUES ===")
-    if bad_seniority:
+    for field_name, (bad_value, allowed) in bad_fields.items():
         lines.append(
-            f"INVALID seniority value: '{bad_seniority}'. "
-            f"You MUST pick exactly one of: {', '.join(_SENIORITY_VALUES)}"
-        )
-    if bad_location:
-        lines.append(
-            f"INVALID location value: '{bad_location}'. "
-            f"You MUST pick exactly one of: {', '.join(_LOCATION_VALUES)}"
+            f"INVALID {field_name} value: '{bad_value}'. "
+            f"You MUST pick exactly one of: {', '.join(str(v) for v in allowed)}"
         )
     lines.append("Return corrected JSON now.")
     return "\n".join(lines)
 
 
-def _extract_bad_field_values(raw_json: str) -> tuple[str | None, str | None]:
-    """Extract the seniority/location values from a raw JSON string for error reporting."""
+def _extract_bad_field_values(raw_json: str) -> dict[str, tuple[Any, list[str]]]:
+    """Identify invalid enum field values in a raw JSON string.
+
+    Returns a mapping of field_name → (bad_value, allowed_values) for each
+    field that contains an out-of-enum value. Empty dict on fully valid JSON.
+    """
+    bad: dict[str, tuple[Any, list[str]]] = {}
     try:
         data = json.loads(raw_json)
-        bad_seniority = (
-            data.get("canonical_seniority")
-            if data.get("canonical_seniority") not in _SENIORITY_VALUES
-            else None
-        )
-        bad_location = (
-            data.get("canonical_location")
-            if data.get("canonical_location") not in _LOCATION_VALUES
-            else None
-        )
-        return bad_seniority, bad_location
     except Exception:
-        return None, None
+        return bad
+
+    _enum_checks: list[tuple[str, list[str]]] = [
+        ("canonical_seniority", _SENIORITY_VALUES),
+        ("canonical_location", _LOCATION_VALUES),
+        ("industry", _INDUSTRY_VALUES),
+        ("citizenship_requirement", ["required", "preferred", "not_mentioned"]),
+        ("can_hire_in_canada", ["yes", "likely", "no", "unclear"]),
+    ]
+    for field_name, allowed in _enum_checks:
+        val = data.get(field_name)
+        if val is not None and val not in allowed:
+            bad[field_name] = (val, allowed)
+
+    # role_orientation is a list — check each item
+    orient_val = data.get("role_orientation")
+    if isinstance(orient_val, list):
+        bad_items = [v for v in orient_val if v not in _ROLE_ORIENTATION_VALUES]
+        if bad_items:
+            bad["role_orientation items"] = (bad_items, _ROLE_ORIENTATION_VALUES)
+
+    return bad
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +555,7 @@ def extract_canonical(
         raise ValueError(f"posting {posting.id} has no full_jd — cannot extract")
 
     text_hash = _jd_hash(posting.full_jd)
-    cache_key = (text_hash, model_name)
+    cache_key = (text_hash, model_name, _PROMPT_VERSION)
 
     # --- In-process cache ---
     if cache_key in _PROCESS_CACHE:
@@ -498,7 +579,7 @@ def extract_canonical(
 
     # --- Persistent DB cache ---
     if db_path is not None:
-        cached = _db_cache_get(db_path, text_hash, model_name)
+        cached = _db_cache_get(db_path, text_hash, model_name, _PROMPT_VERSION)
         if cached is not None:
             logger.debug("extract: DB cache hit for posting %s", posting.id)
             _PROCESS_CACHE[cache_key] = cached
@@ -596,9 +677,7 @@ def extract_canonical(
             try:
                 extraction = CanonicalExtraction.model_validate_json(raw_json)
             except Exception as parse_exc:
-                import pydantic
-
-                bad_seniority, bad_location = _extract_bad_field_values(raw_json)
+                bad_fields = _extract_bad_field_values(raw_json)
                 _write_ledger(
                     db_path=db_path,
                     status="retry" if parse_attempt < 2 else "failure",
@@ -612,7 +691,7 @@ def extract_canonical(
                 parse_last_exc = parse_exc
                 if parse_attempt < 2:
                     user_prompt = _build_stricter_prompt(
-                        base_user_prompt, bad_seniority, bad_location
+                        base_user_prompt, bad_fields
                     )
                     logger.warning(
                         "extract: parse failure on posting %s (attempt %d/3) — %s",
@@ -635,7 +714,7 @@ def extract_canonical(
             )
             _PROCESS_CACHE[cache_key] = extraction
             if db_path is not None:
-                _db_cache_put(db_path, text_hash, model_name, extraction)
+                _db_cache_put(db_path, text_hash, model_name, _PROMPT_VERSION, extraction)
             _write_postings_extracted(
                 db_path=db_path,
                 posting_id=posting.id,

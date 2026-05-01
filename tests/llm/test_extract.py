@@ -64,6 +64,16 @@ _VALID_JSON = json.dumps(
             "The team works on data platform infrastructure and analytics tooling. "
             "Core skills include Python, SQL, and distributed computing."
         ),
+        # M3 v2 required fields
+        "fit_score": 5,
+        "fit_reasoning": "Core duties are ML modeling and production deployment.",
+        "industry": "B2B SaaS",
+        "role_orientation": ["Problem-Solving", "Engineering"],
+        "salary_min_cad": None,
+        "salary_max_cad": None,
+        "citizenship_requirement": "not_mentioned",
+        "citizenship_reason": "",
+        "can_hire_in_canada": "yes",
     }
 )
 
@@ -79,6 +89,19 @@ def _make_posting(
     full_jd: str = "A job at Shopify for a Senior Data Scientist in Canada.",
 ) -> PostingRow:
     return PostingRow(id=posting_id, full_jd=full_jd)
+
+
+# M3 required fields — every CanonicalExtraction constructor call must include
+# these since the v2 model makes all 9 M3 fields required (no defaults).
+_M3_DEFAULTS: dict = {
+    "fit_score": 5,
+    "fit_reasoning": "Core DS role.",
+    "industry": "B2B SaaS",
+    "role_orientation": ["Problem-Solving"],
+    "citizenship_requirement": "not_mentioned",
+    "citizenship_reason": "",
+    "can_hire_in_canada": "yes",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +133,7 @@ class TestCanonicalExtractionModel:
                 canonical_seniority=seniority,
                 canonical_location="Vancouver",
                 role_summary="A role.",
+                **_M3_DEFAULTS,
             )
             assert m.canonical_seniority == seniority
 
@@ -121,6 +145,7 @@ class TestCanonicalExtractionModel:
                 canonical_seniority="Architect",  # not in enum
                 canonical_location="Vancouver",
                 role_summary="A role.",
+                **_M3_DEFAULTS,
             )
 
     def test_valid_location_accepted(self):
@@ -131,6 +156,7 @@ class TestCanonicalExtractionModel:
                 canonical_seniority="Mid",
                 canonical_location=loc,
                 role_summary="A role.",
+                **_M3_DEFAULTS,
             )
             assert m.canonical_location == loc
 
@@ -142,6 +168,7 @@ class TestCanonicalExtractionModel:
                 canonical_seniority="Mid",
                 canonical_location="New York",  # not in enum
                 role_summary="A role.",
+                **_M3_DEFAULTS,
             )
 
     def test_other_location_accepted(self):
@@ -152,6 +179,7 @@ class TestCanonicalExtractionModel:
             canonical_seniority="Mid",
             canonical_location="Other",
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
         assert m.canonical_location == "Other"
 
@@ -164,6 +192,7 @@ class TestCanonicalExtractionModel:
             canonical_location="Vancouver",
             top_skills=skills,
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
         assert len(m.top_skills) == 10
 
@@ -181,6 +210,7 @@ class TestCompanyNormalization:
             canonical_seniority="Mid",
             canonical_location="Toronto",
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
 
     def test_strips_inc(self):
@@ -218,6 +248,7 @@ class TestTeamOrDepartment:
             canonical_location="Vancouver",
             team_or_department=None,
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
         assert m.team_or_department is None
 
@@ -229,6 +260,7 @@ class TestTeamOrDepartment:
             canonical_location="Vancouver",
             team_or_department="Risk Analytics",
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
         assert m.team_or_department == "Risk Analytics"
 
@@ -240,6 +272,7 @@ class TestTeamOrDepartment:
             canonical_location="Vancouver",
             team_or_department="Applied Machine Learning Research",
             role_summary="A role.",
+            **_M3_DEFAULTS,
         )
         assert m.team_or_department == "Applied Machine Learning Research"
 
@@ -248,12 +281,28 @@ class TestTeamOrDepartment:
 # AC #8 — 10 synthetic JDs extract within enum constraints
 # ---------------------------------------------------------------------------
 
+def _with_m3(base: dict) -> dict:
+    """Add M3 required fields to a synthetic JD fixture dict."""
+    return {
+        **base,
+        "fit_score": 5,
+        "fit_reasoning": "Core DS or ML role.",
+        "industry": "B2B SaaS",
+        "role_orientation": ["Problem-Solving"],
+        "salary_min_cad": None,
+        "salary_max_cad": None,
+        "citizenship_requirement": "not_mentioned",
+        "citizenship_reason": "",
+        "can_hire_in_canada": "yes",
+    }
+
+
 _SYNTHETIC_JDS = [
     (
         "junior-software-engineer",
         "We are looking for a Junior Software Engineer to join our Backend Engineering team "
         "in Vancouver, BC. You will work with Python, PostgreSQL, and Docker.",
-        {
+        _with_m3({
             "canonical_title": "Junior Software Engineer",
             "canonical_company": "TechCo",
             "canonical_seniority": "Junior",
@@ -261,13 +310,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Backend Engineering",
             "top_skills": ["Python", "PostgreSQL", "Docker"],
             "role_summary": "A junior engineering role building backend services.",
-        },
+        }),
     ),
     (
         "senior-data-scientist-remote",
         "Senior Data Scientist at Shopify Inc. — 100% Remote (Canada). "
         "You will lead ML model development using Python, Spark, and dbt.",
-        {
+        _with_m3({
             "canonical_title": "Senior Data Scientist",
             "canonical_company": "Shopify",
             "canonical_seniority": "Senior",
@@ -275,13 +324,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Data Platform",
             "top_skills": ["Python", "Spark", "dbt"],
             "role_summary": "A senior data science role at a Canadian e-commerce company.",
-        },
+        }),
     ),
     (
         "staff-ml-engineer-toronto",
         "Staff ML Engineer - Toronto, Ontario. Work on recommendation systems "
         "and production ML infrastructure. Exp with PyTorch, Kubernetes, Kafka required.",
-        {
+        _with_m3({
             "canonical_title": "Staff ML Engineer",
             "canonical_company": "Acme AI",
             "canonical_seniority": "Staff",
@@ -289,13 +338,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Applied Machine Learning",
             "top_skills": ["PyTorch", "Kubernetes", "Kafka"],
             "role_summary": "A staff ML engineering role building recommendation systems.",
-        },
+        }),
     ),
     (
         "principal-data-engineer-calgary",
         "Principal Data Engineer, Calgary AB. Architect large-scale data pipelines. "
         "Expert in Spark, Airflow, dbt, Snowflake, Terraform.",
-        {
+        _with_m3({
             "canonical_title": "Principal Data Engineer",
             "canonical_company": "Energy Corp",
             "canonical_seniority": "Principal",
@@ -303,13 +352,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Data Platform",
             "top_skills": ["Spark", "Airflow", "dbt", "Snowflake", "Terraform"],
             "role_summary": "A principal engineering role designing data infrastructure.",
-        },
+        }),
     ),
     (
         "lead-analytics-engineer-montreal",
         "Lead Analytics Engineer - Montreal. Drive data models and BI tooling. "
         "Requires dbt, SQL, Looker, Tableau. Hybrid schedule.",
-        {
+        _with_m3({
             "canonical_title": "Lead Analytics Engineer",
             "canonical_company": "FinanceCo",
             "canonical_seniority": "Lead",
@@ -317,13 +366,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Analytics Engineering",
             "top_skills": ["dbt", "SQL", "Looker", "Tableau"],
             "role_summary": "A lead analytics engineering role building BI tooling.",
-        },
+        }),
     ),
     (
         "manager-data-science-ottawa",
         "Manager, Data Science - Ottawa, ON. Lead a team of 6 data scientists. "
         "Python, A/B testing, experimentation platform.",
-        {
+        _with_m3({
             "canonical_title": "Manager Data Science",
             "canonical_company": "GovTech",
             "canonical_seniority": "Manager",
@@ -331,13 +380,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Data Science",
             "top_skills": ["Python", "A/B testing"],
             "role_summary": "A data science management role leading a team of six.",
-        },
+        }),
     ),
     (
         "director-analytics-remote-na",
         "Director of Analytics - Remote (US and Canada). Own analytics strategy across "
         "product and growth. SQL, Looker, Python, experimentation.",
-        {
+        _with_m3({
             "canonical_title": "Director of Analytics",
             "canonical_company": "ScaleCo",
             "canonical_seniority": "Director",
@@ -345,13 +394,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": None,
             "top_skills": ["SQL", "Looker", "Python"],
             "role_summary": "A director-level analytics role with cross-functional scope.",
-        },
+        }),
     ),
     (
         "mid-data-analyst-edmonton",
         "Data Analyst II, Edmonton, Alberta. Analyze customer data and build dashboards. "
         "SQL, Excel, Tableau, Power BI.",
-        {
+        _with_m3({
             "canonical_title": "Data Analyst",
             "canonical_company": "UtilityCo",
             "canonical_seniority": "Mid",
@@ -359,13 +408,13 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Business Analytics",
             "top_skills": ["SQL", "Excel", "Tableau", "Power BI"],
             "role_summary": "A mid-level data analyst role building customer dashboards.",
-        },
+        }),
     ),
     (
         "senior-mle-burnaby",
         "Senior Machine Learning Engineer — Burnaby, BC (hybrid). "
         "Build production ML pipelines. PyTorch, MLflow, Kubernetes, Python, AWS.",
-        {
+        _with_m3({
             "canonical_title": "Senior Machine Learning Engineer",
             "canonical_company": "StartupCo",
             "canonical_seniority": "Senior",
@@ -373,12 +422,12 @@ _SYNTHETIC_JDS = [
             "team_or_department": "Machine Learning",
             "top_skills": ["PyTorch", "MLflow", "Kubernetes", "Python", "AWS"],
             "role_summary": "A senior MLE role building production ML pipelines near Vancouver.",
-        },
+        }),
     ),
     (
         "mid-ds-no-team",
         "Data Scientist. No specific team mentioned. Python, R, SQL. Halifax, NS.",
-        {
+        _with_m3({
             "canonical_title": "Data Scientist",
             "canonical_company": "Consulting Inc.",
             "canonical_seniority": "Mid",
@@ -386,7 +435,7 @@ _SYNTHETIC_JDS = [
             "team_or_department": None,
             "top_skills": ["Python", "R", "SQL"],
             "role_summary": "A data science role at a consulting firm in Halifax.",
-        },
+        }),
     ),
 ]
 

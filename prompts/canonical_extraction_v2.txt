@@ -1,0 +1,397 @@
+You are extracting canonical fields from a job description for deduplication and relevance scoring. Return STRICT JSON matching the schema below. Do not include markdown fences or any text outside the JSON object.
+
+=== CANONICAL COMPANY ===
+Official short name only — NO legal suffixes (Inc, Ltd, Corp, Co., Canada Ltd, Inc., Limited, L.L.C., LP).
+Examples:
+  "Toronto-Dominion Bank Canada Ltd." → "TD Bank"
+  "Shopify Inc." → "Shopify"
+  "Royal Bank of Canada" → "RBC"
+  "Lululemon Athletica Canada Inc." → "Lululemon"
+  "Recruiting in Motion" → "Recruiting in Motion"
+  "Outlier Ai" → "Outlier AI"
+
+For small/regional companies, prefer the LONGER descriptive form to avoid
+collisions with other companies sharing a common word:
+  "Alquemy Search & Consulting" — keep ALL distinguishing words; do NOT
+  truncate to "Alquemy Search" because that drops "& Consulting" which
+  identifies the specific firm.
+The Inc/Ltd-stripping rule applies ONLY to legal suffixes
+(Inc, Ltd, Corp, Co., Limited, L.L.C., LP). It does NOT apply to descriptive
+parts of the name (Search, Consulting, Group, Holdings, Partners, Advisory,
+Solutions, Technologies — these may BE part of the canonical name).
+
+=== CANONICAL SENIORITY ===
+Pick EXACTLY ONE of: Junior | Mid | Senior | Staff | Principal | Lead | Manager | Director
+Never invent a value outside this list.
+Examples:
+  "Sr. Software Engineer" → "Senior"
+  "Software Engineer II" → "Mid"
+  "Software Engineer I" → "Junior"
+  "Tech Lead" → "Lead"
+  "Engineering Manager" → "Manager"
+  "Architect" → "Principal"
+  "Staff Engineer" → "Staff"
+  "VP of Engineering" → "Director"
+  "Principal Data Scientist" → "Principal"
+  "Data Scientist" (no qualifier) → "Mid"
+  "Junior Data Analyst" → "Junior"
+  "Head of Data" → "Director"
+
+IGNORE HR classifications when extracting seniority:
+  "Staff - Non Union" → administrative HR pay band, NOT IC seniority "Staff"
+  "Pay Band X", "Job Family Y", "Grade Z", "Job Code N" → administrative; ignore
+  "Excluded - Management" / "Excluded - Professional" → administrative; ignore
+Extract seniority from the IC level title (Engineer I, Senior Engineer,
+Principal Scientist, etc.) or, if not stated, default to "Mid".
+
+=== TOP AI LAB SENIORITY CONVENTIONS ===
+"Member of Technical Staff" / "MTS" at top AI labs (Cohere, OpenAI,
+Anthropic, Google DeepMind, Meta AI, Mistral, Perplexity, Inflection)
+is a SENIOR IC role:
+  "Member of Technical Staff" → "Senior" by default
+  "Sr. Member of Technical Staff" / "Senior MTS" → "Staff"
+  "Member of Technical Staff II" → "Staff" (II suffix at MTS = senior tier)
+This convention overrides the "no level prefix → Mid" default for these companies.
+
+=== CANONICAL LOCATION ===
+Use ONLY these values — never return a province, country, or postal code:
+  Vancouver | Toronto | Montreal | Calgary | Edmonton | Ottawa | Halifax
+  Hybrid — Vancouver | Hybrid — Toronto | Hybrid — Montreal | Hybrid — Calgary | Hybrid — Edmonton | Hybrid — Ottawa | Hybrid — Halifax
+  Remote — Canada | Remote — North America | Remote — Global
+  Other
+
+Metro-area aliasing (map suburbs → canonical city):
+  Burnaby, Richmond, Surrey, Coquitlam, New Westminster, Delta, Langley, Abbotsford, Kelowna → "Vancouver"
+  Mississauga, Brampton, North York, Etobicoke, Markham, Scarborough, GTA, Waterloo, Kitchener, Hamilton → "Toronto"
+  Laval, Longueuil, Brossard, Greater Montreal → "Montreal"
+  Any city not in the canonical city list → "Other"
+
+Remote mapping:
+  "Remote (Canada)" or "Remote - Canada" or "Work from home, Canada" → "Remote — Canada"
+  "Remote (US and Canada)" or "Remote - North America" → "Remote — North America"
+  "Remote (Global)" or "Remote — Worldwide" or "Remote (anywhere)" → "Remote — Global"
+  "Hybrid - Vancouver, BC" → "Hybrid — Vancouver"
+  "Hybrid - Toronto, ON" → "Hybrid — Toronto"
+  Hybrid roles in suburb cities → use the canonical metro: "Hybrid - Burnaby" → "Hybrid — Vancouver"
+  If the role has no explicit remote/hybrid/in-office signal → use the city name or "Other"
+  Bare "Canada" with no city → "Remote — Canada"
+
+=== TEAM OR DEPARTMENT ===
+Organisational unit only — the team or department the role reports into.
+NOT role-level details (no project names, no specializations, no products).
+If the JD does not explicitly name a team or department, return null.
+Length is flexible — single-word org units like "Engineering" or "IT" are fine
+when that's literally the department; multi-word org paths like "Advanced
+Technology / Applied AI Research" are fine when that's the actual structure.
+What matters is org-unit semantics, not word count.
+
+Good: "Engineering", "IT", "Marketing Analytics", "RBC Borealis",
+      "Quantitative Equity Team", "Advanced Technology / Applied AI Research"
+Bad (role-level): "Customer LTV Modelling", "Pricing Algorithm", "Demand Forecasting"
+
+If the team name is unclear or the JD only describes the role itself
+(no organisational context), return null. Do NOT invent a team name.
+
+=== TOP SKILLS ===
+Up to 10 skills ordered by salience (most prominent first).
+Use short canonical labels: "Python", "SQL", "PyTorch", "Spark", "dbt", "Kubernetes", "A/B testing", etc.
+
+=== TOP SKILLS — CANONICAL TAXONOMY ===
+
+top_skills MUST be SPECIFIC TECHNIQUES, FRAMEWORKS, TOOLS, OR LANGUAGES
+used in the role. Do NOT include soft skills (Communication, Collaboration,
+Problem-Solving, Analytical Skills, Teamwork, Leadership, Time Management,
+etc.) — those are role-orientation signals captured separately and MUST
+be excluded from top_skills entirely.
+
+When a skill in the JD matches one of the canonical forms below, return
+the EXACT canonical spelling (case + punctuation matters). Tail skills
+not in this list may be returned in their natural form.
+
+CANONICAL TAXONOMY (43 entries — emit the canonical form on the LEFT):
+
+Languages & databases:
+  Python · SQL
+
+ML / AI core:
+  Machine Learning   (use this for: ML, machine learning, AI/ML)
+  AI
+  Deep Learning      (use this for: deep learning, Neural Networks)
+  NLP                (use this for: Natural Language Processing,
+                      natural language processing)
+  LLMs               (use this for: LLM, Large Language Models)
+  Generative AI      (use this for: GenAI, generative ai)
+  Computer Vision
+  Causal Inference
+  Predictive Modeling
+  MLOps              (use this for: ML Engineering, mlops)
+
+ML frameworks:
+  PyTorch            (NOT Pytorch / pytorch)
+  TensorFlow         (NOT Tensorflow / tensorflow)
+  Scikit-Learn       (NOT scikit-learn / Scikit-learn)
+
+Data work:
+  Data Analysis · Data Engineering (use this for: Data Pipelines)
+  Data Science · Data Analytics · Data Visualization
+  Statistical Analysis · Statistics
+  A/B Testing · Feature Engineering · Data Mining
+  Data Modeling · Data Governance · Data Management · Data Quality
+
+Cloud & infrastructure:
+  AWS · GCP · Azure · Cloud Computing · Cloud Platforms
+  CI/CD · Kubernetes · Microservices · Databricks
+
+Big data:
+  Spark              (use this for: Apache Spark, PySpark)
+
+BI / reporting:
+  Power BI · Business Intelligence
+
+General techniques:
+  Optimization · Automation
+
+EXAMPLES (mapping JD wording → top_skills emission):
+
+JD mentions "experience with PySpark and Apache Spark for ETL"
+  → top_skills includes "Spark" (single entry, not "PySpark" + "Apache Spark")
+
+JD mentions "ML modeling, especially LLMs and GenAI prompt engineering"
+  → top_skills: ["Machine Learning", "LLMs", "Generative AI", ...]
+    (LLMs and Generative AI are kept separate — LLMs is a sub-skill)
+
+JD mentions "strong communication and collaboration skills, with NLP expertise"
+  → top_skills: ["NLP", ...]
+    (Communication and collaboration EXCLUDED — soft skills)
+
+JD mentions "Pytorch, tensorflow, and scikit-learn experience"
+  → top_skills: ["PyTorch", "TensorFlow", "Scikit-Learn", ...]
+    (canonical capitalization enforced)
+
+JD mentions "data pipelines and dbt"
+  → top_skills: ["Data Engineering", "dbt", ...]
+    ("Data Pipelines" is absorbed into "Data Engineering"; dbt is tail/free-form)
+
+=== ROLE SUMMARY ===
+3–4 neutral sentences summarising the role for deduplication embedding.
+No marketing language ("exciting opportunity", "world-class team"), no salary figures, no company boilerplate.
+Focus on: what the role does, what skills are central, what the team works on, seniority/scope.
+
+=== CANONICAL TITLE ===
+Use the job title as posted, with the following normalizations:
+  Strip leading/trailing whitespace.
+  Normalize internal whitespace (collapse multiple spaces).
+  Preserve the title's original capitalization (do not uppercase or lowercase).
+
+=== TITLE SPECIALIZATION PARENTHETICALS ===
+Preserve parenthetical specialization suffixes that identify the role's
+focus area:
+  "Senior Developer (AI/ML/Gen AI Solutions)" → keep "(AI/ML/Gen AI Solutions)"
+  "Software Engineer (Machine Learning)" → keep "(Machine Learning)"
+  "Backend Engineer (Data Platform)" → keep "(Data Platform)"
+
+Drop parenthetical suffixes that are administrative noise:
+  "Senior Data Scientist (Remote)" → drop "(Remote)" (location-only)
+  "Senior Data Scientist (1-Year Contract)" → drop "(1-Year Contract)" (contract-type)
+  "Senior Data Scientist (LinkedIn Auto-Apply)" → drop (system label)
+
+=== FIT SCORE ===
+Rate how well this role fits a Vancouver-based Data Scientist / ML Engineer
+(Python, ML modeling, statistical analysis, experimentation, MLOps) on a 1–5 scale.
+Pick EXACTLY ONE integer.
+
+Rubric:
+  5 = pure DS / ML role — modeling, statistics, experimentation, ML engineering
+      are the CORE duties. The vast majority of the work is DS/ML.
+      Examples: "Senior Data Scientist", "ML Engineer", "Applied Scientist"
+  4 = primarily DS with adjacent duties — e.g. some product or eng work alongside
+      the core DS responsibilities. DS is clearly the dominant focus.
+      Examples: "Data Scientist (Product)", "ML Engineer (Platform + Research)"
+  3 = mixed role — DS is one of several core duties alongside analytics,
+      reporting, engineering, or product management. No single dominant focus.
+      Examples: "Analytics Engineer", "Data Analyst (with ML projects)",
+                "Senior Manager, Data Science" (people-heavy + some IC work)
+  2 = adjacent role with limited DS scope — e.g. data engineering with light
+      analytics, BI with some modelling, product analytics with no ML.
+      Examples: "Data Engineer", "Business Intelligence Analyst", "Analytics Manager"
+  1 = not a DS role — pure SWE, product management, management, non-technical.
+      Examples: "Software Engineer (backend)", "Director of Engineering",
+                "Solutions Architect", "Technical Recruiter"
+
+Examples:
+  "Senior Data Scientist" role focused on LLM fine-tuning → fit_score: 5
+  "Research Analyst" doing market research with Excel → fit_score: 1
+  "Senior Manager Solutions Architecture" → fit_score: 1
+  "Data Engineer" with occasional ML pipeline tasks → fit_score: 2
+
+=== FIT REASONING ===
+1-2 sentences explaining the fit_score. Cite specific JD content (duties, tools,
+team context) that drove the score. Do NOT repeat the rubric definition.
+Examples:
+  Score 5: "Core duties are building production recommendation models and A/B
+            testing frameworks — pure DS/ML IC work with Python and PyTorch."
+  Score 2: "Role is primarily ETL pipeline engineering in Spark; the 'ML tasks'
+            are limited to running pre-built model inference in production."
+
+=== INDUSTRY ===
+Pick EXACTLY ONE industry sector from this closed list. When a company spans
+multiple sectors, pick the dominant one for THIS specific role.
+Never invent a value outside this list — use "Other" as the explicit fallback.
+
+Allowed values (16 total):
+  Financial Services / Asset Management
+  Insurance / Insurtech
+  Telecom / Digital Services
+  Gaming / Entertainment
+  Legal Tech / Compliance
+  Professional Services / Consulting
+  Construction / AEC
+  Energy / Oil & Gas / Cleantech
+  AI Training / Annotation Platforms
+  Staffing / Recruiting
+  AdTech / Marketing Tech
+  B2B SaaS
+  Healthcare / Healthtech
+  Retail / Ecommerce
+  Government / Public Sector / Crown Corp
+  Other
+
+Examples:
+  TD Bank, RBC, Manulife → "Financial Services / Asset Management"
+  TELUS, Rogers, Shaw → "Telecom / Digital Services"
+  Shopify → "B2B SaaS" (e-commerce platform sold to merchants, not a retailer itself)
+  Amazon (AWS role) → "B2B SaaS"
+  Amazon (retail/logistics role) → "Retail / Ecommerce"
+  Electronic Arts, Roblox → "Gaming / Entertainment"
+  Government of Canada, BC Public Service → "Government / Public Sector / Crown Corp"
+  Outlier AI (data annotation) → "AI Training / Annotation Platforms"
+  Recruiting in Motion, Hays → "Staffing / Recruiting"
+  Hootsuite, Unbounce → "AdTech / Marketing Tech"
+  A small startup with no clear sector → "Other"
+
+=== ROLE ORIENTATION ===
+Select 1–3 labels that describe the dominant orientation of this role.
+Choose ONLY from: Engineering | Problem-Solving | Communication
+
+Definitions:
+  Engineering    = building production-grade ML systems, pipelines, or infra;
+                   the role outputs CODE or SYSTEMS (models deployed, APIs shipped,
+                   data pipelines built). Requires software craft, not just analysis.
+  Problem-Solving = open-ended analysis, experimentation, research;
+                    the role outputs INSIGHTS or MODELS (statistical analysis,
+                    A/B test design, model research, algorithm development).
+  Communication  = significant stakeholder management, cross-team coordination,
+                   or leadership component; the role requires INFLUENCING
+                   (presenting to execs, managing reports, driving alignment).
+
+Selection rules:
+  — Most IC DS/ML roles get 1-2 labels.
+  — Truly cross-functional senior roles get all 3.
+  — Do NOT add Engineering unless production systems are a primary duty
+    (exploratory ML notebooks ≠ Engineering; shipping a production API = Engineering).
+  — Do NOT add Communication unless stakeholder influence is an explicit
+    major duty (attending some meetings ≠ Communication).
+
+Examples:
+  "Senior Data Scientist" (pure research + modeling): ["Problem-Solving"]
+  "ML Engineer" (building training infra + serving layer): ["Engineering", "Problem-Solving"]
+  "Staff Data Scientist" (IC modeling + exec presentations): ["Problem-Solving", "Communication"]
+  "Director of Data Science" (people management + vision): ["Problem-Solving", "Communication"]
+  "Data Scientist (Full-Stack ML)" (research + infra + stakeholder): ["Engineering", "Problem-Solving", "Communication"]
+
+=== SALARY (CAD) ===
+Parse the stated salary range and normalize to whole CAD integers.
+Set both salary_min_cad and salary_max_cad.
+
+Rules:
+  — USD → CAD: multiply by 1.37 (fixed fallback rate; round to nearest 100).
+  — If JD states a SINGLE spot value, set min == max.
+  — If JD states a range, set min to the lower bound and max to the upper.
+  — If JD mentions equity / stock options but NO cash range → both are null.
+  — If JD says "competitive", "based on experience", or gives no numbers → both are null.
+  — Always return integers (not floats, not strings).
+
+Examples:
+  "$130,000–$160,000 USD" → salary_min_cad: 178100, salary_max_cad: 219200
+  "CAD 120K" → salary_min_cad: 120000, salary_max_cad: 120000
+  "$95,000–$110,000" (no currency stated, Canadian employer) → salary_min_cad: 95000, salary_max_cad: 110000
+  "competitive package + equity" → salary_min_cad: null, salary_max_cad: null
+  "equity compensation" (no cash stated) → salary_min_cad: null, salary_max_cad: null
+
+=== CITIZENSHIP REQUIREMENT ===
+Detect whether this role requires or prefers Canadian citizenship or
+Permanent Residency. Also detect IMPLICIT gates (security clearance,
+government work, ITAR-controlled tech, classified data access).
+Pick EXACTLY ONE of: required | preferred | not_mentioned
+
+Definitions:
+  required      = the posting explicitly or implicitly REQUIRES citizenship / PR.
+                  A candidate on an Open Work Permit (OWP) CANNOT apply.
+                  Triggers: "must be a Canadian citizen", "PR required",
+                  "Secret clearance required" (implies citizenship for most programs),
+                  "US citizenship required", government roles with security clearance,
+                  ITAR-controlled research.
+  preferred     = citizenship / PR stated as PREFERRED but not disqualifying.
+                  Triggers: "Canadian citizenship preferred", "PR an asset",
+                  "Canadian resident preferred".
+  not_mentioned = JD is silent on citizenship — no explicit or implicit signal.
+
+Also fill citizenship_reason:
+  — When required or preferred: 1-2 sentences citing the EXACT JD language or
+    implicit signal (e.g. "JD states 'Secret clearance required', which requires
+    Canadian citizenship").
+  — When not_mentioned: return an empty string "".
+
+Examples:
+  CIBC posting: "Candidates must be eligible to work in Canada" (generic open-work-permit
+  language, not citizenship) → "not_mentioned", citizenship_reason: ""
+  Government of Canada role: "Secret/Top Secret clearance required" → "required",
+  citizenship_reason: "Secret clearance is restricted to Canadian citizens or PR holders."
+  US defense contractor: "US citizenship required for ITAR compliance" → "required",
+  citizenship_reason: "JD explicitly states US citizenship required for ITAR compliance."
+  Shopify posting: no citizenship language → "not_mentioned", citizenship_reason: ""
+
+=== CAN HIRE IN CANADA ===
+Assess whether this employer can hire a candidate who is physically located
+in Canada. Pick EXACTLY ONE of: yes | likely | no | unclear
+
+Definitions:
+  yes     = Canadian-domiciled employer OR explicit Canadian subsidiary OR JD
+            explicitly states "we hire in Canada" / "this role is open to
+            Canadian residents". Canadian company is sufficient for "yes".
+  likely  = US or global employer with known Canadian engineering presence
+            (Vancouver, Toronto, Montreal offices well-known) even if not
+            stated explicitly for THIS role.
+  no      = US-only employer that explicitly excludes Canadian residents, or
+            EU-only employer, or JD states "must be located in [US city]" with
+            no Canada mention.
+  unclear = JD provides no geographic signal either way.
+
+Examples:
+  Shopify (Ottawa HQ) → "yes"
+  TD Bank, RBC, Manulife → "yes"
+  Google (posted for Mountain View office, no Canada mention) → "likely"
+  (Google has major Canadian engineering presence in Waterloo/Montreal/Toronto)
+  A US startup with no stated Canadian presence → "unclear"
+  "Must be located in Seattle, WA" with no Canada mention → "no"
+  Government of BC → "yes"
+
+=== JSON SCHEMA ===
+{
+  "canonical_title": "<string>",
+  "canonical_company": "<string>",
+  "canonical_seniority": "<Junior|Mid|Senior|Staff|Principal|Lead|Manager|Director>",
+  "canonical_location": "<one of the allowed location values above>",
+  "team_or_department": "<org unit string or null>",
+  "top_skills": ["<skill1>", "<skill2>", ...],
+  "role_summary": "<3-4 neutral sentences>",
+  "fit_score": <integer 1-5>,
+  "fit_reasoning": "<1-2 sentences>",
+  "industry": "<one of the 16 allowed industry values>",
+  "role_orientation": ["<Engineering|Problem-Solving|Communication>"],
+  "salary_min_cad": <integer or null>,
+  "salary_max_cad": <integer or null>,
+  "citizenship_requirement": "<required|preferred|not_mentioned>",
+  "citizenship_reason": "<string — empty string when not_mentioned>",
+  "can_hire_in_canada": "<yes|likely|no|unclear>"
+}
