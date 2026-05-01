@@ -18,6 +18,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from jd_matcher.db.init_db import init_db
+from tests.helpers import seed_posting as _seed_posting_shared
 from jd_matcher.state.manager import (
     StateTransition,
     auto_remove_stale_applied,
@@ -43,17 +44,8 @@ def db(tmp_path):
 
 
 def _insert_posting(conn: sqlite3.Connection, title: str, ts: str) -> int:
-    """Insert a minimal posting and return its id."""
-    cur = conn.execute(
-        """
-        INSERT INTO postings
-            (user_id, canonical_title, hydration_status, first_seen, last_seen)
-        VALUES ('default', ?, 'complete', ?, ?)
-        """,
-        (title, ts, ts),
-    )
-    conn.commit()
-    return cur.lastrowid
+    """Thin wrapper over the shared seed_posting fixture for backward-compat call sites."""
+    return _seed_posting_shared(conn, title=title, first_seen=ts, last_seen=ts)
 
 
 # ---------------------------------------------------------------------------

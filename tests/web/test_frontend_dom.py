@@ -23,6 +23,8 @@ from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.dom
+
 from jd_matcher.db.init_db import init_db
 from jd_matcher.web.app import app
 

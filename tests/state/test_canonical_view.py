@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from jd_matcher.db.init_db import init_db
+from tests.helpers import seed_posting as _shared_seed_posting
 from jd_matcher.state.canonical_view import (
     CanonicalCard,
     CanonicalStateView,
@@ -58,26 +59,16 @@ def _now() -> str:
 
 
 def _seed_posting(conn: sqlite3.Connection, title: str, company: str) -> int:
-    """Insert a posting row and return its id."""
-    now = _now()
-    cur = conn.execute(
-        """
-        INSERT INTO postings
-            (user_id, canonical_title, canonical_company, canonical_location,
-             hydration_status, full_jd, role_summary, first_seen, last_seen)
-        VALUES ('default', ?, ?, 'Vancouver', 'complete', 'jd text', 'summary', ?, ?)
-        """,
-        (title, company, now, now),
-    )
-    return cur.lastrowid
+    """Thin wrapper over shared seed_posting for backward-compat call sites."""
+    return _shared_seed_posting(conn, title=title, company=company, location="Vancouver",
+                                full_jd="jd text", role_summary="summary")
 
 
-def _seed_canonical(
-    conn: sqlite3.Connection,
-    title: str,
-    company: str,
-) -> int:
-    """Insert a canonical_postings row and return its canonical_id."""
+def _seed_canonical_only(conn: sqlite3.Connection, title: str, company: str) -> int:
+    """Insert a canonical_postings row only and return its canonical_id.
+
+    Used by tests that manage the posting and link rows separately.
+    """
     now = _now()
     cur = conn.execute(
         """
@@ -146,7 +137,7 @@ def _build_two_variant_canonical(db_path: Path) -> tuple[int, int, int]:
     try:
         pid_a = _seed_posting(conn, "Senior ML Engineer", "Acme Corp")
         pid_b = _seed_posting(conn, "Senior ML Engineer", "Acme Corp")
-        can_id = _seed_canonical(conn, "Senior ML Engineer", "Acme Corp")
+        can_id = _seed_canonical_only(conn, "Senior ML Engineer", "Acme Corp")
         _seed_link(conn, pid_a, can_id, "new_canonical")
         _seed_link(conn, pid_b, can_id, "content_dedup")
         _seed_posting_source(conn, pid_a, "linkedin_hydrator", f"https://linkedin.com/jobs/{pid_a}")
@@ -435,11 +426,11 @@ class TestEdgeCases:
         try:
             # Create two independent canonicals
             pid1 = _seed_posting(conn, "Senior Data Scientist", "Corp A")
-            can1 = _seed_canonical(conn, "Senior Data Scientist", "Corp A")
+            can1 = _seed_canonical_only(conn, "Senior Data Scientist", "Corp A")
             _seed_link(conn, pid1, can1)
 
             pid2 = _seed_posting(conn, "ML Engineer", "Corp B")
-            can2 = _seed_canonical(conn, "ML Engineer", "Corp B")
+            can2 = _seed_canonical_only(conn, "ML Engineer", "Corp B")
             _seed_link(conn, pid2, can2)
             conn.commit()
         finally:
@@ -456,11 +447,11 @@ class TestEdgeCases:
         conn.execute("PRAGMA foreign_keys = ON;")
         try:
             pid1 = _seed_posting(conn, "Senior Data Scientist", "Corp A")
-            can1 = _seed_canonical(conn, "Senior Data Scientist", "Corp A")
+            can1 = _seed_canonical_only(conn, "Senior Data Scientist", "Corp A")
             _seed_link(conn, pid1, can1)
 
             pid2 = _seed_posting(conn, "ML Engineer", "Corp B")
-            can2 = _seed_canonical(conn, "ML Engineer", "Corp B")
+            can2 = _seed_canonical_only(conn, "ML Engineer", "Corp B")
             _seed_link(conn, pid2, can2)
             conn.commit()
         finally:

@@ -28,8 +28,12 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.dom
+
 from jd_matcher.db.init_db import init_db
 from jd_matcher.web.app import app
+from tests.helpers import seed_posting as _shared_seed_posting
+from tests.helpers import seed_canonical as _shared_seed_canonical
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -123,18 +127,12 @@ def client(seeded_db: Path) -> TestClient:
     return TestClient(app, raise_server_exceptions=True)
 
 
+_TS = "2026-04-25T10:00:00+00:00"
+
+
 def _insert_posting(conn: sqlite3.Connection, title: str) -> int:
-    ts = "2026-04-25T10:00:00+00:00"
-    cur = conn.execute(
-        """
-        INSERT INTO postings
-            (user_id, canonical_title, hydration_status, first_seen, last_seen)
-        VALUES ('default', ?, 'complete', ?, ?)
-        """,
-        (title, ts, ts),
-    )
-    conn.commit()
-    return cur.lastrowid
+    """Thin wrapper over shared seed_posting for backward-compat call sites."""
+    return _shared_seed_posting(conn, title=title, first_seen=_TS, last_seen=_TS)
 
 
 def _insert_posting_with_canonical(
@@ -144,45 +142,24 @@ def _insert_posting_with_canonical(
     full_jd: str | None = None,
     merge_kind: str = "new_canonical",
 ) -> tuple[int, int]:
-    """Insert a posting + canonical + link row.
+    """Thin wrapper over shared seed_canonical.
 
     Returns (posting_id, canonical_id).
     Used by M2 tests that assert on the Main tab (which now projects from canonical_postings).
     """
-    ts = "2026-04-25T10:00:00+00:00"
-    cur_p = conn.execute(
-        """
-        INSERT INTO postings
-            (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
-        VALUES ('default', ?, ?, ?, ?, ?)
-        """,
-        (title, hydration_status, ts, ts, full_jd),
+    return _shared_seed_canonical(
+        conn,
+        title=title,
+        company="TestCo",
+        location="Vancouver, BC",
+        seniority="Mid",
+        full_jd=full_jd or "",
+        role_summary="A test role.",
+        hydration_status=hydration_status,
+        first_seen=_TS,
+        last_seen=_TS,
+        merge_kind=merge_kind,
     )
-    posting_id = cur_p.lastrowid
-
-    cur_c = conn.execute(
-        """
-        INSERT INTO canonical_postings
-            (user_id, canonical_title, canonical_company, canonical_seniority,
-             canonical_location, top_skills, role_summary, full_jd,
-             full_jd_provenance, first_seen, last_seen, sources_summary)
-        VALUES ('default', ?, 'TestCo', 'Mid', 'Vancouver, BC',
-                '[]', 'A test role.', ?, '{}', ?, ?, '[]')
-        """,
-        (title, full_jd or "", ts, ts),
-    )
-    canonical_id = cur_c.lastrowid
-
-    conn.execute(
-        """
-        INSERT INTO posting_canonical_links
-            (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
-        VALUES ('default', ?, ?, 1.0, ?, ?)
-        """,
-        (posting_id, canonical_id, merge_kind, ts),
-    )
-    conn.commit()
-    return posting_id, canonical_id
 
 
 def _seed_pipeline_run(

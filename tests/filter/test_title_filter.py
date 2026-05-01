@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from jd_matcher.filter.title_filter import (
     FilterDecision,
     TitleFilters,

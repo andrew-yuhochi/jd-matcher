@@ -1,7 +1,7 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-04-29
+> **Last Updated**: 2026-04-30
 
 ---
 
@@ -11,7 +11,7 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 0 | 44 |
+| Done | 1 | 45 |
 | In Progress | 0 | 0 |
 | To Do | 13 | 13 |
 | Blocked | 0 | 0 |
@@ -89,6 +89,39 @@
   - [x] `dedup.auto_merge_threshold` removed from config + any dead code paths
   - [x] Total test count: 973 passed (within ±20 of 910 target) with ZERO failures
   - [x] No regressions in M2 functionality (full suite green)
+
+---
+
+##### TASK-M3-000b — Pre-M3-001 cleanup bundle (decomposition finish + test infra + migration consolidation)
+
+- **Status**: Done (2026-04-30)
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C11 (decomposition completion) + C2 (migration consolidation) — TDD §C11, §C2
+- **Description**: Four-item bundle picked from the deferred review backlog after TASK-M3-000 partially completed AC1. (1) **Finish pipeline decomposition** — move `_run_gmail_source`, `_run_hydrator_source`, and the 15+ DB utility helpers out of `pipeline/__init__.py` (currently 1071 lines) into the existing stub phase modules + a new `pipeline/_helpers.py`. Target: orchestrator <300 lines (the AC1 literal target from M3-000). (2) **Promote `_insert_posting` + `_seed_canonical` to `tests/conftest.py` shared fixtures** — 8+ duplicate implementations across web/state/dedup test files; root conftest is currently a 4-line placeholder. Pre-empts M3 DOM test duplication. (3) **Add `[markers]` to `pyproject.toml`** — `unit`, `db`, `dom`, `slow` markers for fast inner loop on M3 LLM tests. Decorate existing test files where the marker is unambiguous; uncategorized tests stay unmarked (no whole-suite reclassification needed). (4) **Consolidate `init_db.py` `_ensure_*` helpers** into a single migrations table — pre-empts TASK-M3-001 which adds 11 new columns + would otherwise land 11 more `_ensure_*` calls.
+- **Dependencies**: TASK-M3-000
+- **Implementation Checklist**:
+  - Move `_run_gmail_source` body into `pipeline/phases/fetch.py` + `parse.py`; move `_run_hydrator_source` body into `pipeline/phases/hydrate.py`. Stubs become real `run(state) -> state` implementations.
+  - Move `_get_pending_*`, `_setup_run_logger`, `_emit_transition_event_if_needed`, `_get_monthly_llm_cost` into a new `pipeline/_helpers.py`.
+  - Confirm `pipeline/__init__.py` < 300 lines after the moves.
+  - Create root `tests/conftest.py` with `seed_posting`, `seed_canonical`, `empty_db` fixtures. Refactor at least 4 of the 8 caller sites to use the shared fixtures (full sweep across all 8 sites is preferred but acceptable to leave 1-2 stragglers if mechanical risk is high — note any that aren't migrated in the quality log).
+  - Add `[tool.pytest.ini_options]` `markers` entries to `pyproject.toml` for `unit`, `db`, `dom`, `slow`. Decorate existing files where the marker is obvious (`test_extract.py` LLM tests get `slow`; `test_routes.py` gets `dom`; pure unit tests in `dedup/test_engine.py` get `unit`). Skip ambiguous cases — full reclassification is a future concern.
+  - Refactor `init_db.py`: replace the per-column `_ensure_<col>(conn)` pattern with a single `_apply_pending_migrations(conn, migrations)` driven by a list of `(column_name, ALTER_TABLE_SQL, optional_default_backfill_sql)` tuples. Keep idempotency via `PRAGMA table_info` check. Verify migration on a fresh DB and on the live DB (snapshot first per data safety rule).
+  - Imports affected: `src/jd_matcher/pipeline/__init__.py`, `src/jd_matcher/pipeline/phases/{fetch,parse,hydrate}.py`, `src/jd_matcher/pipeline/_helpers.py` (new), `src/jd_matcher/db/init_db.py`, `tests/conftest.py`, `pyproject.toml`, multiple test files
+  - Runtime files: live DB at `~/.jd-matcher/jd-matcher.db` — snapshot before running migration changes against it.
+- **Demo Artifact**: `pipeline/__init__.py` < 300 lines (verify with `wc -l`); `tests/conftest.py` exposes shared fixtures (verify by grep); `pyproject.toml` has `[tool.pytest.ini_options].markers` block; `init_db.py` has consolidated `_apply_pending_migrations` function (no per-column `_ensure_*` helpers); full test suite green.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-000b.md`
+- **Acceptance Criteria**:
+  - [x] `pipeline/__init__.py` < 300 lines (278 lines)
+  - [x] `pipeline/phases/{fetch,parse,hydrate}.py` are real implementations (not stubs); `merge.py` stays a stub (its body was already in `dedup/merge.py`, not the orchestrator — noted in quality log)
+  - [x] `pipeline/_helpers.py` exists with the moved utility helpers
+  - [x] `tests/conftest.py` exposes `seed_posting`, `seed_canonical`, `empty_db` fixtures (via `tests/helpers.py`)
+  - [x] At least 4 of the 8 `_insert_posting`/`_seed_canonical` caller sites switched to shared fixtures (4 done: test_state_manager, test_canonical_view, test_m2_ui, test_routes; 4 stragglers noted in quality log)
+  - [x] `pyproject.toml` has `[tool.pytest.ini_options].markers` with `unit`, `db`, `dom`, `slow`
+  - [x] `init_db.py` has consolidated `_apply_pending_migrations(conn, migrations)`; no per-column `_ensure_*` helpers remain
+  - [x] Migration is idempotent (running twice produces no errors)
+  - [x] Full test suite green (zero failures); test count within ±20 of post-M3-000 baseline (973 passed, 10 skipped)
+  - [x] No M2 functionality regressions
 
 ---
 

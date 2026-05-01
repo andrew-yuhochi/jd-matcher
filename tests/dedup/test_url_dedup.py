@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.db
+
 from jd_matcher.db.init_db import init_db
 from jd_matcher.dedup.url_dedup import is_seen, mark_seen, register_new
 from jd_matcher.parse.linkedin_email import ParsedPosting

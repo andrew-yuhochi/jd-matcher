@@ -21,8 +21,11 @@ from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.dom
+
 from jd_matcher.db.init_db import init_db
 from jd_matcher.web.app import app
+from tests.helpers import seed_canonical as _shared_seed_canonical
 
 TS = "2026-04-25T10:00:00+00:00"
 
@@ -38,39 +41,17 @@ def _seed_canonical(
     hydration_status: str = "complete",
     full_jd: str = "",
 ) -> tuple[int, int]:
-    """Insert posting + canonical + link. Returns (posting_id, canonical_id)."""
-    cur_p = conn.execute(
-        """
-        INSERT INTO postings
-            (user_id, canonical_title, hydration_status, first_seen, last_seen, full_jd)
-        VALUES ('default', ?, ?, ?, ?, ?)
-        """,
-        (title, hydration_status, TS, TS, full_jd),
+    """Thin wrapper over shared seed_canonical for backward-compat call sites."""
+    return _shared_seed_canonical(
+        conn,
+        title=title,
+        company="TestCo",
+        location="Vancouver, BC",
+        seniority="Mid",
+        full_jd=full_jd,
+        role_summary="A test role.",
+        hydration_status=hydration_status,
     )
-    pid = cur_p.lastrowid
-
-    cur_c = conn.execute(
-        """
-        INSERT INTO canonical_postings
-            (user_id, canonical_title, canonical_company, canonical_seniority,
-             canonical_location, top_skills, role_summary, full_jd,
-             full_jd_provenance, first_seen, last_seen, sources_summary)
-        VALUES ('default', ?, 'TestCo', 'Mid', 'Vancouver, BC',
-                '[]', 'A test role.', ?, '{}', ?, ?, '[]')
-        """,
-        (title, full_jd, TS, TS),
-    )
-    cid = cur_c.lastrowid
-
-    conn.execute(
-        """
-        INSERT INTO posting_canonical_links
-            (user_id, posting_id, canonical_id, similarity_score, merge_kind, merged_at)
-        VALUES ('default', ?, ?, 1.0, 'new_canonical', ?)
-        """,
-        (pid, cid, TS),
-    )
-    return pid, cid
 
 
 def _add_repost_posting(

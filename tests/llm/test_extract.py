@@ -23,6 +23,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 from jd_matcher.db.init_db import init_db
 from jd_matcher.llm.extract import (
     CanonicalExtraction,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -16,62 +17,88 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _DEFAULT_DB_PATH = Path.home() / ".jd-matcher" / "jd-matcher.db"
 
 
-def _ensure_pipeline_runs_counts_column(conn: sqlite3.Connection) -> None:
-    """Add counts column to pipeline_runs if absent (M2-010 migration).
+# ---------------------------------------------------------------------------
+# Migration registry
+#
+# Each entry is a 3-tuple:
+#   (table_name, column_name, alter_sql)
+#
+# ``alter_sql`` is the exact ALTER TABLE statement to run if the column is
+# absent.  A fourth optional element may be added in future for backfill SQL.
+#
+# Add new migrations at the END of the list.  Never reorder or remove entries
+# (that would break the idempotency invariant on existing databases).
+# ---------------------------------------------------------------------------
 
-    Stores per-phase stats (e.g. extraction cost, embedding batch counts) as JSON.
-    SQLite lacks ADD COLUMN IF NOT EXISTS — check PRAGMA table_info first.
+_COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
+    # M2-010: per-phase stats on pipeline_runs
+    (
+        "pipeline_runs",
+        "counts",
+        "ALTER TABLE pipeline_runs ADD COLUMN counts TEXT NULL;",
+    ),
+    # M2-009/M2-010: separate canonical_seniority on postings
+    (
+        "postings",
+        "canonical_seniority",
+        "ALTER TABLE postings ADD COLUMN canonical_seniority TEXT NULL;",
+    ),
+    # M2-012: JSON context payload on llm_call_ledger
+    (
+        "llm_call_ledger",
+        "notes",
+        "ALTER TABLE llm_call_ledger ADD COLUMN notes TEXT NULL;",
+    ),
+    # M2-013: filter tracking on email_ingest_log
+    (
+        "email_ingest_log",
+        "filter_status",
+        "ALTER TABLE email_ingest_log ADD COLUMN filter_status TEXT NULL;",
+    ),
+    (
+        "email_ingest_log",
+        "filter_reason",
+        "ALTER TABLE email_ingest_log ADD COLUMN filter_reason TEXT NULL;",
+    ),
+]
+
+# Index-only migrations that don't need a column presence check.
+# These use CREATE INDEX IF NOT EXISTS which is already idempotent.
+_INDEX_MIGRATIONS: list[str] = [
+    "CREATE INDEX IF NOT EXISTS idx_email_ingest_log_filter ON email_ingest_log (filter_status);",
+]
+
+
+def _apply_pending_migrations(
+    conn: sqlite3.Connection,
+    migrations: list[tuple[str, str, str]],
+) -> None:
+    """Apply ALTER TABLE migrations idempotently.
+
+    For each (table, column, sql) entry, skip the ALTER if the column already
+    exists (checked via PRAGMA table_info). SQLite does not support
+    ADD COLUMN IF NOT EXISTS, so the pre-check is required.
+
+    Args:
+        conn:       Open SQLite connection (foreign_keys already set).
+        migrations: List of (table_name, column_name, alter_sql) tuples.
     """
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs);")}
-    if "counts" not in existing:
-        conn.execute("ALTER TABLE pipeline_runs ADD COLUMN counts TEXT NULL;")
+    table_columns: dict[str, set[str]] = {}
+
+    for table_name, column_name, alter_sql in migrations:
+        if table_name not in table_columns:
+            table_columns[table_name] = {
+                row[1]
+                for row in conn.execute(f"PRAGMA table_info({table_name});").fetchall()
+            }
+        if column_name not in table_columns[table_name]:
+            conn.execute(alter_sql)
+            # Invalidate cache so subsequent entries on the same table see
+            # the freshly added column.
+            table_columns.pop(table_name, None)
 
 
-def _ensure_postings_canonical_seniority_column(conn: sqlite3.Connection) -> None:
-    """Add canonical_seniority column to postings if absent (M2-009/M2-010 migration).
-
-    M2-009 merge.py references canonical_seniority but existing DBs created
-    before M2-009 only have seniority_band.  Adding canonical_seniority as a
-    separate nullable column (rather than renaming) avoids DROP+CREATE complexity
-    and keeps historical seniority_band data intact.
-    """
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(postings);")}
-    if "canonical_seniority" not in existing:
-        conn.execute("ALTER TABLE postings ADD COLUMN canonical_seniority TEXT NULL;")
-
-
-def _ensure_llm_call_ledger_notes_column(conn: sqlite3.Connection) -> None:
-    """Add notes column to llm_call_ledger if absent (M2-012 migration).
-
-    The notes column carries a JSON payload for calls that need per-pair context
-    (e.g. dedup_gatekeeper calls store {posting_a_id, posting_b_id, fuse_score}).
-    """
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(llm_call_ledger);")}
-    if "notes" not in existing:
-        conn.execute("ALTER TABLE llm_call_ledger ADD COLUMN notes TEXT NULL;")
-
-
-def _ensure_email_ingest_log_filter_columns(conn: sqlite3.Connection) -> None:
-    """Add filter_status / filter_reason columns + their index to email_ingest_log if absent.
-
-    SQLite has no ADD COLUMN IF NOT EXISTS syntax, so we inspect PRAGMA
-    table_info before issuing each ALTER TABLE to keep init_db() idempotent.
-    The index on filter_status is also created here (not in schema.sql) because
-    executescript runs before the ALTER, so the column doesn't exist yet when
-    schema.sql is executed on a fresh DB.
-    """
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(email_ingest_log);")}
-    if "filter_status" not in existing:
-        conn.execute("ALTER TABLE email_ingest_log ADD COLUMN filter_status TEXT NULL;")
-    if "filter_reason" not in existing:
-        conn.execute("ALTER TABLE email_ingest_log ADD COLUMN filter_reason TEXT NULL;")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_email_ingest_log_filter "
-        "ON email_ingest_log (filter_status);"
-    )
-
-
-def init_db(db_path: Path | None = None) -> None:
+def init_db(db_path: Optional[Path] = None) -> None:
     """Create the database and apply schema.sql if it has not been applied yet.
 
     Args:
@@ -99,11 +126,10 @@ def init_db(db_path: Path | None = None) -> None:
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.executescript(schema_sql)
         # ALTER TABLE statements cannot use IF NOT EXISTS in SQLite; apply them
-        # via a Python helper that checks PRAGMA table_info first.
-        _ensure_pipeline_runs_counts_column(conn)
-        _ensure_postings_canonical_seniority_column(conn)
-        _ensure_email_ingest_log_filter_columns(conn)
-        _ensure_llm_call_ledger_notes_column(conn)
+        # via _apply_pending_migrations which checks PRAGMA table_info first.
+        _apply_pending_migrations(conn, _COLUMN_MIGRATIONS)
+        for index_sql in _INDEX_MIGRATIONS:
+            conn.execute(index_sql)
         # Seed the single 'default' user row — ignored if it already exists.
         conn.execute(
             "INSERT OR IGNORE INTO users (id) VALUES (?);",

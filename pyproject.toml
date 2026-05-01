@@ -26,3 +26,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "unit: pure function, no I/O, <10ms each",
+    "db: uses tmp SQLite, no network, <100ms each",
+    "dom: uses TestClient + HTML parse, <200ms each",
+    "slow: any test that takes >500ms (LLM mocks with latency sim, large fixtures)",
+]
