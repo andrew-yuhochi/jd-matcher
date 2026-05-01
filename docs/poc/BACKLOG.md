@@ -183,6 +183,27 @@ Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
 
 ---
 
+## Promoted to TASK-M3-013 scope — manual Expire flow + expired_canonicals table
+
+### Manual Expire flow (Expired tab + "Mark expired" button + `expired_canonicals` table)
+
+**Surfaced**: 2026-05-01 — daily M3 triage friction (dead LinkedIn URLs poisoning ranker evaluation)
+**BA verdict**: DRIFTING (logged in ALIGNMENT-LOG.md 2026-05-01 entry — proposal reverses 2026-04-26 manual-Expire MVP-M2 deferral and instances PRD §6 Scope OUT "Inactive AND Expired state lifecycle … MVP-M1" compound clause)
+**User decision**: 2026-05-01 — **Override BA**, promote to TASK-M3-013
+
+**Why promoted (user reasoning)**: dead/expired postings poison the M3 evaluation testing loop. When a posting ranks highly but the apply link is dead, the user cannot tell whether the issue is a ranker quality bug or a freshness issue — the two confounds are indistinguishable without an explicit "this posting is dead" signal during daily triage. The Expire feature is therefore part of the testable PoC M3 logic, not UX polish.
+
+**Doc restructuring committed in the same transaction (2026-05-01)**:
+- PRD §5 M2 Inactive/Expired dedup-bypass clause + §6 Scope OUT clause split — manual Expire promoted to PoC M3, auto-Expire/auto-Inactivate retained in MVP-M1.
+- TDD §C2 (`expired_canonicals` table), §C7 (expire_canonical/unexpire_canonical write API), §C8 (/expired + /expire + /unexpire endpoints + Expired tab nav), §C9 (Expired tab + "Mark expired" red button + `x` keyboard shortcut), §C21 (BLOCK + FUSE filter activated as load-bearing in M3 via table-based predicate), §C22 (select_expired + select_main predicate), §C30 (no-linkage clause documented).
+- BACKLOG.md MVP-M1 Inactive/Expired entry trimmed (this section's parent entry up at line 239); cross-reference to PoC M3.
+
+**Implementation**: TASK-M3-013 (TASKS.md). 10 ACs covering schema migration, dedup engine filter, state manager API, read-side queries, web routes, frontend tab + button + keyboard shortcut, and an integration test for the reactivation cycle (mark expired → ingest fresh duplicate → assert canonical reappears on Main as new entity).
+
+**Pattern note for future BA invocations**: this is the first M3 promotion to reverse a previously logged MVP deferral. Pattern flag: if a second M3 proposal cites the same "needed for evaluation" framing, the M3 evaluation surface itself may be under-specified — escalate to architect for an evaluation-surface design pass rather than auto-promote case-by-case.
+
+---
+
 ## Deferred to MVP
 
 - **Scheduling** — launchd job for unattended pipeline runs.
@@ -236,18 +257,20 @@ Multi-select; captures mid-senior IC roles that span 2–3 archetypes.
 
 ---
 
-### MVP-M1 — Inactive AND Expired state lifecycle (supersedes auto-remove model)
+### MVP-M1 — Inactive lifecycle + auto-Expire-on-HTTP-404 (supersedes auto-remove model)
 
-**Decision date**: 2026-04-25 (Inactive); 2026-04-26 (Expired sibling concept added)
-**Approved by**: User (Option A — full capture; Expired added 2026-04-26 from M1-005b real-data validation)
-**Alignment verdict**: ALIGNED (see ALIGNMENT-LOG.md 2026-04-25 entry; 2026-04-26 entry for Expired)
+**Decision date**: 2026-04-25 (Inactive); 2026-04-26 (auto-Expire sibling concept added); 2026-05-01 (manual Expire flow split out and promoted to PoC M3 — see scope-narrowing note below)
+**Approved by**: User (Option A — full capture; auto-Expire added 2026-04-26 from M1-005b real-data validation; manual Expire promoted to M3 per ALIGNMENT-LOG 2026-05-01)
+**Alignment verdict**: ALIGNED (see ALIGNMENT-LOG.md 2026-04-25, 2026-04-26, 2026-05-01 entries)
 
-**What**:
-Replace the original "auto-remove after 90 days of silence" model with an Inactive state model, plus a sibling `Expired` state for hydrator-detected dead-link postings:
+**Scope-narrowing note (2026-05-01 — Override BA per ALIGNMENT-LOG)**: the manual-user-driven Expire flow (Expired tab + "Mark expired" button + `expired_canonicals` table + C7 `expire_canonical/unexpire_canonical` write API + C22 `select_expired` read + C8 endpoints + C21/C30 expired-filter activation) was promoted to PoC M3 as **TASK-M3-013** because dead-link postings poison the M3 evaluation testing loop (cannot distinguish ranker bugs from freshness issues during daily triage). The earlier 2026-04-26 deferral of the manual "Job link is dead" button is **superseded by that promotion** — M3 ships the manual flow; MVP-M1 retains only auto-detection. **MVP-M1 reuses the same `expired_canonicals` table** introduced in PoC M3 (purely additive — auto-Expire writes to the same table from a different trigger; no re-architecture needed).
+
+**What (MVP-M1 retained scope)**:
+Replace the original "auto-remove after 90 days of silence" model with an Inactive state model, plus auto-Expire on hydrator HTTP 404:
 1. New status value: `Inactive`. Auto-trigger after ~90 days of silence on `status_updated_at` for `Applied`/`Screen`/`Interview` only (`Offer`/`Rejected`/`Withdrew` exempt).
 2. Inactive entries stay forever in Applied tab as forensic history; user can manually transition Inactive → any status.
-3. Dedup bypass: Inactive entries are treated as non-existent for BOTH URL-based and LLM content-based dedup. A new posting matching the same role surfaces on Main with a fresh posting_id; old Inactive entry persists.
-4. **Expired status**: hydrator-detected dead-link postings transition to `status='Expired'` automatically (HTTP 404 from LinkedIn/Indeed). Same dedup-bypass mechanic as Inactive — reposts surface as fresh on Main, old Expired entry persists as forensic history.
+3. Dedup bypass (status-based): Inactive entries are treated as non-existent for BOTH URL-based and LLM content-based dedup. A new posting matching the same role surfaces on Main with a fresh posting_id; old Inactive entry persists. (TDD §C21/§C22 responsibilities (5)/(7) already wire this as a no-op-at-M2 predicate — MVP-M1 flips it to load-bearing.)
+4. **Auto-Expire status**: hydrator-detected dead-link postings transition to `status='Expired'` automatically (HTTP 404 from LinkedIn/Indeed). MVP-M1 hydrator additionally `INSERT OR IGNORE`s into `expired_canonicals` (the table PoC M3 introduces) with `marked_by_user='auto-hydrator-404'` so the existing M3 dedup-engine filter (C21 (5b)) suppresses the canonical from being a match candidate. Reposts surface as fresh canonicals on Main per the M3 reactivation invariant — already implemented at PoC M3.
 
 **Why**:
 - Auto-remove destroys forensic context (compensation, role details) the user may want for re-application context
@@ -256,34 +279,35 @@ Replace the original "auto-remove after 90 days of silence" model with an Inacti
 - More semantically precise version of what auto-remove was attempting to do
 - Dead-link postings: Dismiss semantically wrong (user wants to evaluate reposts); Expired = "system unavailable" not "user uninterested"; preserves repost-surfacing for legitimate role re-openings
 
-**Schema impact for M1: NONE.**
-`status` and `status_updated_at` columns already exist on `applied` table. `auto_remove_at` column is semantically dead from inception — see TDD §1.2a / §C7 superseded notes. Expired adds another allowed `status` value at MVP-M1 — no new column.
+**Schema impact for MVP-M1: minimal.**
+`status` and `status_updated_at` columns already exist on `applied` table. `auto_remove_at` column is semantically dead from inception — see TDD §1.2a / §C7 superseded notes. Expired adds another allowed `status` value — no new column. **`expired_canonicals` table is already created at PoC M3 (TASK-M3-013)** — MVP-M1 reuses it, no migration needed.
 
-**Scope at MVP-M1**:
-1. Schema: extend `status` allowed values to include `Inactive` AND `Expired` (and the rest of the funnel — `Screen`, `Interview`, `Offer`, `Rejected`, `Withdrew`). No new columns.
-2. State manager (C7): replace `auto_remove_stale_applied()` with `auto_inactivate_stale_applied()` (sets `status='Inactive'`); add `update_status(posting_id, new_status)` that resets `status_updated_at`; **add `mark_expired(posting_id)` for hydrator-triggered transitions to `status='Expired'`**.
-3. Dedup (C5/C6): both URL-based and LLM content-based dedup add `WHERE NOT EXISTS (… applied.status IN ('Inactive', 'Expired'))` semantics. **Both Inactive AND Expired entries are treated as non-existent for dedup purposes.**
+**Scope at MVP-M1 (narrowed post-2026-05-01)**:
+1. Schema: extend `status` allowed values to include `Inactive` AND `Expired` (and the rest of the funnel — `Screen`, `Interview`, `Offer`, `Rejected`, `Withdrew`). No new columns. `expired_canonicals` already exists from PoC M3.
+2. State manager (C7): replace `auto_remove_stale_applied()` with `auto_inactivate_stale_applied()` (sets `status='Inactive'`); add `update_status(posting_id, new_status)` that resets `status_updated_at`; **add `mark_expired(posting_id)` for hydrator-triggered transitions to `status='Expired'`** — this also `INSERT OR IGNORE`s into `expired_canonicals` (re-using the PoC M3 write path, just from a different caller).
+3. Dedup (C21/C22): the status-based predicate `WHERE NOT EXISTS (… applied.status IN ('Inactive', 'Expired'))` (TDD §C21 responsibility 5, §C22 responsibility 7) flips from no-op to load-bearing. The table-based `NOT IN expired_canonicals` predicate (TDD §C21 responsibility 5b) is already load-bearing from M3 — no change needed.
 4. Scheduler (already MVP-M1 scope): daily cron/launchd job runs `auto_inactivate_stale_applied()`. (No scheduler needed for Expired — it's hydration-triggered, not time-triggered.)
-5. UI (C8):
-   - Applied tab gains Inactive section/filter
-   - **Dismissed tab gains Expired section/filter** (or, at MVP-M1 planning, decide if a unified "Unavailable" filter spanning Inactive + Expired is cleaner)
-   - Main tab indicates entries whose URL once mapped to an Inactive OR Expired posting (e.g. "Reposted" badge)
+5. UI (C8/C9):
+   - Applied tab gains Inactive section/filter (NEW for MVP-M1)
+   - Expired tab is **already shipped at PoC M3** (TASK-M3-013) — MVP-M1 makes no Expired-tab UI changes; auto-Expired postings simply appear there alongside user-marked-Expired ones (the user cannot easily tell them apart; a `marked_by_user` distinction column is logged but not surfaced in the UI at MVP-M1 — backlog item for MVP-M2 if needed)
+   - Main tab "Reposted" badge interaction: PoC M3 (TASK-M3-013) explicitly DECIDED no linkage between expired and fresh canonicals (clean separation). MVP-M1 does NOT revisit this decision.
 6. **Hydrator (C5/C6) auto-detect**:
-   - On hydration, if HTTP response is 404 (or "this job is no longer available" markers), call `mark_expired(posting_id)` — the posting transitions to `Expired` automatically, no user action required
+   - On hydration, if HTTP response is 404 (or "this job is no longer available" markers), call `mark_expired(posting_id)` — the posting transitions to `Expired` automatically AND the canonical is added to `expired_canonicals`, no user action required
    - Other failure modes (403, 500, network timeout) remain `hydration_status='failed'` — those are transient, not expired
 
 **Out of scope for this item (separate MVP item)**:
 - Inactive accumulation reminder notification (UI prompt when Inactive count crosses threshold). Logged separately because Inactive entries never auto-remove and could accumulate over years.
-- Manual "Job link is dead" button on cards — deferred to MVP-M2; auto-detect via hydrator 404 covers the common case at zero user effort
+- ~~Manual "Job link is dead" button on cards~~ — **superseded by PoC M3 TASK-M3-013** (manual Expire flow). The 2026-04-26 deferral to MVP-M2 was overridden 2026-05-01.
+- Distinguishing manual-Expired vs auto-Expired in the UI (e.g. an "Auto-Expired" sub-badge on Expired-tab cards). MVP-M2 backlog item if user surfaces a need.
 
 **Caveats to action at MVP-M1 planning**:
 1. Confirm `status_updated_at` is written on every status transition (not just initial `apply`) — this is the silence clock.
 2. The dedup bypass applies to both URL-based (M1/M2) and LLM-based (MVP) dedup — explicit in PRD §5 M2 update; do not let the URL path slip through unmodified.
 3. Decide whether to drop or repurpose the `auto_remove_at` column at MVP-M1 (it's dead-code in M1; either remove it or leave as a vestigial column — small migration either way).
-4. **Status enum reconciliation**: TDD §1.2a currently documents the `applied.status` enum as `Applied / Screen / Interview / Offer / Rejected / Ghosted`. The new design introduces `Inactive` as the auto-transitioned-when-cold state, which is the concept the original `Ghosted` placeholder was likely standing in for. The MVP-M1 enum should resolve to: `Applied / Inactive / Screen / Interview / Offer / Rejected / Withdrew` — adding `Inactive` (system-set), renaming/dropping `Ghosted`, and adding `Withdrew` (genuinely missing terminal status for user-initiated pull-out). Decide and update TDD §1.2a at MVP-M1 planning.
-5. **Status enum reconciliation now also includes Expired**: TDD §1.2a `applied.status` enum should resolve at MVP-M1 to `Applied / Inactive / Expired / Screen / Interview / Offer / Rejected / Withdrew`. (Update of caveat #4.)
+4. **Status enum reconciliation**: TDD §1.2a currently documents the `applied.status` enum as `Applied / Screen / Interview / Offer / Rejected / Ghosted`. The new design introduces `Inactive` as the auto-transitioned-when-cold state, which is the concept the original `Ghosted` placeholder was likely standing in for. The MVP-M1 enum should resolve to: `Applied / Inactive / Expired / Screen / Interview / Offer / Rejected / Withdrew` — adding `Inactive` and `Expired` (system-set), renaming/dropping `Ghosted`, and adding `Withdrew` (genuinely missing terminal status for user-initiated pull-out). Decide and update TDD §1.2a at MVP-M1 planning.
+5. The `expired_canonicals.marked_by_user` column already exists from PoC M3 (default `'default'`). MVP-M1's auto-trigger should write `'auto-hydrator-404'` so the two trigger sources are distinguishable in queries (e.g. analytics on auto vs manual Expire rate). No schema change needed.
 
-**M1 workaround for dead links**: until MVP-M1 lands the Expired status, users encountering a dead link should click Dismiss. Limitation: if the same role is reposted with the same `jk=`, dedup will suppress it; if reposted with a new `jk=`, user will see what looks like a "new" job and may be confused. Acceptable trade-off for M1 — proper Expired handling fully addresses both cases at MVP-M1.
+**M1 workaround for dead links — superseded**: ~~until MVP-M1 lands the Expired status, users encountering a dead link should click Dismiss~~. **Superseded by PoC M3 TASK-M3-013** — users now click "Mark expired" on dead links from M3 onward; the manual flow is shipped before MVP-M1 auto-detection.
 
 **M1 status**: TASK-M1-007 stands as shipped. No M1 changes required.
 
