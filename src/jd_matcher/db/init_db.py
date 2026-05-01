@@ -60,12 +60,104 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
         "filter_reason",
         "ALTER TABLE email_ingest_log ADD COLUMN filter_reason TEXT NULL;",
     ),
+    # M3-001: LLM-extracted classification fields on canonical_postings (C18 v2)
+    (
+        "canonical_postings",
+        "fit_score",
+        "ALTER TABLE canonical_postings ADD COLUMN fit_score INTEGER NULL CHECK (fit_score BETWEEN 1 AND 5);",
+    ),
+    (
+        "canonical_postings",
+        "fit_reasoning",
+        "ALTER TABLE canonical_postings ADD COLUMN fit_reasoning TEXT NULL;",
+    ),
+    (
+        "canonical_postings",
+        "industry",
+        (
+            "ALTER TABLE canonical_postings ADD COLUMN industry TEXT NULL CHECK ("
+            "industry IN ("
+            "'Financial Services / Asset Management',"
+            "'Insurance / Insurtech',"
+            "'Telecom / Digital Services',"
+            "'Gaming / Entertainment',"
+            "'Legal Tech / Compliance',"
+            "'Professional Services / Consulting',"
+            "'Construction / AEC',"
+            "'Energy / Oil & Gas / Cleantech',"
+            "'AI Training / Annotation Platforms',"
+            "'Staffing / Recruiting',"
+            "'AdTech / Marketing Tech',"
+            "'B2B SaaS',"
+            "'Healthcare / Healthtech',"
+            "'Retail / Ecommerce',"
+            "'Government / Public Sector / Crown Corp',"
+            "'Other'"
+            "));"
+        ),
+    ),
+    (
+        "canonical_postings",
+        "role_orientation",
+        # Validated at Pydantic layer (same precedent as top_skills JSON array)
+        "ALTER TABLE canonical_postings ADD COLUMN role_orientation TEXT NULL;",
+    ),
+    (
+        "canonical_postings",
+        "salary_min_cad",
+        "ALTER TABLE canonical_postings ADD COLUMN salary_min_cad INTEGER NULL;",
+    ),
+    (
+        "canonical_postings",
+        "salary_max_cad",
+        "ALTER TABLE canonical_postings ADD COLUMN salary_max_cad INTEGER NULL;",
+    ),
+    (
+        "canonical_postings",
+        "citizenship_requirement",
+        (
+            "ALTER TABLE canonical_postings ADD COLUMN citizenship_requirement TEXT NULL "
+            "CHECK (citizenship_requirement IN ('required', 'preferred', 'not_mentioned'));"
+        ),
+    ),
+    (
+        "canonical_postings",
+        "citizenship_reason",
+        "ALTER TABLE canonical_postings ADD COLUMN citizenship_reason TEXT NULL;",
+    ),
+    (
+        "canonical_postings",
+        "can_hire_in_canada",
+        (
+            "ALTER TABLE canonical_postings ADD COLUMN can_hire_in_canada TEXT NULL "
+            "CHECK (can_hire_in_canada IN ('yes', 'likely', 'no', 'unclear'));"
+        ),
+    ),
+    # M3-001: Hard-filter fields on canonical_postings (C33, populated at TASK-M3-006)
+    (
+        "canonical_postings",
+        "is_filtered",
+        "ALTER TABLE canonical_postings ADD COLUMN is_filtered BOOLEAN NOT NULL DEFAULT 0;",
+    ),
+    (
+        "canonical_postings",
+        "filter_reason",
+        "ALTER TABLE canonical_postings ADD COLUMN filter_reason TEXT NULL;",
+    ),
 ]
 
 # Index-only migrations that don't need a column presence check.
 # These use CREATE INDEX IF NOT EXISTS which is already idempotent.
 _INDEX_MIGRATIONS: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_email_ingest_log_filter ON email_ingest_log (filter_status);",
+    # M3-001: leading-prefix index for the C34 4-tuple sort
+    # (fit_score DESC, orientation_diversity DESC, salary_max_cad DESC, post_date DESC).
+    # orientation_diversity is computed from role_orientation in the query, so the index
+    # covers the stored prefix: user_id, fit_score, salary_max_cad.
+    (
+        "CREATE INDEX IF NOT EXISTS idx_canonical_user_main_rank "
+        "ON canonical_postings(user_id, fit_score DESC, salary_max_cad DESC);"
+    ),
 ]
 
 

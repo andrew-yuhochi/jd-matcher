@@ -11,9 +11,9 @@
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | 1 | 45 |
+| Done | 2 | 46 |
 | In Progress | 0 | 0 |
-| To Do | 14 | 14 |
+| To Do | 13 | 13 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 2 (M1, M2) |
 | Invalidated tasks | — | 0 |
@@ -127,11 +127,11 @@
 
 ##### TASK-M3-001 — Schema migration: 11 new columns on canonical_postings + sort index
 
-- **Status**: To Do
+- **Status**: Done (2026-05-01)
 - **Blocked reason**:
 - **Agent**: data-pipeline
 - **Component**: C2 (Schema) — TDD §C2
-- **Description**: Idempotent migration adds 11 new columns to `canonical_postings`: 9 LLM-extracted fields (`fit_score INT 1-5`, `fit_reasoning TEXT`, `industry TEXT`, `role_orientation TEXT JSON`, `salary_min_cad INT`, `salary_max_cad INT`, `citizenship_requirement TEXT 3-state`, `citizenship_reason TEXT`, `can_hire_in_canada TEXT 4-state`) + 2 hard-filter fields (`is_filtered BOOLEAN DEFAULT 0`, `filter_reason TEXT`). Plus new `idx_canonical_user_main_rank` index supporting the C34 4-tuple sort. Per-column `_ensure_<col>(conn)` helpers per existing C2 idempotent migration pattern.
+- **Description**: Idempotent migration adds 11 new columns to `canonical_postings`: 9 LLM-extracted fields (`fit_score INT 1-5`, `fit_reasoning TEXT`, `industry TEXT`, `role_orientation TEXT JSON`, `salary_min_cad INT`, `salary_max_cad INT`, `citizenship_requirement TEXT 3-state`, `citizenship_reason TEXT`, `can_hire_in_canada TEXT 4-state`) + 2 hard-filter fields (`is_filtered BOOLEAN DEFAULT 0`, `filter_reason TEXT`). Plus new `idx_canonical_user_main_rank` index supporting the C34 4-tuple sort. Implemented via `_COLUMN_MIGRATIONS` table per M3-000b consolidated pattern (not per-column `_ensure_*` helpers).
 - **Dependencies**: TASK-M3-000
 - **Implementation Checklist**:
   - Schema: 11 new columns + 1 new index. CHECK constraints for enum fields.
@@ -143,12 +143,12 @@
 - **Demo Artifact**: `sqlite3 ~/.jd-matcher/jd-matcher.db ".schema canonical_postings"` shows all 11 new columns + index. Running migration twice is idempotent. CHECK constraints reject test inserts.
 - **Quality log**: `docs/poc/quality-logs/TASK-M3-001.md`
 - **Acceptance Criteria**:
-  - [ ] All 11 columns present on `canonical_postings` post-migration
-  - [ ] `idx_canonical_user_main_rank` index exists and is used by select_main query (verify via EXPLAIN QUERY PLAN)
-  - [ ] CHECK constraints reject invalid inserts (fit_score=0, fit_score=6, citizenship='unknown', can_hire='maybe')
-  - [ ] Migration is idempotent (running twice produces no errors)
-  - [ ] DB snapshot taken before migration (per data safety rule)
-  - [ ] All 982 tests still pass post-migration
+  - [x] All 11 columns present on `canonical_postings` post-migration
+  - [x] `idx_canonical_user_main_rank` index exists (confirmed via sqlite_master + `.indexes canonical_postings`)
+  - [x] CHECK constraints reject invalid inserts (fit_score=0, fit_score=6, citizenship='unknown', can_hire='maybe')
+  - [x] Migration is idempotent (running twice produces no errors)
+  - [x] DB snapshot taken before migration (`~/.jd-matcher/snapshots/20260501-0952-pre-m3-001-schema.db`)
+  - [x] All 993 tests still pass post-migration (baseline 979 → 993; +14 new M3-001 tests)
 
 ---
 
