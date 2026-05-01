@@ -620,3 +620,115 @@ Zero drift between the Pydantic Literal and the DB CHECK constraint source of tr
 - `canonical_postings` row count: **257** (no data loss from migration)
 - `extraction_cache.prompt_version` column: present with `DEFAULT 'v1'`
 - v1 entries: 254 | v2 entries: 5 (from smoke test)
+
+---
+
+## v4 Iteration — 2026-04-30
+
+### Design Intent
+
+User identified 2 fit_score mis-anchorings in v3 smoke test:
+- CIBC (canonical_id=327): returned 4, expected 3 — financial modeling is the PRIMARY work, not DS support
+- Dropbox (canonical_id=439): returned 5, expected 4 — automated dashboards = one notable out-of-scope stretch
+
+User's proposed fix: replace mechanical "drop X level if Y" rules with explicit **IN-SCOPE vs OUT-OF-SCOPE DS responsibility lists** that the LLM uses to evaluate the responsibility distribution.
+
+### v4 Prompt Changes (fit_score section only)
+
+The fit_score section was completely rewritten with:
+- 8 IN-SCOPE DS responsibilities (numbered 1-8): EDA, ML model dev, stats, experimentation, MLOps, stakeholder communication, research direction
+- 9 OUT-OF-SCOPE responsibilities (numbered 1-9): data engineering, dashboard dev, backend engineering, full-stack dev, system architecture, DevOps, SDLC ownership, domain quant modeling (primary), people management of non-DS teams
+- Score interpretation mapped to proportion of in-scope vs out-of-scope responsibilities
+- 8 worked examples using structured `In-scope: items X,Y` / `Out-of-scope: items A,B` format
+
+All other sections unchanged from v3 (byte-identical).
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `prompts/canonical_extraction_v4.txt` | New file — v3 with fit_score section replaced |
+| `src/jd_matcher/llm/extract.py` | `_PROMPT_VERSION = "v4"`, `_PROMPT_PATH` updated |
+| `tests/llm/test_extract_m3.py` | All v3 references updated to v4 |
+
+### Test Results (post-v4)
+
+**Full suite (SKIP_LIVE=1)**: 1031 passed, 0 failed, 10 skipped
+**test_extract_m3.py**: 38/38 passed
+
+### 6-Posting v4 Smoke Test
+
+**Date**: 2026-04-30
+**Model**: gpt-4o-mini
+**Prompt version**: v4
+**DB snapshot before test**: `~/.jd-matcher/snapshots/20260430-HHMM-pre-m3-002-v4-prompt.db`
+**Cache state after**: v1|253, v4|6 (6 fresh LLM calls; v3 entries keyed separately)
+
+---
+
+#### v3 → v4 → Expected diff table
+
+| Posting | Company | fit_score v3 | fit_score v4 | fit_score expected | Match? |
+|---------|---------|-------------|-------------|-------------------|--------|
+| 102 | Rockwell | 5 | 5 | 5 | PASS |
+| 107 | DarkVision | 2 | 4 | 2 | FAIL (regression) |
+| 11 | TELUS | 3 | 5 | 3 | FAIL (regression) |
+| 10 | Coalition | 5 | 5 | 5 | PASS |
+| 114 | CIBC | 4 | 5 | 3 | FAIL (target fix not achieved; score went UP) |
+| 8 | Dropbox | 5 | 4 | 4 | PASS (target fix achieved) |
+
+**Target fixes**: 1/2 achieved (Dropbox fixed; CIBC not fixed)
+**Regressions**: 2 (DarkVision 2→4, TELUS 3→5)
+**Net**: worse than v3 overall
+
+---
+
+#### Posting-by-posting v4 detail
+
+**posting_id=102, canonical_id=315: Rockwell Senior DS Agentic AI**
+- fit_score=5 ✓ (unchanged from v3)
+- fit_reasoning: "The role focuses on building predictive models and datasets, applying statistical methods, and collaborating with product managers, which aligns closely with in-scope data science responsibilities. There are no significant out-of-scope duties mentioned."
+
+**posting_id=107, canonical_id=320: DarkVision Data Engineer** — REGRESSION
+- fit_score=4 (was 2 in v3, expected 2)
+- fit_reasoning: "The role focuses on data pipeline development and validation, which are core data engineering tasks. While there are elements of data visualization and communication, the primary responsibilities align closely with data engineering work."
+- Root cause: LLM acknowledges data engineering but concludes "primarily data engineering" while still returning 4. The in-scope/out-of-scope framing led it to search for any DS-adjacent signal and weight it upward. V3's anchored worked examples kept it at 2 more reliably.
+
+**posting_id=11, canonical_id=323: TELUS Senior Developer AI/ML** — REGRESSION
+- fit_score=5 (was 3 in v3, expected 3)
+- fit_reasoning: "The role focuses on leading AI/ML solution development, stakeholder management, and hands-on full stack development, aligning closely with in-scope data science responsibilities. There are no significant out-of-scope duties mentioned."
+- Root cause: LLM mapped "AI/ML solution development" to in-scope items 3/6, and "hands-on full stack development" was not recognized as out-of-scope item 4. The v4 framework gave the LLM latitude to decide "no significant out-of-scope" for a role that is explicitly full-stack + architecture + devops.
+
+**posting_id=10, canonical_id=312: Coalition Applied Scientist II**
+- fit_score=5 ✓ (unchanged from v3)
+- fit_reasoning: "The role focuses on developing and deploying ML models, statistical analysis, and experimentation, which are core data science responsibilities. There are no significant out-of-scope duties mentioned, indicating a strong alignment with data science work."
+
+**posting_id=114, canonical_id=327: CIBC Senior Research Analyst** — TARGET FIX NOT ACHIEVED
+- fit_score=5 (was 4 in v3, expected 3 — went in wrong direction)
+- fit_reasoning: "The role focuses on delivering investment research and conducting macroeconomic analysis, which are core data science responsibilities. The use of Python and econometric modeling aligns with in-scope data science work, with no significant out-of-scope responsibilities mentioned."
+- Root cause: LLM mapped investment research/macroeconomic analysis to in-scope item 4 (statistical analysis) rather than out-of-scope item 8 (financial modeling as separate professional discipline). The in-scope/out-of-scope lists are not granular enough to distinguish "statistical analysis supporting DS" from "financial modeling as primary professional discipline."
+
+**posting_id=8, canonical_id=439: Dropbox Data Scientist** — TARGET FIX ACHIEVED
+- fit_score=4 ✓ (was 5 in v3, expected 4)
+- fit_reasoning: "The role involves significant in-scope data science responsibilities such as statistical analysis, experimentation, and data analysis, while also requiring some reporting and dashboard development, which is an adjacent out-of-scope category."
+- The structured framing correctly surfaced automated dashboards as out-of-scope item 2 for this posting.
+
+---
+
+### Root Cause Analysis
+
+The v4 in-scope/out-of-scope framework has a systematic failure mode: the LLM finds **any DS-adjacent keyword** in the JD and maps it to an in-scope item, then concludes "no significant out-of-scope duties" regardless of what the actual primary work is. This is the opposite of v3's failure: v3 was biased high by not anchoring at the lower scores; v4 is biased high by giving the LLM too much flexibility to reason that everything is "in-scope."
+
+The v3 prompt's conservative default rule ("when ambiguous between 3 and 4, drop to 3") and the specific rubric note ("Quant/financial-modeling roles → fit=3") were effective anchors that v4 does not reproduce explicitly within the worked examples.
+
+### Decision Options for User
+
+1. **Revert to v3** — v3 was better on 4/6 postings (DarkVision=2 ✓, TELUS=3 ✓, Coalition=5 ✓, Rockwell=5 ✓), only CIBC=4 (vs expected 3) and Dropbox=5 (vs expected 4) were off. Accept v3 as-is (CIBC and Dropbox are defensible) and proceed to TASK-M3-003.
+
+2. **Hybrid v5** — Keep v3 as the base; incorporate the in-scope/out-of-scope itemized lists alongside (not replacing) the per-score rubric + conservative default + quant note. The lists provide framework; the specific per-score examples anchor calibration.
+
+3. **Accept v4 Dropbox fix + manual override** — Accept v4 as shipped with its 3 failures and use the `[Show anyway]` override button (M3 deliverable) to surface mis-scored cards during personal use.
+
+4. **Accept v3 with CIBC at 4** — If CIBC=4 is defensible (macroeconomic/investment research is analytically adjacent to DS), then v3's only divergence is Dropbox=5 vs expected 4, which is a one-level mismatch. This may be acceptable for Gate 4 probabilistic approval.
+
+Cache state after v4 test: v1|253, v4|6. Rolling back to v3 requires only the one-line `_PROMPT_VERSION` change in extract.py.

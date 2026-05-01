@@ -154,26 +154,27 @@
 
 ##### TASK-M3-002 — C18 v2 prompt: 7 new fields + few-shot rubric
 
-- **Status**: In Progress — pending user approval of v3 smoke test (Gate 4)
-- **Blocked reason**: Awaiting user review of 6-posting v3 smoke test (Gate 4 probabilistic)
+- **Status**: In Progress — v4 iteration smoke test complete; pending user approval (Gate 4)
+- **Blocked reason**: Awaiting user review of 6-posting v4 smoke test (Gate 4 probabilistic). v4 fixed Dropbox (5→4 ✓) but regressed DarkVision (2→4), TELUS (3→5), CIBC (3→5). v3 was better for those 3. See quality log for analysis and user decision options.
 - **Agent**: data-pipeline
 - **Component**: C18 (LLM Extraction) — TDD §C18
-- **Description**: Extend `prompts/canonical_extraction_v1.txt` → `v2.txt` with 7 new fields. Each field gets a brief rubric + 1-2 worked examples. Pydantic model `CanonicalExtraction` extended with new field types (Literals for enums, Optional ints for salary). Cache key bumped (includes prompt version) so v1→v2 triggers re-extraction. v3 prompt iteration (2026-05-01) reframed fit_score rubric (8 worked examples, conservative default), role_orientation (Engineering = SE work separate from DS), salary (CAD default for Canadian employers), location (expanded suburb mapping).
+- **Description**: Extend `prompts/canonical_extraction_v1.txt` → `v2.txt` with 7 new fields. Each field gets a brief rubric + 1-2 worked examples. Pydantic model `CanonicalExtraction` extended with new field types (Literals for enums, Optional ints for salary). Cache key bumped (includes prompt version) so v1→v2 triggers re-extraction. v3 prompt iteration (2026-05-01) reframed fit_score rubric (8 worked examples, conservative default), role_orientation (Engineering = SE work separate from DS), salary (CAD default for Canadian employers), location (expanded suburb mapping). v4 prompt iteration (2026-04-30) replaced fit_score section with explicit in-scope/out-of-scope DS responsibility lists; Dropbox fixed but DarkVision/TELUS/CIBC regressed — needs user decision.
 - **Dependencies**: TASK-M3-001
 - **Implementation Checklist**:
   - [x] New file: `prompts/canonical_extraction_v2.txt` — extends v1 with 7 new field sections + worked examples
   - [x] New file: `prompts/canonical_extraction_v3.txt` — v3 iteration with sharper fit_score rubric + role_orientation reframe + salary CAD-default + Canadian metro fallback
+  - [x] New file: `prompts/canonical_extraction_v4.txt` — v4 iteration with in-scope/out-of-scope DS responsibility lists for fit_score
   - [x] Pydantic model: `CanonicalExtraction` adds `fit_score: int Field(ge=1, le=5)`, `fit_reasoning: str`, `industry: Literal[16-sector list]`, `role_orientation: list[Literal[Engineering, Problem-Solving, Communication]] Field(min_items=1, max_items=3)`, `salary_min_cad: int | None`, `salary_max_cad: int | None`, `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]`, `citizenship_reason: str`, `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]`
-  - [x] Cache: bump prompt version to v3; v1/v2 cache entries don't satisfy v3 lookups
-  - [x] Tests: 38/38 unit tests pass; 6-posting live smoke test all parse successfully
+  - [x] Cache: bump prompt version to v4; v1/v2/v3 cache entries don't satisfy v4 lookups
+  - [x] Tests: 38/38 unit tests pass (v4 references); 6-posting live smoke test all parse successfully
   - [x] Actual module paths: `src/jd_matcher/llm/extract.py` (model + cache), `src/jd_matcher/db/init_db.py` (schema migration), `src/jd_matcher/db/schema.sql` (new table definition)
 - **Demo Artifact**: Run extraction on 6 postings (mix of clear-DS, mixed, non-DS, quant, DE, dashboard-DS); verify all fields populated and validate against Pydantic model. No JSON parse failures.
 - **Quality log**: `docs/poc/quality-logs/TASK-M3-002.md`
 - **Acceptance Criteria**:
-  - [x] `prompts/canonical_extraction_v3.txt` exists with all field sections + ≥1 worked example each
+  - [x] `prompts/canonical_extraction_v4.txt` exists with all field sections + ≥1 worked example each
   - [x] Pydantic `CanonicalExtraction` has all 9 new fields with correct types/constraints
-  - [x] Cache key includes prompt version (v3 cache miss on v1/v2 entries)
-  - [ ] 6-posting smoke test produces valid v3 output for all 6; no parse failures [v3 iteration — pending user review of new smoke test]
+  - [x] Cache key includes prompt version (v4 cache miss on v1/v2/v3 entries)
+  - [ ] 6-posting smoke test produces valid v4 output for all 6; no parse failures [v4 iteration — pending user review; v4 regressed on 3 of 6]
   - [x] Industry taxonomy hardcoded as Literal type matches the 16-sector list in TDD §C18
 
 ---

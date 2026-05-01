@@ -10,8 +10,8 @@ A local-only desktop tool that consolidates job postings from LinkedIn, Indeed, 
 | **Phase** | PoC |
 | **Milestone** | M3 — Smart Layer (LLM extraction expansion + hard filters + ranking) |
 | **Last completed** | TASK-M3-001 — Schema migration: 11 new columns on canonical_postings + sort index (Done 2026-05-01) |
-| **Next task** | TASK-M3-002 — pending user approval of v3 prompt smoke test (Gate 4) |
-| **Next command** | Reply with "approve M3-002 v3" or "improve M3-002 v3: <feedback>" |
+| **Next task** | TASK-M3-002 — pending user decision on v4 smoke test results (Gate 4) |
+| **Next command** | Reply with decision: "revert to v3", "try hybrid v5: <feedback>", "accept v4", or "accept v3 with CIBC=4" |
 | **Scope note** | Indeed extraction deferred to MVP-M1 per ALIGNMENT-LOG 2026-04-28 / PRD §9 R3. PoC = LinkedIn-only. browser_fetcher.py infrastructure committed (`ce7def0`) and ready for MVP reactivation. |
 
 ---
