@@ -7,20 +7,412 @@
 
 ## Progress Summary
 
-**Active milestone**: None — M2 closed 2026-04-29. Run `/milestone-plan jd-matcher` to plan M3.
+**Active milestone**: M3 — Smart Layer (LLM extraction expansion + hard filters + ranking) — opened 2026-04-29.
 
 | Metric | Active milestone | Project total |
 |--------|------------------|---------------|
-| Done | — | 44 |
-| In Progress | — | 0 |
-| To Do | — | 0 |
-| Blocked | — | 0 |
+| Done | 0 | 44 |
+| In Progress | 0 | 0 |
+| To Do | 13 | 13 |
+| Blocked | 0 | 0 |
 | Completed milestones | — | 2 (M1, M2) |
 | Invalidated tasks | — | 0 |
 
 ---
 
 ## Active Milestone
+
+### Milestone 3 — Smart Layer (LLM extraction expansion + hard filters + ranking)
+
+**Goal**: Cards arrive pre-classified, pre-scored, pre-filtered. User opens Main and immediately sees a sorted shortlist of qualifying DS roles only.
+
+**User-observable deliverable**:
+- Browser shows ~40-80 cards on Main (down from 148) — hard filters hide postings with `fit_score < 3`, `salary < $120K`, requires US-citizenship, non-Canadian-hiring, or seniority outside [Mid/Senior/Manager].
+- Each remaining card surfaces new chips above the role_summary: `DS-fit: 5/5`, `$130-160K CAD`, `Engineering · Problem-Solving`, plus `[Industry: <sector>]` on line 2 and conditional `[PR/Citizen required]` + `[Canadian hire: yes]` in the line-6 footer.
+- Main view sorted by 4-tuple: fit_score DESC → orientation_diversity DESC → salary_max_cad DESC → post_date DESC.
+- New 4th tab "Filtered" with count badge (parallel to Applied/Dismissed); shows hidden postings + per-card `Filtered: <reason>` badge + `[Show anyway]` override button.
+- Pipeline LLM cost stays under $0.50 total for M3 (~$0.15 re-extract + ongoing per-run).
+
+**Quality bars** (per ROADMAP §M3 + PRD §7 SC-9 through SC-15c):
+- C18 LLM extraction (probabilistic — user approval gate per Gate 4):
+  - role_orientation ≥80% set-equality on 30 hand-labeled (SC-9)
+  - fit_score ≥90% accept/reject agreement at threshold N=3 (SC-11)
+  - industry ≥75% (SC-15a — lower bar; 16-class harder than 3-class)
+  - citizenship_requirement ≥90% 3-state (SC-15b)
+  - can_hire_in_canada ≥85% 4-state (SC-15c)
+  - salary extraction ≥90% within ±10% where stated (SC-12)
+- C33 Hard Filter Engine (deterministic, regression-blocking):
+  - ZERO false-negatives on 10 hand-crafted citizenship-blocking JDs (SC-13)
+- C34 Card Ranker (deterministic 100% on 6 invariants)
+- Cloud-LLM cost ≤$1/month (SC-14)
+- Below-threshold postings remain queryable via Filtered tab badge count (SC-15 / Hedge 1)
+
+**Components introduced or significantly changed**:
+- C18 LLM Extraction (extended — 7 new fields + propagation fix) — TDD §C18
+- C2 Schema (extended — 11 new columns + index) — TDD §C2
+- C8 Web UI backend (extended — `/filtered` + filter_override) — TDD §C8
+- C9 Web UI frontend (extended — Smart Layer chips + Filtered tab + override button) — TDD §C9
+- C10 Events (extended — card_filter_overridden) — TDD §C10
+- C11 Pipeline orchestrator (refactored — pipeline.py decomposition + new hardfilter phase + propagation fix) — TDD §C11
+- C22 Canonical View (extended — select_main filter+rank + select_filtered) — TDD §C22
+- C33 Hard Filter Engine (NEW) — TDD §C33
+- C34 Card Ranker (NEW) — TDD §C34
+
+**Architecture review pre-step**: Done 2026-04-29 — see `docs/poc/ARCHITECTURE-REVIEW-2026-04-29.md` and `docs/poc/TEST-SUITE-REVIEW-2026-04-29.md`. Refactor recommendations folded into TASK-M3-000.
+
+---
+
+##### TASK-M3-000 — Refactor: C18→postings + pipeline.py decomposition + test cuts
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C11 (refactor) + C18 (propagation fix) — TDD §C11, §C18
+- **Description**: Pre-M3 architecture cleanup per user directive (BACKLOG `68440bc`). Three concerns bundled: (1) **C18 → postings propagation fix** — `extract_canonical()` writes the LLM-extracted fields back to `postings` (closes Jobright bug class from M2-012; root cause of `seniority_band`/`canonical_seniority` confusion from M2-010). (2) **pipeline.py decomposition** — split 1480-line monolith into `pipeline/__init__.py` orchestrator + `pipeline/phases/{fetch,parse,filter,hydrate,extract,embed,dedup,merge,hardfilter,rank}.py` (each `run(state) -> state`). (3) **Test-suite consolidation** — collapse title-filter calibration blocks (-60 to -70 tests), parametrize nav-badge matrix (-12 tests), add `TestCacheHitPropagation` test (+1, closes coverage gap), drop dead `dedup.auto_merge_threshold` config field.
+- **Dependencies**: —
+- **Implementation Checklist**:
+  - Add `_write_postings_extracted()` paralleling `_write_postings_failed()` in extraction module
+  - Create `pipeline/phases/` package; one phase per file with consistent `run(state) -> state` signature
+  - Migrate orchestrator to thin sequencer; consolidate 9 `_count_*_since` / `_sum_*_since` helpers into single `_ledger_delta()`
+  - Test cuts per TEST-SUITE-REVIEW-2026-04-29.md HIGH recommendations
+  - Remove `dedup.auto_merge_threshold` from config and any dead code paths
+  - Imports affected: `src/jd_matcher/pipeline.py`, `src/jd_matcher/extraction/*.py`, multiple test files
+  - Runtime files: existing `~/.jd-matcher/jd-matcher.db` (no schema changes, just behavior fix)
+- **Demo Artifact**: pipeline.py decomposed into 10 phase files; full test suite passes at ~910 tests (down from 982); `TestCacheHitPropagation` passes; running `python -m jd_matcher.pipeline` on a fresh canonical produces correct `postings.top_skills` + `seniority_band` + `role_summary` populations (verified by direct DB query).
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-000.md`
+- **Acceptance Criteria**:
+  - [ ] `pipeline/phases/` directory with 10 phase modules; orchestrator <300 lines
+  - [ ] `_write_postings_extracted()` exists and is invoked by extract phase
+  - [ ] `TestCacheHitPropagation` test exists and passes (asserts `postings.seniority_band`/`top_skills`/`role_summary` populated on cache hit)
+  - [ ] Title-filter calibration tests collapsed to single parametrized `REGRESSION_CASES` function
+  - [ ] Nav-badge matrix collapsed to 1 parametrized test (was 13)
+  - [ ] `dedup.auto_merge_threshold` removed from config + any dead code paths
+  - [ ] Total test count: 982 → ~910 (±20 tolerance) with ZERO failures
+  - [ ] No regressions in M2 functionality (full suite green)
+
+---
+
+##### TASK-M3-001 — Schema migration: 11 new columns on canonical_postings + sort index
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C2 (Schema) — TDD §C2
+- **Description**: Idempotent migration adds 11 new columns to `canonical_postings`: 9 LLM-extracted fields (`fit_score INT 1-5`, `fit_reasoning TEXT`, `industry TEXT`, `role_orientation TEXT JSON`, `salary_min_cad INT`, `salary_max_cad INT`, `citizenship_requirement TEXT 3-state`, `citizenship_reason TEXT`, `can_hire_in_canada TEXT 4-state`) + 2 hard-filter fields (`is_filtered BOOLEAN DEFAULT 0`, `filter_reason TEXT`). Plus new `idx_canonical_user_main_rank` index supporting the C34 4-tuple sort. Per-column `_ensure_<col>(conn)` helpers per existing C2 idempotent migration pattern.
+- **Dependencies**: TASK-M3-000
+- **Implementation Checklist**:
+  - Schema: 11 new columns + 1 new index. CHECK constraints for enum fields.
+  - Wire: extend `init_db.py` with `_ensure_*` helpers per column
+  - Migration: idempotent per existing pattern (PRAGMA table_info check before ALTER)
+  - Tests: assert columns present after migration, CHECK constraints reject invalid inserts (fit_score=6, citizenship='invalid', etc.)
+  - Imports affected: `src/jd_matcher/db/init_db.py`
+  - Runtime files: live DB at `~/.jd-matcher/jd-matcher.db` (snapshot first per data safety rule)
+- **Demo Artifact**: `sqlite3 ~/.jd-matcher/jd-matcher.db ".schema canonical_postings"` shows all 11 new columns + index. Running migration twice is idempotent. CHECK constraints reject test inserts.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-001.md`
+- **Acceptance Criteria**:
+  - [ ] All 11 columns present on `canonical_postings` post-migration
+  - [ ] `idx_canonical_user_main_rank` index exists and is used by select_main query (verify via EXPLAIN QUERY PLAN)
+  - [ ] CHECK constraints reject invalid inserts (fit_score=0, fit_score=6, citizenship='unknown', can_hire='maybe')
+  - [ ] Migration is idempotent (running twice produces no errors)
+  - [ ] DB snapshot taken before migration (per data safety rule)
+  - [ ] All 982 tests still pass post-migration
+
+---
+
+##### TASK-M3-002 — C18 v2 prompt: 7 new fields + few-shot rubric
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C18 (LLM Extraction) — TDD §C18
+- **Description**: Extend `prompts/canonical_extraction_v1.txt` → `v2.txt` with 7 new fields. Each field gets a brief rubric + 1-2 worked examples. Pydantic model `CanonicalExtraction` extended with new field types (Literals for enums, Optional ints for salary). Cache key bumped (includes prompt version) so v1→v2 triggers re-extraction.
+- **Dependencies**: TASK-M3-001
+- **Implementation Checklist**:
+  - New file: `prompts/canonical_extraction_v2.txt` — extends v1 with 7 new field sections + worked examples
+  - Pydantic model: `CanonicalExtraction` adds `fit_score: int Field(ge=1, le=5)`, `fit_reasoning: str`, `industry: Literal[16-sector list]`, `role_orientation: list[Literal[Engineering, Problem-Solving, Communication]] Field(min_items=1, max_items=3)`, `salary_min_cad: int | None`, `salary_max_cad: int | None`, `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]`, `citizenship_reason: str`, `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]`
+  - Cache: bump prompt version key so v1 cache entries don't satisfy v2 lookups
+  - Tests: spot-check on 5 sample postings shows extraction output validates against the new model
+  - Imports affected: `src/jd_matcher/extraction/extractor.py`, `src/jd_matcher/extraction/models.py`
+- **Demo Artifact**: Run extraction on 5 test postings (mix of clear-DS, mixed, non-DS); verify all 7 new fields populated and validate against Pydantic model. No JSON parse failures.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-002.md`
+- **Acceptance Criteria**:
+  - [ ] `prompts/canonical_extraction_v2.txt` exists with 7 new field sections + ≥1 worked example each
+  - [ ] Pydantic `CanonicalExtraction` has all 9 new fields with correct types/constraints
+  - [ ] Cache key includes prompt version (v2 cache miss on v1 entries)
+  - [ ] 5-posting smoke test produces valid v2 output for all 5; no parse failures
+  - [ ] Industry taxonomy hardcoded as Literal type matches the 16-sector list in TDD §C18
+
+---
+
+##### TASK-M3-003 — Re-extract 148 corpus with v2 prompt
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C18 — TDD §C18
+- **Description**: Run v2 extraction across all 148 canonical postings in live DB. Snapshot DB first. Cost estimate: ~$0.15 (148 × ~$0.001/call gpt-4o-mini). Output written to `extraction_cache` AND propagated to both `postings` and `canonical_postings` (per TASK-M3-000 propagation fix).
+- **Dependencies**: TASK-M3-002
+- **Implementation Checklist**:
+  - Snapshot DB first per data safety rule
+  - One-shot script or CLI to iterate canonicals + invoke C18 v2 extraction per linked posting
+  - Verify each canonical's new fields populated post-run (no NULL where extraction succeeded)
+  - Cost recorded to `quality-logs/TASK-M3-003.md` and `llm_call_ledger`
+  - Imports affected: existing extraction module + possibly new `scripts/reextract_v2.py`
+  - Runtime files: live DB updated in-place
+- **Demo Artifact**: Live DB query: `SELECT canonical_id, fit_score, industry, role_orientation, citizenship_requirement, can_hire_in_canada FROM canonical_postings WHERE canonical_id IN (312, 326, 331, 366, 377, 385, 408, 414) — all 8 known merged canonicals show populated fields.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-003.md`
+- **Acceptance Criteria**:
+  - [ ] DB snapshot taken pre-extract
+  - [ ] 148/148 canonicals have v2 extraction completed (any failures triaged)
+  - [ ] Spot-check on 8 known merges + 5 random canonicals shows all 7 new fields populated sensibly
+  - [ ] Total LLM cost recorded; ≤$0.30 (with margin over $0.15 estimate)
+  - [ ] `llm_call_ledger` reflects all calls with `call_kind='extract_v2'`
+  - [ ] Zero data loss (all M2 fields still intact)
+
+---
+
+##### TASK-M3-004 — User labels 30 hand-labeled postings (CSV)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: manual (user) + data-pipeline (CSV scaffold generation)
+- **Component**: C18 (validation set) — TDD §C18
+- **Description**: Generate labeling CSV with 30 candidate postings sampled from live corpus. Postings selected to span scenarios (clear DS, mixed, MLE-leaning, non-DS, sparse JD, citizenship-flagged, salary-stated, salary-absent, multiple industries). User fills in: `fit_score`, `role_orientation`, `industry`, `salary_min_cad`, `salary_max_cad`, `citizenship_requirement`, `can_hire_in_canada`. Optional `user_notes`. CSV format mirrors M2-012 `dedup_labels.csv` precedent.
+- **Dependencies**: TASK-M3-003
+- **Implementation Checklist**:
+  - Sampling: stratified — 8 known merges + 22 sampled (mix of FUSE scores, industries, hydration states)
+  - CSV columns: `canonical_id, title, company, full_jd, fit_score, role_orientation, industry, salary_min_cad, salary_max_cad, citizenship_requirement, can_hire_in_canada, user_notes`
+  - Top of CSV: `## INSTRUCTIONS` block with field rubric (e.g., `fit_score 5 = pure DS, 1 = not DS`) + valid enum values
+  - Save to `tests/fixtures/m3_labels.csv`
+  - User can use the LLM v2 output as starting context but should label per their own judgment
+  - Imports affected: new `scripts/generate_m3_labels_csv.py` (one-shot)
+- **Demo Artifact**: `tests/fixtures/m3_labels.csv` exists with 30 postings, all label columns filled in by user.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-004.md`
+- **Acceptance Criteria**:
+  - [ ] CSV scaffold generated with 30 postings + instruction block + empty label columns
+  - [ ] User has labeled all 30 rows (or explicitly skipped some with reason in `user_notes`)
+  - [ ] At least 5 postings sampled per industry-fit dimension to ensure coverage
+  - [ ] CSV committed to git as a permanent fixture for regression
+
+---
+
+##### TASK-M3-005 — C18 v2 calibration vs 30 user labels
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user (Gate 4 approval)
+- **Component**: C18 (calibration) — TDD §C18
+- **Description**: Run calibration script comparing C18 v2 extraction outputs vs user labels per field. Compute per-field accuracy (set-equality for role_orientation, accept/reject @ N=3 for fit_score, ±10% for salary, exact-match for industry/citizenship/can_hire). Generate calibration report with per-field metrics + per-pair disagreement analysis. Flag results to user for Gate 4 approval. If a field misses its threshold by a wide margin → root-cause first → max 3 prompt-tuning attempts → re-flag.
+- **Dependencies**: TASK-M3-004
+- **Implementation Checklist**:
+  - New module: `src/jd_matcher/extraction/calibrate.py` (mirrors `dedup/calibrate.py` pattern)
+  - CLI: `python -m jd_matcher.extraction calibrate`
+  - Compute metrics per SC-9/11/12/15a/b/c
+  - Generate report at `docs/poc/quality-logs/TASK-M3-005-calibration-report.md`
+  - Per-pair disagreement table for fields below threshold
+  - Imports affected: new module
+- **Demo Artifact**: `TASK-M3-005-calibration-report.md` with per-field metrics + disagreement analysis. User approves probabilistic results per Gate 4.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-005.md`
+- **Acceptance Criteria**:
+  - [ ] role_orientation ≥80% set-equality (SC-9)
+  - [ ] fit_score ≥90% accept/reject at N=3 (SC-11)
+  - [ ] industry ≥75% (SC-15a)
+  - [ ] citizenship_requirement ≥90% 3-state (SC-15b)
+  - [ ] can_hire_in_canada ≥85% 4-state (SC-15c)
+  - [ ] salary extraction ≥90% within ±10% where stated (SC-12)
+  - [ ] Calibration report committed
+  - [ ] User approves per Gate 4 (probabilistic results require explicit approval)
+
+---
+
+##### TASK-M3-006 — C33 Hard Filter Engine + user_profile.yaml hard_filters section
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C33 (Hard Filter Engine, NEW) — TDD §C33
+- **Description**: Implement C33 component per TDD spec. Reads `user_profile.yaml::hard_filters` (5 rules: min_fit_score, min_salary_cad, acceptable_seniority, citizenship_status, require_canadian_hiring). Null-tolerant — innocent until proven guilty. Writes `is_filtered` + `filter_reason` per canonical. Wired into pipeline as new `hardfilter` phase post-merge / pre-rank.
+- **Dependencies**: TASK-M3-005
+- **Implementation Checklist**:
+  - New module: `src/jd_matcher/filters/hardfilter.py` with `HardFilterEngine` class
+  - Extend `config/user_profile.yaml` with `hard_filters` section (default values per Step 1: min_fit_score=3, min_salary_cad=120000, acceptable_seniority=[Mid, Senior, Manager], citizenship_status=pr_canada, require_canadian_hiring=true)
+  - Wire into `pipeline/phases/hardfilter.py` (per TASK-M3-000 decomposition)
+  - Re-evaluates ALL canonicals each run (config edits take effect immediately)
+  - Pipeline_runs.hardfilter row with counts.{filtered, unfiltered, filter_reasons rollup}
+  - Tests: 7 invariants per TDD §C33 quality bar
+  - Imports affected: new module + pipeline/phases/hardfilter.py + config/user_profile.yaml
+- **Demo Artifact**: Run pipeline on live 148 corpus; query `SELECT COUNT(*), filter_reason FROM canonical_postings WHERE is_filtered=1 GROUP BY filter_reason`. Counts rolled up by reason.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-006.md`
+- **Acceptance Criteria**:
+  - [ ] `HardFilterEngine.evaluate(canonical) → FilterResult` implemented
+  - [ ] All 5 rules functional + null-tolerant (null fields never trigger filter)
+  - [ ] `config/user_profile.yaml` extended with `hard_filters` section + defaults
+  - [ ] Pipeline `hardfilter` phase runs post-merge / pre-rank
+  - [ ] `is_filtered` + `filter_reason` populated on all 148 canonicals after pipeline run
+  - [ ] `pipeline_runs.hardfilter` row written with counts breakdown
+  - [ ] 7 unit-test invariants pass per TDD §C33
+
+---
+
+##### TASK-M3-007 — C34 Card Ranker + C22 select_main 4-tuple sort
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C34 (Ranker, NEW) + C22 (Canonical View, extended) — TDD §C34, §C22
+- **Description**: Implement C34 ranker (pure-logic, computes 4-tuple sort key). Embed in `C22.select_main()` as `ORDER BY` clause: fit_score DESC, orientation_diversity DESC, salary_max_cad DESC (null = median), post_date DESC, canonical_id ASC tiebreak. Add `select_filtered()` returning is_filtered=1 canonicals.
+- **Dependencies**: TASK-M3-006
+- **Implementation Checklist**:
+  - New module: `src/jd_matcher/ranking/ranker.py` with `compute_orientation_diversity(role_orientation: list[str]) -> int` and SQL helper for sort
+  - Extend `canonical_view.py::select_main()` with the new ORDER BY
+  - Add `canonical_view.py::select_filtered()` for the Filtered tab
+  - Tests: 6 ranker invariants + 8 view invariants per TDD §C34/§C22
+  - Imports affected: new ranker module + `state/canonical_view.py`
+- **Demo Artifact**: Direct query: select_main returns canonicals in correct 4-tuple order. Verify by inspecting first 5 rows have descending fit_scores then descending orientation_diversity etc.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-007.md`
+- **Acceptance Criteria**:
+  - [ ] `orientation_diversity` correctly computed per TDD §C34 rubric (7-case table test passes)
+  - [ ] select_main applies WHERE is_filtered=0 + 4-tuple ORDER BY
+  - [ ] Null salary_max_cad replaced by median (not pushed to bottom)
+  - [ ] Stability: ties broken by canonical_id ASC
+  - [ ] select_filtered returns is_filtered=1 ordered first_seen DESC
+  - [ ] 6 ranker invariants + 8 view invariants pass per TDD
+
+---
+
+##### TASK-M3-008 — C9 Smart Layer chips + 6-line card layout
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C9 (Web UI frontend) — TDD §C9
+- **Description**: Update `_card.html` to the locked 6-line layout with Smart Layer chips on Line 3 (`[DS-fit: X/5] [$X-Y CAD] [orientation]`), Industry chip on Line 2, citizenship + Canadian-hire badges in Line 6 footer. CSS chip palette per TDD §C9 (e.g., gradient on `.chip-fit-score`, red/amber/hidden on `.badge-citizenship`). fit_score chip carries `title=<fit_reasoning>` for native tooltip. All chips conditional (null-safe).
+- **Dependencies**: TASK-M3-007
+- **Implementation Checklist**:
+  - Update `_card.html` per locked Step 1 layout
+  - Add CSS rules: `.chip-fit-score`, `.chip-salary`, `.chip-orientation`, `.chip-industry`, `.badge-citizenship`, `.badge-canadian-hire` with palette per TDD §C9
+  - Update `canonical_view.py` CanonicalCard to expose new fields for template
+  - Tests: ~10 DOM tests covering chip presence under each field state + null handling
+  - Imports affected: `_card.html`, `styles.css`, `canonical_view.py`
+- **Demo Artifact**: Browser shows updated cards with Smart Layer chips visible. Hover on fit_score chip shows fit_reasoning tooltip. Conditional badges appear only when relevant.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-008.md`
+- **Acceptance Criteria**:
+  - [ ] Card layout matches locked Step 1 design (6 lines per spec)
+  - [ ] All 6 chip CSS classes present with palette per TDD §C9
+  - [ ] fit_score chip native tooltip shows fit_reasoning text
+  - [ ] All chips null-safe (absent when field is null)
+  - [ ] DOM tests for each chip state (~10 new tests)
+  - [ ] No regression in existing tests
+
+---
+
+##### TASK-M3-009 — Filtered tab + filter_override + card_filter_overridden event (C8 + C9 + C10)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline
+- **Component**: C8 + C9 + C10 — TDD §C8, §C9, §C10
+- **Description**: Add 4th tab "Filtered" to nav with count badge. New `/filtered` route renders is_filtered=1 canonicals with `Filtered: <reason>` badge per card + `[Show anyway]` button. New `POST /postings/{id}/filter_override` endpoint flips `is_filtered=0` for the canonical (idempotent) + emits `card_filter_overridden` event via C10. Keyboard shortcut `s` = Show anyway (Filtered tab only).
+- **Dependencies**: TASK-M3-008
+- **Implementation Checklist**:
+  - New route in `routes.py`: `GET /filtered` rendering filtered canonicals
+  - New route: `POST /postings/{id}/filter_override` — idempotent canonical-level flip
+  - C9: Filtered tab nav slot + count badge in `base.html`
+  - C9: Filtered card variant — adds `Filtered: <reason>` badge + `[Show anyway]` button
+  - C9: keyboard `s` shortcut on Filtered tab
+  - C10: `card_filter_overridden` event with metadata={canonical_id, filter_reason snapshot, override_at}
+  - Tests: route, override flow, event emission, badge display
+  - Imports affected: `routes.py`, `_card.html`, `base.html`, `app.js`, event emission helpers
+- **Demo Artifact**: Browser shows Filtered tab with count + filtered cards + reason badges. Click `[Show anyway]` reveals card on Main next refresh; event logged in DB.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-009.md`
+- **Acceptance Criteria**:
+  - [ ] `/filtered` route returns filtered canonicals
+  - [ ] Filtered tab badge shows count of is_filtered=1 canonicals
+  - [ ] `Filtered: <reason>` badge renders per filtered card
+  - [ ] `[Show anyway]` button + `s` keyboard shortcut work
+  - [ ] `POST /postings/{id}/filter_override` is idempotent (re-clicking on already-unfiltered = no-op)
+  - [ ] `card_filter_overridden` event emitted with documented metadata
+  - [ ] DOM tests for tab badge, override button, filtered card variant
+
+---
+
+##### TASK-M3-010 — SC-13 hard-filter regression test (10 citizenship-blocking JDs)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + test-validator
+- **Component**: C33 (regression test) — TDD §C33
+- **Description**: Build 10 hand-crafted citizenship-blocking JDs covering: explicit US-citizenship-only, explicit security clearance (Secret/TS), implicit gates (national-sensitive data, ITAR-controlled tech, defense contractor work). Run through C18 + C33 pipeline; assert all 10 produce `citizenship_requirement="required"` AND `is_filtered=1` with citizenship-related `filter_reason`. ZERO false-negatives (regression-blocking per SC-13).
+- **Dependencies**: TASK-M3-006
+- **Implementation Checklist**:
+  - Create `tests/fixtures/m3_citizenship_blocking_jds.yaml` with 10 hand-crafted JDs
+  - Each JD includes: full_jd text + expected_citizenship_requirement + expected_filter_reason category
+  - Test: load fixtures, run through extraction + filter, assert all 10 caught
+  - Failure of ANY = regression-blocking (Major)
+  - Imports affected: new fixture file + `tests/filters/test_hardfilter_sc13.py`
+- **Demo Artifact**: `pytest tests/filters/test_hardfilter_sc13.py -v` shows all 10 pass.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-010.md`
+- **Acceptance Criteria**:
+  - [ ] 10 hand-crafted citizenship JDs in fixture file
+  - [ ] All 10 produce `citizenship_requirement="required"` from C18
+  - [ ] All 10 produce `is_filtered=1` from C33
+  - [ ] All 10 have citizenship-related `filter_reason`
+  - [ ] ZERO false-negatives (regression-blocking)
+  - [ ] Test runs as part of CI / regular suite
+
+---
+
+##### TASK-M3-011 — Industry taxonomy revision pass
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user
+- **Component**: C18 (taxonomy refinement) — TDD §C18
+- **Description**: Tabulate industry distribution after M3 first run on 148 corpus. Identify: empty sectors (no canonicals classified into them), overflow into "Other" (>20% of corpus = bucket too coarse), genuine multi-sector cases (LLM struggled to pick one). User reviews + decides rename/merge/split actions. Apply changes to `prompts/canonical_extraction_v2.txt` industry section. If non-trivial changes (>2 sectors changed), re-extract affected canonicals.
+- **Dependencies**: TASK-M3-005
+- **Implementation Checklist**:
+  - Generate distribution report at `docs/poc/quality-logs/TASK-M3-011-taxonomy-distribution.md`
+  - Per-sector counts + sample canonicals per sector
+  - User reviews + decides actions (rename / merge / split / no-change)
+  - Apply changes to prompt; bump prompt version if structural
+  - Optionally re-extract affected canonicals (cost ~$0.05 if needed)
+  - Imports affected: `prompts/canonical_extraction_v2.txt`, possibly Pydantic model Literal
+- **Demo Artifact**: Distribution table + user-approved taxonomy update + report committed.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-011.md`
+- **Acceptance Criteria**:
+  - [ ] Distribution report generated
+  - [ ] User reviews + approves any rename/merge/split decisions
+  - [ ] If changes applied: prompt updated + re-extract affected canonicals
+  - [ ] Final taxonomy documented in TDD §C18 + prompt file
+  - [ ] Hedge 4 (taxonomy portability): generic role-family-language preserved
+
+---
+
+##### TASK-M3-012 — M3 demo + user approval
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: manual (user)
+- **Component**: M3 milestone deliverable acceptance — references all M3 components
+- **Description**: User runs full pipeline on live corpus; observes ~40-80 cards on Main (down from 148) sorted by 4-tuple; each card shows Smart Layer chips per locked layout; Filtered tab shows hidden postings with reasons + override works; user explicitly approves M3 deliverable.
+- **Dependencies**: TASK-M3-007, TASK-M3-009, TASK-M3-010, TASK-M3-011
+- **Implementation Checklist**:
+  - Schema: N/A
+  - Wire: N/A (demo task)
+  - User runs pipeline + reviews UI + approves
+- **Demo Artifact**: User-approved milestone closure (recorded in TASK-M3-012 quality log).
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-012.md`
+- **Acceptance Criteria**:
+  - [ ] Main tab shows fewer cards than 148 (hard filter working)
+  - [ ] Each card shows Smart Layer chips per locked layout
+  - [ ] Sort order matches 4-tuple spec (fit_score → orientation → salary → date)
+  - [ ] Filtered tab shows hidden cards + reason badges + override works
+  - [ ] All ROADMAP §M3 ACs verified per PRD §7 SC-9 through SC-15c
+  - [ ] User explicit approval logged
+
+---
+
+## M2 Task Entries (closed 2026-04-29)
 
 ### Milestone 2 — Content-aware dedup + repost detection (+ title pre-filter)
 
