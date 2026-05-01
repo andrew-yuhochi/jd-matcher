@@ -1,11 +1,11 @@
-"""Tests for TASK-M3-002 — C18 v2 prompt + Pydantic extension + cache key bump.
+"""Tests for TASK-M3-002 — C18 v3 prompt + Pydantic extension + cache key bump.
 
 Coverage:
-  - v2 prompt file exists and contains required field sections (AC #1)
+  - v3 prompt file exists and contains required field sections (AC #1)
   - CanonicalExtraction has all 9 new M3 fields with correct types (AC #2)
   - Pydantic rejects invalid M3 enum values (AC #2)
   - Cache key is now a 3-tuple (text_hash, model_name, prompt_version) (AC #3)
-  - v1 cache entries do NOT satisfy v2 lookups (AC #3 — load-bearing)
+  - v1/v2 cache entries do NOT satisfy v3 lookups (AC #3 — load-bearing)
   - Industry Literal matches the 16-sector list verbatim (AC #5)
 """
 
@@ -105,50 +105,50 @@ def tmp_db(tmp_path: Path) -> Path:
 class TestPromptFileV2:
     def test_prompt_file_exists(self):
         project_root = Path(__file__).parents[2]
-        prompt_path = project_root / "prompts" / "canonical_extraction_v2.txt"
-        assert prompt_path.exists(), f"v2 prompt not found at {prompt_path}"
+        prompt_path = project_root / "prompts" / "canonical_extraction_v3.txt"
+        assert prompt_path.exists(), f"v3 prompt not found at {prompt_path}"
 
-    def test_prompt_version_constant_is_v2(self):
-        assert _PROMPT_VERSION == "v2"
+    def test_prompt_version_constant_is_v3(self):
+        assert _PROMPT_VERSION == "v3"
 
     def test_prompt_contains_fit_score_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "FIT SCORE" in content
 
     def test_prompt_contains_fit_reasoning_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "FIT REASONING" in content
 
     def test_prompt_contains_industry_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "INDUSTRY" in content
 
     def test_prompt_contains_role_orientation_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "ROLE ORIENTATION" in content
 
     def test_prompt_contains_salary_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "SALARY" in content
 
     def test_prompt_contains_citizenship_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "CITIZENSHIP" in content
 
     def test_prompt_contains_can_hire_section(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         assert "CAN HIRE IN CANADA" in content
 
     def test_prompt_json_schema_has_all_new_fields(self):
         project_root = Path(__file__).parents[2]
-        content = (project_root / "prompts" / "canonical_extraction_v2.txt").read_text()
+        content = (project_root / "prompts" / "canonical_extraction_v3.txt").read_text()
         for field in [
             "fit_score",
             "fit_reasoning",
@@ -160,7 +160,7 @@ class TestPromptFileV2:
             "citizenship_reason",
             "can_hire_in_canada",
         ]:
-            assert field in content, f"Field '{field}' missing from v2 prompt schema"
+            assert field in content, f"Field '{field}' missing from v3 prompt schema"
 
 
 # ---------------------------------------------------------------------------
@@ -325,10 +325,10 @@ class TestCacheKeyV2:
         key = next(iter(_PROCESS_CACHE.keys()))
         assert len(key) == 3, f"Expected 3-tuple key, got: {key}"
         text_hash, model_name, prompt_version = key
-        assert prompt_version == "v2"
+        assert prompt_version == "v3"
 
-    def test_v1_db_entry_does_not_satisfy_v2_lookup(self, tmp_db):
-        """A v1 cache entry (prompt_version='v1') should be a miss for v2 lookup."""
+    def test_v1_db_entry_does_not_satisfy_v3_lookup(self, tmp_db):
+        """A v1 cache entry (prompt_version='v1') should be a miss for v3 lookup."""
         from jd_matcher.llm.extract import _jd_hash
 
         jd_text = "A senior DS role at Acme Corp."
@@ -348,12 +348,12 @@ class TestCacheKeyV2:
         finally:
             conn.close()
 
-        # v2 lookup should miss
-        result = _db_cache_get(tmp_db, text_hash, model_name, "v2")
-        assert result is None, "v1 cache entry should not satisfy v2 lookup"
+        # v3 lookup should miss
+        result = _db_cache_get(tmp_db, text_hash, model_name, "v3")
+        assert result is None, "v1 cache entry should not satisfy v3 lookup"
 
-    def test_v2_db_entry_is_found_by_v2_lookup(self, tmp_db):
-        """A v2 cache entry is found by a v2 lookup."""
+    def test_v3_db_entry_is_found_by_v3_lookup(self, tmp_db):
+        """A v3 cache entry is found by a v3 lookup."""
         from jd_matcher.llm.extract import _jd_hash
 
         jd_text = "An ML Engineer role at Stripe."
@@ -361,15 +361,15 @@ class TestCacheKeyV2:
         model_name = "gpt-4o-mini"
 
         extraction = CanonicalExtraction.model_validate_json(_VALID_V2_JSON)
-        _db_cache_put(tmp_db, text_hash, model_name, "v2", extraction)
+        _db_cache_put(tmp_db, text_hash, model_name, "v3", extraction)
 
-        result = _db_cache_get(tmp_db, text_hash, model_name, "v2")
+        result = _db_cache_get(tmp_db, text_hash, model_name, "v3")
         assert result is not None
         assert result.fit_score == extraction.fit_score
         assert result.industry == extraction.industry
 
     def test_extract_canonical_calls_provider_on_v1_cache_miss(self, tmp_db):
-        """With v1 entry in DB, extract_canonical calls the provider (v2 cache miss)."""
+        """With v1 entry in DB, extract_canonical calls the provider (v3 cache miss)."""
         from jd_matcher.llm.extract import _jd_hash
         from unittest.mock import MagicMock
 
