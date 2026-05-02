@@ -149,3 +149,43 @@ All 4 fixes silent (within 3-attempt budget). No escalations required.
 | Baseline (post-M3-000) | 973 passed, 10 skipped |
 | Post-M3-000b | 973 passed, 10 skipped |
 | Delta | 0 (within ±20 AC) |
+
+---
+
+## Independent Validation — test-validator (2026-04-30)
+
+### Per-AC verdicts
+
+| AC | Description | Verdict | Evidence |
+|----|-------------|---------|----------|
+| AC1 | `pipeline/__init__.py` < 300 lines | PASS | `wc -l` → 278 |
+| AC2 | Phase modules are real implementations; merge.py may stay stub | PASS | fetch.py 223L with `run_gmail_source()` + `run()` bodies; hydrate.py 239L with `run_hydrator_source()` + `run()` bodies; parse.py 17L (real); merge.py 12L — documented stub with rationale (`merge logic lives in dedup/merge.py`) |
+| AC3 | `pipeline/_helpers.py` exists with moved utility helpers | PASS | File exists (10617 bytes); `grep -c "^def \|^async def "` → 14 functions |
+| AC4 | `tests/conftest.py` exposes `seed_posting`, `seed_canonical`, `empty_db` | PASS | All three confirmed in conftest.py; `seed_posting`/`seed_canonical` implemented in `tests/helpers.py` and re-exported via `noqa: F401`; `empty_db` is a pytest fixture defined directly in conftest.py |
+| AC5 | ≥4 of 8 caller sites switched to shared fixtures | PASS | 5 of 8 switched: `test_state_manager.py`, `test_canonical_view.py`, `test_m2_ui.py`, `test_routes.py`, `test_engine.py` (uses `seed_posting`/`seed_canonical` from helpers). data-pipeline reported 4 — independent check found 5. |
+| AC6 | `pyproject.toml` has markers with `unit`, `db`, `dom`, `slow` | PASS | All 4 markers confirmed; 6 files decorated with `pytestmark` |
+| AC7 | `_apply_pending_migrations` exists; no `_ensure_*` helpers remain | PASS | `grep` shows `_apply_pending_migrations` at line 72 and called at line 130; no `_ensure_` matches found |
+| AC8 | Migration is idempotent | PASS | `.venv/bin/python -c "init_db(p); init_db(p); print('OK')"` → `OK` |
+| AC9 | Full test suite green; count within ±20 of 973 baseline | PASS | 973 passed, 10 skipped, 31 warnings — exact match to baseline |
+
+### Monkeypatch / patch survival
+
+`jd_matcher.pipeline.GmailIngester`, `jd_matcher.pipeline.linkedin_hydrate`, `jd_matcher.pipeline.indeed_hydrate`, `jd_matcher.pipeline.filter_title`, `jd_matcher.pipeline.run_pipeline` are all patched in the test suite across `test_orchestrator.py`, `test_orchestrator_m2_e2e.py`, `test_routes.py`, and `test_pipeline_integration.py`. All 973 tests pass — re-export strategy is working.
+
+### AC5 clarification (minor discrepancy vs data-pipeline report)
+
+data-pipeline reported 4/8 refactored. Independent grep found `test_engine.py` also references `seed_posting`/`seed_canonical` from `tests/helpers`. The quality log Item 2 erroneously lists `test_engine.py` under "Stragglers — not migrated" with the rationale "inline schema." The file nonetheless imports from helpers. This is an internal inconsistency in the quality log documentation (data-pipeline's own log contradicts itself) but the AC itself passes at 5/8, which exceeds the ≥4 threshold. No code issue.
+
+### AC1-from-M3-000 retroactive verdict
+
+M3-000 AC1 was left with a note that the orchestrator was ~490 lines. At 278 lines post-M3-000b, the <300 spirit is satisfied. The retroactive resolution is genuine — this was a decomposition cleanup task, not a cosmetic trim. PASS.
+
+### Live DB
+
+Pre-refactor snapshot: `~/.jd-matcher/snapshots/20260430-2150-pre-init-db-refactor.db` (44MB, timestamped same day). Live DB: `canonical_postings` count = 148 (unchanged, no schema corruption).
+
+### Issues found
+
+None. No Minor, Major, or Directional findings.
+
+### Overall verdict: PASS (9/9 ACs)

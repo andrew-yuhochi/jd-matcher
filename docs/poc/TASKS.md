@@ -1,7 +1,7 @@
 # Tasks — jd-matcher — PoC
 
 > **Phase**: PoC
-> **Last Updated**: 2026-05-01 (TASK-M3-013 promoted from BACKLOG → M3 per ALIGNMENT-LOG 2026-05-01 Override BA)
+> **Last Updated**: 2026-05-01 (Direction change — single-call C18 split into 3 components C18a/b/c per TDD update; TASK-M3-002 invalidated, TASK-M3-003 replaced by 4 new tasks M3-002b/c/d + revised M3-003; milestone-plan complete)
 
 ---
 
@@ -13,10 +13,10 @@
 |--------|------------------|---------------|
 | Done | 2 | 46 |
 | In Progress | 0 | 0 |
-| To Do | 13 | 13 |
+| To Do | 15 | 15 |
 | Blocked | 0 | 0 |
 | Completed milestones | — | 2 (M1, M2) |
-| Invalidated tasks | — | 0 |
+| Invalidated tasks | 1 (M3-002) | 1 |
 
 ---
 
@@ -152,58 +152,205 @@
 
 ---
 
-##### TASK-M3-002 — C18 v2 prompt: 7 new fields + few-shot rubric
-
-- **Status**: In Progress — v5 hybrid iteration smoke test complete; pending user approval (Gate 4)
-- **Blocked reason**: Awaiting user review of 6-posting v5 smoke test (Gate 4 probabilistic). v5 achieves 5/6: CIBC fixed (4→3 ✓), v3's 4 passes all preserved. Dropbox remains 5 (expected 4) — iteration budget exhausted. See quality log v5 section for analysis.
-- **Agent**: data-pipeline
-- **Component**: C18 (LLM Extraction) — TDD §C18
-- **Description**: Extend `prompts/canonical_extraction_v1.txt` → `v2.txt` with 7 new fields. Each field gets a brief rubric + 1-2 worked examples. Pydantic model `CanonicalExtraction` extended with new field types (Literals for enums, Optional ints for salary). Cache key bumped (includes prompt version) so v1→v2 triggers re-extraction. v3 prompt iteration (2026-05-01) reframed fit_score rubric (8 worked examples, conservative default), role_orientation (Engineering = SE work separate from DS), salary (CAD default for Canadian employers), location (expanded suburb mapping). v4 prompt iteration (2026-04-30) replaced fit_score section with explicit in-scope/out-of-scope DS responsibility lists; Dropbox fixed but DarkVision/TELUS/CIBC regressed. v5 hybrid iteration (2026-04-30) keeps v3's per-score rubric as base and adds in-scope/out-of-scope lists as supplemental application framework — achieves 5/6, CIBC now correct at 3.
-- **Dependencies**: TASK-M3-001
-- **Implementation Checklist**:
-  - [x] New file: `prompts/canonical_extraction_v2.txt` — extends v1 with 7 new field sections + worked examples
-  - [x] New file: `prompts/canonical_extraction_v3.txt` — v3 iteration with sharper fit_score rubric + role_orientation reframe + salary CAD-default + Canadian metro fallback
-  - [x] New file: `prompts/canonical_extraction_v4.txt` — v4 iteration with in-scope/out-of-scope DS responsibility lists for fit_score (broken — treated as learning artifact)
-  - [x] New file: `prompts/canonical_extraction_v5.txt` — v5 hybrid: v3 rubric base + augmented examples with in-scope/out-of-scope item citations + "How to apply" subsection
-  - [x] Pydantic model: `CanonicalExtraction` adds `fit_score: int Field(ge=1, le=5)`, `fit_reasoning: str`, `industry: Literal[16-sector list]`, `role_orientation: list[Literal[Engineering, Problem-Solving, Communication]] Field(min_items=1, max_items=3)`, `salary_min_cad: int | None`, `salary_max_cad: int | None`, `citizenship_requirement: Literal["required", "preferred", "not_mentioned"]`, `citizenship_reason: str`, `can_hire_in_canada: Literal["yes", "likely", "no", "unclear"]`
-  - [x] Cache: bump prompt version to v5; v1/v2/v3/v4 cache entries don't satisfy v5 lookups
-  - [x] Tests: 38/38 unit tests pass (v5 references); 6-posting live smoke test all parse successfully
-  - [x] Actual module paths: `src/jd_matcher/llm/extract.py` (model + cache), `src/jd_matcher/db/init_db.py` (schema migration), `src/jd_matcher/db/schema.sql` (new table definition)
-- **Demo Artifact**: Run extraction on 6 postings (mix of clear-DS, mixed, non-DS, quant, DE, dashboard-DS); verify all fields populated and validate against Pydantic model. No JSON parse failures.
-- **Quality log**: `docs/poc/quality-logs/TASK-M3-002.md`
-- **Acceptance Criteria**:
-  - [x] `prompts/canonical_extraction_v5.txt` exists with all field sections + ≥1 worked example each
-  - [x] Pydantic `CanonicalExtraction` has all 9 new fields with correct types/constraints
-  - [x] Cache key includes prompt version (v5 cache miss on v1/v2/v3/v4 entries)
-  - [ ] 6-posting smoke test produces valid v5 output for all 6; no parse failures [v5 iteration — 5/6 correct; Dropbox=5 (expected 4); pending user approval]
-  - [x] Industry taxonomy hardcoded as Literal type matches the 16-sector list in TDD §C18
-
----
-
-##### TASK-M3-003 — Re-extract 148 corpus with v2 prompt
+##### TASK-M3-002b — Architecture refactor: cache schema split + Pydantic 3-way split + orchestrator routing + C18a lazy-extract + regression test
 
 - **Status**: To Do
 - **Blocked reason**:
 - **Agent**: data-pipeline
-- **Component**: C18 — TDD §C18
-- **Description**: Run v2 extraction across all 148 canonical postings in live DB. Snapshot DB first. Cost estimate: ~$0.15 (148 × ~$0.001/call gpt-4o-mini). Output written to `extraction_cache` AND propagated to both `postings` and `canonical_postings` (per TASK-M3-000 propagation fix).
-- **Dependencies**: TASK-M3-002
+- **Component**: C18a + C18b + C18c orchestration scaffolding only — TDD §C18a, §C18b, §C18c, §C11. Actual LLM bodies for C18b/C18c are stubs here; real implementation deferred to TASK-M3-002c / TASK-M3-002d.
+- **Description**: Plumbing-only refactor that builds the architectural skeleton enabling the 3-LLM split. Three concerns bundled: (1) **Cache schema migration** — extend `extraction_cache` PRIMARY KEY from `(text_hash, model_name, prompt_version)` to `(text_hash, model_name, prompt_section, prompt_version)` with `prompt_section ∈ {m2_extraction, m3_extraction, classification}`, and rename existing v1 rows to `prompt_section='m2_extraction', prompt_version='v1'` AS-IS. (2) **Pydantic split** — existing `CanonicalExtraction` model split into `M2ExtractionResult` (7 M2 fields, byte-identical to prior v1 schema), `M3ExtractionResult` (6 M3 fields declared, body returns `.empty()` stub), `ClassificationResult` (3 classification fields declared, body returns `.empty()` stub). (3) **Orchestrator routing** — per /replanning concern #2 option (b), the per-posting `extract` phase becomes a no-op for backfill buckets (b) and (c); C18a runs only when a NEW canonical is being created. Two new phases `m3_extract` and `classify` run AFTER merge per-canonical, gated on null-field detection. C18c MUST NOT block on C18b failure. Phase count grows to 12 (was 11). Closes architectural pre-conditions for M3-002c/d.
+- **Dependencies**: TASK-M3-001
 - **Implementation Checklist**:
-  - Snapshot DB first per data safety rule
-  - One-shot script or CLI to iterate canonicals + invoke C18 v2 extraction per linked posting
-  - Verify each canonical's new fields populated post-run (no NULL where extraction succeeded)
-  - Cost recorded to `quality-logs/TASK-M3-003.md` and `llm_call_ledger`
-  - Imports affected: existing extraction module + possibly new `scripts/reextract_v2.py`
-  - Runtime files: live DB updated in-place
-- **Demo Artifact**: Live DB query: `SELECT canonical_id, fit_score, industry, role_orientation, citizenship_requirement, can_hire_in_canada FROM canonical_postings WHERE canonical_id IN (312, 326, 331, 366, 377, 385, 408, 414) — all 8 known merged canonicals show populated fields.
+  - **Cache schema migration script** at `scripts/migrate_extraction_cache_section_split.py`:
+    - `--dry-run` mode that reports field-set distribution across existing v1 rows before any writes
+    - Pydantic strict-validation precondition check: every existing v1 row's JSON parses cleanly into `M2ExtractionResult` and contains ONLY the 7 M2 fields. Any row with extra fields aborts the migration with a clear diagnostic identifying the offending row's `(text_hash, model_name)` and the unexpected field set
+    - On approval (no `--dry-run`), rename existing `prompt_version='v1'` rows to `prompt_section='m2_extraction', prompt_version='v1'` AS-IS — no field re-extraction
+    - Pre-flight DB snapshot per project data-safety rule before any writes
+  - **Pydantic split** in `src/jd_matcher/extraction/models.py`:
+    - `M2ExtractionResult`: 7 M2 fields exactly as prior `CanonicalExtraction` v1 schema (canonical_title, canonical_company, canonical_seniority, canonical_location, team_or_department, top_skills, role_summary). Schema MUST be byte-identical to the M2-locked schema
+    - `M3ExtractionResult`: declares the 6 M3 factual field types (`salary_min_cad: int|None`, `salary_max_cad: int|None`, `citizenship_requirement: Literal['required','preferred','not_mentioned']`, `citizenship_reason: str`, `can_hire_in_canada: Literal['yes','likely','no','unclear']`, `industry: Literal[<16-sector taxonomy>]`). `.empty()` classmethod returns a sentinel instance with all fields null/default
+    - `ClassificationResult`: declares the 3 fields (`fit_reasoning: str`, `fit_score: int Field(ge=1, le=5)`, `role_orientation: list[Literal['Engineering','Problem-Solving','Communication']] Field(min_length=1, max_length=3)`). `.empty()` classmethod returns a sentinel
+  - **LLM call function refactor** in `src/jd_matcher/extraction/extract.py`:
+    - `extract_canonical(jd, role: Literal['m2_extraction','m3_extraction','classification'])` selects prompt path + Pydantic model + cache `prompt_section` by `role`
+    - Three role-keyed configs in `config/user_profile.yaml::llm.{m2_extraction, m3_extraction, classification}` (provider + model knobs); all default `gpt-4o-mini` per TDD §C18b/C18c
+    - C18b call body returns `M3ExtractionResult.empty()` stub (no provider call). C18c call body returns `ClassificationResult.empty()` stub. Real bodies are deferred to TASK-M3-002c / TASK-M3-002d
+  - **Orchestrator routing** in `src/jd_matcher/pipeline/__init__.py` and phase modules:
+    - Per-posting `extract` phase becomes a no-op for postings whose target canonical already has an `extraction_cache` row at `prompt_section='m2_extraction'` (backfill buckets (b) and (c))
+    - New phase module `pipeline/phases/m3_extract.py` registered AFTER `merge`, runs C18b per-canonical when `salary_min_cad IS NULL` (backfill buckets (a) and (b))
+    - New phase module `pipeline/phases/classify.py` registered AFTER `m3_extract`, runs C18c per-canonical when `fit_score IS NULL` (backfill buckets (a), (b), (c))
+    - C18c invocation is independent of C18b success — implemented via `try/except` around C18b at the orchestrator level. Documented in code comment AND covered by integration test
+  - **Phase count update**: orchestrator phase count = 12. Update `pipeline_runs.source_count` invariant from 11 to 12. Step-progress strings update from `(N/11)` to `(N/12)`
+  - **Cost watchdog**: extend the per-section ledger summation in `pipeline/__init__.py` to sum across all 3 prompt_sections; existing M2 watchdog tests still pass; new test asserts WARNING fires at the correct combined-cost threshold
+  - **Regression test (load-bearing)** at `tests/integration/test_no_m2_re_extraction.py`:
+    - Pre-seed test fixture with 50 fake "existing" canonicals (M2 fields populated, M3 + classification fields NULL, `extraction_cache` populated for `prompt_section='m2_extraction'`)
+    - Run backfill orchestrator end-to-end
+    - Assert ZERO `prompt_section='m2_extraction'` ledger SUCCESS rows are produced
+    - This test is REGRESSION-BLOCKING and never gets removed in MVP
+  - **Source-count test**: assert `SELECT COUNT(DISTINCT source) FROM pipeline_runs WHERE run_id = <latest>` = 12 after a fresh run
+  - Files affected: `src/jd_matcher/extraction/{models.py, extract.py}`, `src/jd_matcher/pipeline/__init__.py`, new `src/jd_matcher/pipeline/phases/{m3_extract.py, classify.py}`, `config/user_profile.yaml`, `scripts/migrate_extraction_cache_section_split.py`, `tests/integration/test_no_m2_re_extraction.py`, plus impacted test updates
+- **Demo Artifact**: Run pipeline on a 1-new + 1-existing canonical fixture. New canonical produces 3 ledger rows (one per prompt_section, all SUCCESS). Existing canonical produces 0 `m2_extraction` rows + 1 `m3_extraction` stub row + 1 `classification` stub row (M3 + classification fields stay NULL because C18b/C18c stubs return empty). Direct DB query verification.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-002b.md`
+- **Acceptance Criteria**:
+  - [ ] Cache schema migrated; `extraction_cache` PRIMARY KEY now 4-tuple `(text_hash, model_name, prompt_section, prompt_version)`
+  - [ ] Migration script has `--dry-run` mode AND Pydantic strict-validation precondition (M2-fields-only); both verified by unit test
+  - [ ] Pydantic split: 3 models exist; `M2ExtractionResult` schema is byte-identical to the prior `CanonicalExtraction` v1 schema (assert via JSON-schema export comparison)
+  - [ ] LLM call function accepts `role` parameter; routing per `config.llm.{role}` verified by unit test for each of the three roles
+  - [ ] `extract` phase no-op for postings whose target canonical already has an `m2_extraction` cache row (verified by integration test)
+  - [ ] Orchestrator phase count = 12; `pipeline_runs` source count = 12 (verified by integration test on a fresh run)
+  - [ ] C18b stub returns `M3ExtractionResult.empty()`; C18c stub returns `ClassificationResult.empty()` (verified by unit test)
+  - [ ] C18c invocation independent of C18b success (integration test: simulate C18b raising → C18c still runs and writes its ledger row)
+  - [ ] Regression test in `tests/integration/test_no_m2_re_extraction.py` PASSES: zero `prompt_section='m2_extraction'` ledger SUCCESS rows on the 50-fixture backfill
+  - [ ] Cost watchdog test PASSES for combined 3-section ledger summation
+  - [ ] Full unit + integration test suite green: `.venv/bin/python -m pytest -v` (SKIP_LIVE=1) — zero new failures
+  - [ ] No live LLM calls billed for this task (stubs only) — verified by `llm_call_ledger` showing zero new SUCCESS rows for `m3_extraction` or `classification` after a non-stub orchestrator dry run
+  - [ ] Quality log `TASK-M3-002b.md` documents migration dry-run output, source-count test, regression-test result, and the C18c-independent-of-C18b integration test outcome
+
+---
+
+##### TASK-M3-002c — Build C18b: M3 New Data Extraction LLM (salary, citizenship, can_hire, industry)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user (Gate 4 probabilistic approval)
+- **Component**: C18b — TDD §C18b
+- **Description**: Replace the C18b stub from TASK-M3-002b with the real LLM body. Lift the M3 factual sections from the v8 prompt iteration (TASK-M3-002 quality log) into a new `prompts/m3_extraction_v1.txt`: salary CAD parsing rules, citizenship 3-state + reason, can_hire 4-state, and industry 16-sector closed taxonomy — each section keeps the worked examples from v8. Wire C18b into the `m3_extract` orchestrator phase. Validate on the 30-canonical labeled set (same canonical IDs used for M3-002 v7-mini / v7-full / v8-mini for apples-to-apples comparison) and produce per-field accuracy report.
+- **Dependencies**: TASK-M3-002b
+- **Implementation Checklist**:
+  - **New prompt file** at `prompts/m3_extraction_v1.txt`:
+    - Section 1 — SALARY (CAD): parsing rules + USD→CAD ±5% noise tolerance; few-shot examples lifted from v8 (`"$130,000-$160,000 USD" → {178100, 219200}`, `"CAD 120K" → {120000, 120000}`, `"competitive package" → {null, null}`)
+    - Section 2 — CITIZENSHIP REQUIREMENT (3-state required/preferred/not_mentioned + reason): explicit + implicit-gate detection rules, citizenship_reason='' when not_mentioned
+    - Section 3 — CAN HIRE IN CANADA (4-state yes/likely/no/unclear): explicit and inferential rules
+    - Section 4 — INDUSTRY (16-sector closed list, no `Multi`, `Other` is fallback): exact taxonomy from TDD §C18b
+    - JSON output schema declares the 6 M3 fields; no M2 fields, no classification fields
+  - **Pydantic body** for `M3ExtractionResult` populated (no longer `.empty()` stub): all 6 fields with correct types/`Literal` constraints; validation errors raise `ExtractionParseError`
+  - **C18b call function** in `extraction/extract.py`: real provider call (configured at `config.llm.m3_extraction.model = 'gpt-4o-mini'`); 3-retry transient + 3-retry validation per TDD §C18b clause (5); writes `llm_call_ledger` row with `call_kind='extraction'`, `prompt_section='m3_extraction'`; cache cell scoped to `prompt_section='m3_extraction', prompt_version='v1'`
+  - **Propagation** via `_write_canonical_m3_extracted(canonical_id, m3_extraction)` writing all 6 fields to `canonical_postings` AND propagating to `postings` for every linked posting (preserves M3-000 propagation invariant)
+  - **Validation run** on the 30-canonical labeled set (same IDs as M3-002 v7-mini/v7-full/v8-mini for continuity); cache invalidated for these 30 to force fresh extraction
+  - **Per-field accuracy report** in quality log:
+    - Deterministic closed-list parseability per TDD §C18b (a): every response parses; enums in-set; salary parses int|None
+    - Probabilistic content-accuracy per TDD §C18b (c): salary ≥90% within ±10% (SC-12), citizenship_requirement ≥90% (SC-15b), can_hire_in_canada ≥85% (SC-15c), industry ≥75% (SC-15a)
+    - Probabilistic citizenship_reason quality per TDD §C18b (b): qualitative spot-check, surfaced for user review
+    - Per-sample table: canonical_id, employer/title, each extracted field, expected, agree?
+- **Demo Artifact**: Run extraction on the 30 canonicals; query `SELECT canonical_id, salary_min_cad, salary_max_cad, citizenship_requirement, can_hire_in_canada, industry FROM canonical_postings WHERE canonical_id IN (<30 IDs>)`. All fields populated where the JD provides signal. Quality log shows per-field deterministic-parseability + probabilistic content-accuracy pass rates with per-sample comparison.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-002c.md`
+- **Acceptance Criteria**:
+  - [ ] `prompts/m3_extraction_v1.txt` exists with all 4 field sections + worked examples lifted from v8
+  - [ ] Pydantic `M3ExtractionResult` populated body (all 6 fields with correct types and `Literal` constraints) — no longer `.empty()` stub
+  - [ ] C18b cache cell uses `prompt_section='m3_extraction', prompt_version='v1'`
+  - [ ] 30 canonicals extracted; per-sample report in quality log
+  - [ ] Deterministic closed-list parseability ≥95% on real data per TDD §C18b (a):
+    - [ ] every response parses cleanly as `M3ExtractionResult` (≥95%)
+    - [ ] `citizenship_requirement` ∈ {required, preferred, not_mentioned} on every successful row (100% of successful parses)
+    - [ ] `can_hire_in_canada` ∈ {yes, likely, no, unclear} on every successful row (100% of successful parses)
+    - [ ] `industry` ∈ the 16-sector taxonomy on every successful row (100% of successful parses)
+    - [ ] `salary_min_cad`/`salary_max_cad` parse as `int | None` on every successful row (100% of successful parses)
+  - [ ] Probabilistic content-accuracy reported for user review per Gate 4:
+    - [ ] salary ≥90% within ±10% on the labeled subset where salary is stated (SC-12)
+    - [ ] citizenship_requirement ≥90% exact-match across 3 states (SC-15b)
+    - [ ] can_hire_in_canada ≥85% exact-match across 4 states (SC-15c)
+    - [ ] industry ≥75% exact-match across 16 states (SC-15a)
+  - [ ] User approves probabilistic fields per Gate 4 (citizenship_reason qualitative; salary/citizenship/can_hire/industry content-accuracy)
+  - [ ] Quality log `TASK-M3-002c.md` documents the 30 samples with per-field pass/fail and per-sample reasoning where available
+  - [ ] Total LLM cost recorded in `llm_call_ledger`; ≤$0.005 (30 × ~$0.00015 gpt-4o-mini)
+  - [ ] No regression: the M3-002b regression test (`test_no_m2_re_extraction.py`) still passes — zero new `prompt_section='m2_extraction'` ledger rows produced during this validation run
+
+---
+
+##### TASK-M3-002d — Build C18c: User-Fit Classification LLM (fit_reasoning, fit_score, role_orientation; gpt-4o-mini)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user (Gate 4 fit_score approval — load-bearing)
+- **Component**: C18c — TDD §C18c
+- **Description**: Replace the C18c stub from TASK-M3-002b with the real LLM body. Lift the FIT SCORE rubric (5-line ownership taxonomy + collaboration rule + manager paragraph + 6 worked examples) and ROLE ORIENTATION 3-label taxonomy from v8 verbatim into a new `prompts/classification_v1.txt`. Industry sections are REMOVED (now owned by C18b). JSON schema declares `fit_reasoning` BEFORE `fit_score` to preserve chain-of-thought ordering, with the prompt explicitly instructing the model to write `fit_reasoning` first then commit to `fit_score`. Wire C18c into the `classify` orchestrator phase. Model defaults to `gpt-4o-mini` per user choice — testing whether a dedicated-LLM with shorter focused prompt resolves the M3-002 v8 fit_score agreement issue (24% on this corpus) without spending on `gpt-4o`. Validate on the SAME 30 canonicals as M3-002c for apples-to-apples comparison vs prior runs. Gate 4 user approval is load-bearing — no fixed pass threshold, user decides accept v1 / iterate / escalate to `gpt-4o`.
+- **Dependencies**: TASK-M3-002b
+- **Implementation Checklist**:
+  - **New prompt file** at `prompts/classification_v1.txt`:
+    - FIT SCORE rubric: 5-line ownership taxonomy lifted verbatim from v8 (5 = pure DS/ML; 4 = primarily DS with adjacent; 3 = mixed; 2 = adjacent / light DS; 1 = not DS)
+    - Collaboration rule (verbatim from v8)
+    - Manager paragraph (verbatim from v8)
+    - 6 worked examples (verbatim from v8)
+    - FIT REASONING instruction: 1-2 sentences citing specific JD content, declared FIRST in JSON output
+    - ROLE ORIENTATION 3-label taxonomy with worked examples (Engineering, Problem-Solving, Communication; 1-3 items)
+    - **Industry sections REMOVED** (now owned by C18b — verified by absence)
+    - JSON output schema: `fit_reasoning` declared BEFORE `fit_score` (chain-of-thought ordering); prompt body explicitly instructs "write `fit_reasoning` first, then commit to `fit_score`"
+  - **Pydantic body** for `ClassificationResult` populated (no longer `.empty()` stub): `fit_reasoning: str` declared first, `fit_score: int Field(ge=1, le=5)`, `role_orientation: list[Literal['Engineering','Problem-Solving','Communication']] Field(min_length=1, max_length=3)`
+  - **C18c call function** in `extraction/extract.py`: real provider call (configured at `config.llm.classification.model = 'gpt-4o-mini'` per user choice); 3-retry transient + 3-retry validation per TDD §C18c clause (5); writes `llm_call_ledger` row with `call_kind='extraction'`, `prompt_section='classification'`; cache cell scoped to `prompt_section='classification', prompt_version='v1'`
+  - **Propagation** via `_write_canonical_classified(canonical_id, classification)` writing all 3 fields to `canonical_postings` AND propagating to `postings` for every linked posting
+  - **Validation run** on the SAME 30 canonicals as M3-002c (apples-to-apples vs M3-002 v7-mini/v7-full/v8-mini); cache invalidated for these 30 to force fresh classification
+  - **Quality report MUST include** in quality log:
+    - Per-sample table: canonical_id, employer/title, fit_reasoning (truncated), fit_score, rubric_expected, agree?, role_orientation, role_orientation_expected
+    - Aggregate fit_score agreement rate vs ownership rubric
+    - Distribution of fit_score: counts at 1/2/3/4/5
+    - Comparison vs M3-002 v8-mini baseline (24% on this corpus) — does dedicated-LLM C18c at v1 improve?
+    - Direct user-action implications: precision @ fit=5 (apply directly) and precision @ fit=2 (ignore)
+    - role_orientation set-equality rate vs labels (SC-9 ≥80% advisory)
+    - fit_reasoning qualitative quality assessment for user review
+  - **Gate 4 user approval surfacing**: present results to user; user decides accept v1 / iterate prompt to v2 / escalate model to `gpt-4o`. Do NOT mark Done before user approval is recorded
+- **Demo Artifact**: Run classification on the 30 canonicals; produce quality log with per-sample comparison + agreement rate vs ownership rubric. User reviews quality report and explicitly approves OR redirects to iteration.
+- **Quality log**: `docs/poc/quality-logs/TASK-M3-002d.md`
+- **Acceptance Criteria**:
+  - [ ] `prompts/classification_v1.txt` exists with FIT SCORE rubric + collaboration rule + manager paragraph + 6 worked examples + FIT REASONING instruction + ROLE ORIENTATION taxonomy + worked examples
+  - [ ] Industry sections REMOVED from `classification_v1.txt` (verified by absence — no `industry` keyword in prompt)
+  - [ ] Pydantic `ClassificationResult` populated body — `fit_reasoning` declared FIRST, `fit_score` with `Field(ge=1, le=5)`, `role_orientation` with `Field(min_length=1, max_length=3)` and `Literal` constraint
+  - [ ] JSON output schema in `classification_v1.txt` has `fit_reasoning` BEFORE `fit_score`
+  - [ ] C18c cache cell uses `prompt_section='classification', prompt_version='v1'`
+  - [ ] Deterministic closed-list parseability ≥95% on real data per TDD §C18c (a):
+    - [ ] every response parses cleanly as `ClassificationResult` (≥95%)
+    - [ ] `role_orientation` items all in {Engineering, Problem-Solving, Communication} on every successful row (100% of successful parses)
+    - [ ] `fit_score` is an int in [1, 5] on every successful row (100% of successful parses)
+    - [ ] `role_orientation` length in [1, 3] on every successful row (100% of successful parses)
+  - [ ] 30 canonicals classified; quality log with per-sample comparison vs ownership-rubric expected
+  - [ ] Quality log includes direct comparison vs M3-002 v8-mini (24% baseline)
+  - [ ] **User approves fit_score quality per Gate 4 (probabilistic, no fixed pass threshold)** — explicit approval recorded in quality log
+  - [ ] User approves role_orientation quality per Gate 4 (≥80% set-equality SC-9 advisory; flagged regardless)
+  - [ ] User approves fit_reasoning quality per Gate 4 (qualitative)
+  - [ ] Total LLM cost recorded in `llm_call_ledger`; ≤$0.005 (30 × ~$0.00015 gpt-4o-mini)
+  - [ ] No regression: the M3-002b regression test (`test_no_m2_re_extraction.py`) still passes
+  - [ ] If Gate 4 fails (user rejects fit_score quality): task moves to In Progress with explicit iteration plan (prompt v2 OR escalate to `gpt-4o`); do NOT mark Done
+
+---
+
+##### TASK-M3-003 — Backfill 257 existing canonicals using C18b + C18c (C18a NEVER runs on existing)
+
+- **Status**: To Do
+- **Blocked reason**:
+- **Agent**: data-pipeline + user (Gate 4)
+- **Component**: C18b + C18c (already validated in M3-002c/d) — applied at scale to existing 257 canonicals
+- **Description**: One-shot backfill that brings every existing canonical from M2-only state up to full M2 + M3-extraction + classification state. All 257 existing canonicals fall in backfill bucket (b) per TDD §C11 — they have `canonical_company IS NOT NULL` and `salary_min_cad IS NULL`. Routing rule REQUIRES that C18a is NEVER invoked on these canonicals — preservation of M2 bit-identity is a load-bearing architectural promise enforced by the M3-002b regression test. Cost expectation: ~$0.05 (257 × 2 calls × ~$0.00015 gpt-4o-mini for both C18b and C18c). Gate 4 user approval on aggregate fit_score quality required before marking Done.
+- **Dependencies**: TASK-M3-002c, TASK-M3-002d
+- **Implementation Checklist**:
+  - **Pre-flight DB snapshot** per project data-safety rule:
+    - `sqlite3 ~/.jd-matcher/jd-matcher.db ".backup ~/.jd-matcher/snapshots/jd-matcher-pre-m3-003-$(date +%Y%m%d-%H%M).db"`
+    - Snapshot path logged in quality log
+  - **One-shot script** at `scripts/backfill_m3_classification.py`:
+    - Iterates all `canonical_postings` rows
+    - Routes each canonical to bucket (a) / (b) / (c) per orchestrator logic from TASK-M3-002b
+    - Existing 257 canonicals all fall in bucket (b): runs C18b + C18c only, NEVER C18a
+    - Cost ledgered per call to `llm_call_ledger`
+    - Progress logging per-canonical (canonical_id, bucket, C18b cost, C18c cost)
+  - **Verify post-run** invariant: zero new `prompt_section='m2_extraction'` rows added (assert via `SELECT COUNT(*) FROM llm_call_ledger WHERE prompt_section='m2_extraction'` before/after diff)
+  - **Quality report** in quality log:
+    - Aggregate fit_score distribution across all 257 canonicals
+    - Sample-level reasoning surfaced for user Gate 4 approval (top 10 fit=5, top 10 fit=1, plus a random sample of 10 mid-range)
+    - M3 extraction field populations (count of non-null per field across 257)
+    - Total cost vs ~$0.05 estimate
+  - **M2-untouched spot check**: pick 10 canonical_ids; query `canonical_company`, `role_summary`, `top_skills` before backfill (from snapshot) and after backfill (live DB); assert byte-identical
+- **Demo Artifact**: Live DB query `SELECT canonical_id, salary_max_cad, citizenship_requirement, can_hire_in_canada, industry, fit_score, role_orientation FROM canonical_postings ORDER BY canonical_id`. All 257 canonicals show populated fields (or null where JD lacks signal). Cost log shows ~$0.05 total.
 - **Quality log**: `docs/poc/quality-logs/TASK-M3-003.md`
 - **Acceptance Criteria**:
-  - [ ] DB snapshot taken pre-extract
-  - [ ] 148/148 canonicals have v2 extraction completed (any failures triaged)
-  - [ ] Spot-check on 8 known merges + 5 random canonicals shows all 7 new fields populated sensibly
-  - [ ] Total LLM cost recorded; ≤$0.30 (with margin over $0.15 estimate)
-  - [ ] `llm_call_ledger` reflects all calls with `call_kind='extract_v2'`
-  - [ ] Zero data loss (all M2 fields still intact)
+  - [ ] DB snapshot taken pre-backfill; snapshot path logged in quality log
+  - [ ] All 257 canonicals processed
+  - [ ] **Zero `prompt_section='m2_extraction'` ledger SUCCESS rows added during backfill** (assert via SQL count diff before/after — load-bearing M2 bit-identity invariant)
+  - [ ] All 257 canonicals have populated `salary_min_cad` / `salary_max_cad` / `citizenship_requirement` / `citizenship_reason` / `can_hire_in_canada` / `industry` (or null where JD silent — null is acceptable, not a failure)
+  - [ ] All 257 canonicals have populated `fit_score` / `fit_reasoning` / `role_orientation`
+  - [ ] M2 fields untouched: spot-check 10 canonicals — `canonical_company`, `role_summary`, `top_skills`, `canonical_seniority`, `canonical_title`, `canonical_location`, `team_or_department` byte-identical pre/post backfill
+  - [ ] Total LLM cost recorded in `llm_call_ledger`; ≤$0.10 (margin over ~$0.05 estimate)
+  - [ ] User approves aggregate fit_score quality per Gate 4 (probabilistic, no fixed threshold)
+  - [ ] User approves citizenship_reason aggregate quality at 257-canonical scale per Gate 4 (probabilistic field on free-text justification)
+  - [ ] M3-002b regression test (`test_no_m2_re_extraction.py`) still passes after backfill
+  - [ ] All 257 canonicals propagated to `postings` for every linked posting (verified by spot-check 10 canonicals: posting-level fields equal canonical-level fields for the 9 new fields)
+  - [ ] Quality log documents the 257 backfilled canonicals with fit_score distribution, M3-field population counts, total cost, and the 10-sample M2-untouched spot check
 
 ---
 
@@ -1496,3 +1643,9 @@
 - **Reason**: [Direction change — one sentence]
 - **Original status**: Done | In Progress | To Do
 -->
+
+### TASK-M3-002 — C18 v2 prompt: 7 new fields + few-shot rubric
+- **Invalidated**: 2026-05-01
+- **Reason**: Direction change — single-call C18 architecture replaced by 3-component split (C18a M2-locked + C18b M3 factual extraction + C18c user-fit classification) per TDD update 2026-05-01. v1-v8 prompt iterations informed the rubric design; ownership-rubric logic survives and lands in C18c (`prompts/classification_v1.txt`).
+- **Original status**: In Progress
+- **Replaced by**: TASK-M3-002b (to be specced via /milestone-plan)

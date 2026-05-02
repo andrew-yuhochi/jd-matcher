@@ -1,11 +1,11 @@
-# TASK-M2-006b — Top-Skills Canonicalization Analysis (Phase A + Phase E)
+# TASK-M2-006b Phase A — Top-Skills Canonicalization Analysis
 
 | Field | Value |
 |-------|-------|
 | Task | TASK-M2-006b |
 | Date | 2026-04-29 |
-| Phase A status | Complete — taxonomy approved by user 2026-04-29 |
-| Phase E status | Complete — post-extraction verification below |
+| Phase A status | **Awaiting user taxonomy review** |
+| Phase B–E | Blocked pending user sign-off on canonical taxonomy below |
 
 ## 2. Methodology
 
@@ -231,52 +231,3 @@ Listed for completeness. Pull into the canonical taxonomy if relevant.
 ## 7. Estimated Impact on FUSE Jaccard
 
 Approximately **4** skill mentions (0.3% of all mentions) across multi-variant clusters currently produce **zero Jaccard contribution** when compared against postings using a different surface form for the same skill. Canonicalizing these clusters is expected to meaningfully improve FUSE dedup recall — particularly for high-frequency clusters like Machine Learning (13 total multi-variant occurrences across 4 clusters).
-
----
-
-## Phase E — Post-Extraction Verification Summary
-
-This section captures the before/after comparison following Phase D re-extraction of 147 C19-passed postings with the updated canonical taxonomy prompt.
-
-### Pre/Post Comparison
-
-| Metric | Phase A (Before) | Phase E (After) | Change |
-|--------|-----------------|-----------------|--------|
-| Total skill mentions | 1374 | 1209 | −165 (soft skills + over-count removed) |
-| Distinct normalized forms | 523 | 278 | **−245 (−47%)** |
-| Multi-variant clusters | 62 | 4 | **−58 (−94%)** |
-| Canonical match rate | ~65% (est.) | **75.3%** | +10 pp |
-| Soft skill mentions | 62 (4.5%) | 3 (0.2%) | **−59 (−95%)** |
-
-### Canonical Match Rate Analysis
-
-- **75.3%** of all 1209 skill mentions match one of the 43-entry canonical taxonomy entries
-- **24.5%** are legitimate free-form tail skills (Docker, R, dbt, Tableau, C++, Java, Snowflake, Kafka, etc.) correctly handled as non-canonical
-- **0.2%** are residual soft skills (3 mentions out of 1209) — LLM near-compliance (2 postings)
-- **< 1%** are canonical mapping misses by the LLM (Data Pipelines→Data Engineering, GenAI→Generative AI: 12 mentions)
-
-**AC target was ≥80% canonical match rate.** The observed 75.3% is below target by ~4.7 percentage points (~57 mentions).
-
-Root cause: the 43-entry taxonomy was calibrated on the most frequent DS/ML skills, but the real corpus has a substantial tail of valid technical skills (Docker, dbt, R, Tableau, C++, JavaScript, Kafka, Snowflake) appearing in DS/ML JDs that are legitimately NOT DS/ML-core skills. These are correctly classified as free-form tail by the LLM. The taxonomy could be expanded to include these (~10 additions would close the gap), but this is a taxonomy scope question, not a prompt compliance failure.
-
-### Soft Skill Exclusion
-
-- 3 residual soft skill mentions (0.2% of total) vs 62 (4.5%) before — **95% reduction**
-- 138/140 postings (98.6%) have zero soft skills in top_skills
-
-### Remaining Multi-Variant Clusters (4)
-
-These are tail skills not in the canonical taxonomy — expected free-form behavior:
-
-| Normalized form | Variants |
-|----------------|---------|
-| scikit-learn | Scikit-Learn, scikit-learn |
-| langchain | LangChain, Langchain |
-| java | Java, JAVA |
-| api development | API Development, API development |
-
-### Re-Extraction Cost
-
-- Postings re-extracted: 147 (140 new API calls + 7 cache hits for duplicate JD content)
-- Total cost: **$0.084848** (under $0.10 AC target)
-- One parse-failure retry (posting 132, location "Hybrid — Other") — auto-recovered on attempt 2

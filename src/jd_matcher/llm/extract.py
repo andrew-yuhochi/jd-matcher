@@ -43,7 +43,7 @@ _PROJECT_ROOT = Path(__file__).parents[3]
 # Prompt version is part of the cache key — bumping to v2 forces re-extraction
 # of all existing cache entries (v1 entries keyed on "v1" will never satisfy
 # a v2 lookup, achieving zero-code-change invalidation of the M2 corpus).
-_PROMPT_VERSION = "v5"
+_PROMPT_VERSION = "v8"
 _PROMPT_PATH = _PROJECT_ROOT / "prompts" / f"canonical_extraction_{_PROMPT_VERSION}.txt"
 
 # In-process extraction cache: (text_hash, model_name, prompt_version) -> CanonicalExtraction
@@ -155,9 +155,10 @@ class CanonicalExtraction(BaseModel):
     team_or_department: str | None = None
     top_skills: list[str] = Field(default_factory=list)
     role_summary: str
-    # M3 full-classification fields
-    fit_score: int = Field(ge=1, le=5)
+    # M3 full-classification fields (fit_reasoning declared first so JSON schema
+    # emitted to OpenAI shows reasoning before score, forcing chain-of-thought order)
     fit_reasoning: str
+    fit_score: int = Field(ge=1, le=5)
     industry: CanonicalIndustry
     role_orientation: list[CanonicalRoleOrientation] = Field(min_length=1, max_length=3)
     salary_min_cad: int | None = None

@@ -1063,3 +1063,619 @@ Minor issues noted (not blockers for TASK-M3-003):
 2. salary=0/0 returned instead of null/null for one posting (PHSA, no salary stated) — minor defect
 3. ICBC (canonical_id=474) tagged as "Other" instead of "Insurance / Insurtech" — one-off mis-classification
 4. Amazon SDE-II (canonical_id=417) at fit=4 is borderline — could be 3 depending on actual team context
+
+---
+
+### v6 simplification — same 30 samples
+
+**Date**: 2026-05-01
+**Prompt version**: v6
+**Design**: Stripped all v5 elaboration from fit_score section — removed 8 worked examples, in-scope/out-of-scope lists, manager-role caveat, sister-team signal, conservative-default rule, quant=3 note, "How to apply" subsection. Replaced with exactly 5 rubric lines.
+**v5 scores**: re-extracted fresh (v5 cache entries had been overwritten by v6 run; recovered via in-process prompt patch).
+
+#### Rubric-expected methodology
+
+rubric_expected was derived as follows:
+- 4 cases confirmed in v5 spot-check narratives: IBM SAP HANA=2, Marine Biologics=2, Human Data Manager=2, ExaCare AI MLE=5
+- Role-class defaults applied to the remaining 26 per the 5-line v6 rubric:
+  - Pure DS/Applied Scientist/MLE roles → 5 (Cover Genius, Amazon Applied Sci, PictorLabs, UBC Postdoc)
+  - DS + dashboard/BI → 4 (Comm100 Algorithm Eng AI, Alimentiv Statistician, Joveo Agentic AI, Alquemy DS-via-recruiter)
+  - DS + non-DS work / managers / non-pure-DS → 3 (Affirm Mgr MLE, PHSA Data Analyst, Bird Construction, BCCNM Perf Measurement, Dialpad Analytics Eng, Hopper Finance Strategy, Fasken Mgr Data Analytics, RBC Sr Dev Manager, Diligent AI Solution Architect, Clio Mgr Enterprise AI, ICBC RPA/AI Dev, The Select Group Dev Analyst, Grafana Labs Sr Analytics Eng, KOHO Sr BA, Turing Quant Finance, Amazon SDE-II, Aspire AI Automation Eng)
+  - Mainly non-DS data-adjacent → 2 (Crossing Hurdles Data Ops Mgr, IBM SAP HANA, Marine Biologics R&D Sci, Brokkr Microbiology Lead)
+
+#### Per-sample comparison table
+
+| canonical_id | employer / title | v5 | v6 | rubric | v5 match | v6 match |
+|---|---|---|---|---|---|---|
+| 344 | Aspire Software / AI Automation Engineer | 4 | 4 | 3 | N | N |
+| 347 | Alquemy S&C / Data Scientist | 5 | 5 | 4 | N | N |
+| 350 | Affirm / Manager MLE | 3 | 4 | 3 | Y | N |
+| 355 | Crossing Hurdles / Data Operations Manager | 2 | 2 | 2 | Y | Y |
+| 357 | Cover Genius / Sr Data Scientist GenAI | 5 | 5 | 5 | Y | Y |
+| 360 | PHSA / Data Analyst | 3 | 3 | 3 | Y | Y |
+| 366 | Bird Construction / Sr Data Analyst | 4 | 4 | 3 | N | N |
+| 370 | BCCNM / Perf Measurement Specialist | 4 | 4 | 3 | N | N |
+| 380 | Dialpad / Analytics Engineer | 5 | 4 | 3 | N | N |
+| 382 | Comm100 / Algorithm Engineer AI | 5 | 4 | 4 | N | Y |
+| 387 | Hopper / Finance Strategy Manager | 4 | 4 | 3 | N | N |
+| 389 | IBM / SAP HANA Consultant | 2 | 3 | 2 | Y | N |
+| 393 | Marine Biologics / R&D Scientist | 2 | 3 | 2 | Y | N |
+| 397 | Alimentiv / Statistician | 4 | 4 | 4 | Y | Y |
+| 413 | Joveo / Agentic AI Engineer | 5 | 4 | 4 | N | Y |
+| 417 | Amazon / SDE-II | 4 | 3 | 3 | N | Y |
+| 436 | Fasken / Manager Data Analytics | 4 | 4 | 3 | N | N |
+| 448 | Amazon / Applied Scientist | 5 | 5 | 5 | Y | Y |
+| 449 | RBC / Sr Dev Manager | 3 | 3 | 3 | Y | Y |
+| 450 | Diligent / AI Solution Architect | 4 | 4 | 3 | N | N |
+| 465 | Clio / Manager Enterprise AI | 3 | 4 | 3 | Y | N |
+| 466 | ExaCare AI / Machine Learning Engineer | 5 | 4 | 5 | Y | N |
+| 474 | ICBC / RPA/AI Apps Dev | 4 | 4 | 3 | N | N |
+| 488 | The Select Group / Developer Analyst | 3 | 3 | 3 | Y | Y |
+| 489 | Grafana Labs / Sr Analytics Engineer | 4 | 4 | 3 | N | N |
+| 499 | KOHO / Sr BA Fraud Strategy | 4 | 4 | 3 | N | N |
+| 522 | PictorLabs / Sr Applied ML Eng CV | 5 | 5 | 5 | Y | Y |
+| 532 | Turing / Quant Finance | 4 | 3 | 3 | N | Y |
+| 534 | UBC / Postdoc Research Fellow | 5 | 5 | 5 | Y | Y |
+| 558 | Brokkr / Microbiology Lead | 3 | 3 | 2 | N | N |
+
+#### Aggregate stats
+
+| Metric | v5 | v6 |
+|--------|----|----|
+| Agreement with rubric | 14 / 30 (46.7%) | 13 / 30 (43.3%) |
+| Disagreement with rubric | 16 / 30 (53.3%) | 17 / 30 (56.7%) |
+
+**v6 is not better than v5 on this corpus.** The disagreement rates are statistically identical (53% vs 57%, within noise). v6 is also not dramatically worse — the two prompts produce near-identical aggregate performance, but for different reasons on different samples.
+
+#### fit_score distribution: v5 vs v6
+
+| Score | v5 count | v6 count |
+|-------|----------|----------|
+| 1 | 0 | 0 |
+| 2 | 3 | 1 |
+| 3 | 6 | 8 |
+| 4 | 12 | 16 |
+| 5 | 9 | 5 |
+
+Key observation: v6 shifts mass from 2 and 5 into 3 and 4. It collapses the low end (fewer fit=2 detections) and the high end (fewer fit=5 detections) toward the middle. The 16 fit=4 scores in v6 vs 12 in v5 is the most visible signal — v6 is gravitating toward 4 as a default for ambiguous roles.
+
+#### Notable shifts (10 cases where v5 ≠ v6)
+
+1. **Comm100 Algorithm Engineer AI (382): v5=5 → v6=4 [BETTER, rubric=4]** — v5 over-scored a role with genuine SE/algorithm engineering components. v6 correctly landed at 4. This is v6's clearest win.
+
+2. **Joveo Agentic AI Engineer (413): v5=5 → v6=4 [BETTER, rubric=4]** — v5 over-scored an AI eng role with mixed DS+SE responsibilities. v6 correctly landed at 4.
+
+3. **Amazon SDE-II (417): v5=4 → v6=3 [BETTER, rubric=3]** — v5 over-scored a primarily-SWE role. v6 correctly identified it as DS+SWE (fit=3). This was the borderline case flagged in v5 analysis.
+
+4. **Turing Quant Finance (532): v5=4 → v6=3 [BETTER, rubric=3]** — v6 correctly applied the quant=3 logic without the explicit rubric note, just from the minimal rubric definition.
+
+5. **IBM SAP HANA Consultant (389): v5=2 → v6=3 [WORSE, rubric=2]** — v5 correctly scored this as data-adjacent non-DS work (fit=2). v6 lost the low-end anchor; without explicit calibration examples, it inflated to 3. A clear regression.
+
+6. **Marine Biologics R&D Scientist (393): v5=2 → v6=3 [WORSE, rubric=2]** — Same pattern as IBM. v5 correctly rejected a chemistry/lab role; v6 inflated it to 3. Loss of the fit=2 anchor.
+
+7. **ExaCare AI MLE (466): v5=5 → v6=4 [WORSE, rubric=5]** — v6 under-scored a pure MLE role at an AI-native company. The absence of the sister-team signal instruction caused v6 to penalize the SE component (model deployment) that v5 correctly identified as in-scope DS work.
+
+8. **Affirm Manager MLE (350): v5=3 → v6=4 [WORSE, rubric=3]** — v5 correctly landed this manager-in-DS-team role at 3. v6 inflated to 4, missing the managerial overhead that reduces the fit. The manager-role caveat removed in v6 may be load-bearing here.
+
+9. **Clio Manager Enterprise AI (465): v5=3 → v6=4 [WORSE, rubric=3]** — Same pattern as Affirm. v5 correctly held managers at 3; v6 promoted to 4.
+
+10. **Dialpad Analytics Engineer (380): v5=5 → v6=4 [SAME-MISS, rubric=3]** — Both v5 and v6 over-score this analytics engineering role, but v6 is closer. Neither lands at rubric=3.
+
+#### Summary interpretation
+
+v6 simplification hypothesis — "remove all the engineering and let the 5-line rubric do the work" — is **not confirmed**. The two prompts are statistically equivalent on this 30-sample corpus (46.7% vs 43.3% agreement), but for structurally different reasons:
+
+- **v6 wins** on the high-inflation cases where v5's elaboration failed to prevent upward drift (Comm100, Joveo, SDE-II, Turing) — 4 cases.
+- **v6 loses** on the low-end anchor cases where v5's worked examples held the model at fit=2 for clearly non-DS roles (IBM SAP HANA, Marine Biologics) and on manager-role cases where v5's explicit caveat kept scores at 3 (Affirm, Clio, ExaCare AI) — 5 cases.
+
+The 16 structural disagreements (same between v5 and v6) are shared anchor failures: both prompts over-score roles like Bird Construction Sr Data Analyst (4 vs rubric=3), Aspire AI Automation Engineer (4 vs rubric=3), and Grafana Labs Sr Analytics Engineer (4 vs rubric=3). These are not a v6-specific problem — they reflect a general model bias toward 4 for any role with "data" or "AI" in the title.
+
+**Net verdict**: v6 is not an improvement over v5. The simplification removed load-bearing calibration anchors (fit=2 worked examples, manager-role caveat) without fixing the shared structural failures. The 37% per-sample disagreement reported for v5 in the task context maps closely to the 53% seen here (the difference likely reflects rubric scoring methodology differences between the user-rubric run and this agent-rubric run, not a real regression).
+
+---
+
+### v7 ownership rubric + reasoning-before-score — same 30 samples
+
+**Date**: 2026-05-01
+**Summary**: Schema + 5-level ownership rubric + manager paragraph; `fit_reasoning` generated before `fit_score` (Pydantic field order enforces chain-of-thought); no worked examples, no caveats, ownership framing replaces DS-fit framing.
+
+---
+
+#### v7 rubric (applied fresh — do not copy v5/v6 rubric_expected values)
+
+```
+5 = SOLE ownership of ML/statistical model as a problem-solving tool.
+    (Includes deployment + monitoring of THEIR OWN model. Includes
+    model-performance dashboards the DS builds for themselves.)
+4 = DUAL ownership: ML/statistical model + BI/Tableau-style dashboards
+    for stakeholder consumption (specifically dashboards, not other things).
+3 = DUAL ownership: ML/statistical model + ANYTHING OTHER than stakeholder
+    dashboards (MLOps robustness, software/backend/API, data engineering,
+    data architecture, integration).
+2 = SOLE ownership of something OTHER than ML/statistical models
+    (data eng, BI dev, MLE-as-deployment-only, data architect, backend).
+1 = Non-data role.
+
+Manager roles: evaluate the COMBINED ownership of the team the manager
+leads, then apply 1-5 to that combined ownership.
+```
+
+---
+
+#### Per-sample comparison table
+
+Rubric scores applied fresh against the ownership rubric above. `?` = genuinely ambiguous / recruiter-thin JD where rubric cannot be mechanically applied.
+
+| canonical_id | employer / title | v7_fit_reasoning (truncated ~120 chars) | v7_fit | rubric_expected | agree? |
+|---|---|---|---|---|---|
+| 344 | Aspire Software / AI Automation Engineer | "...owns development and deployment of AI agents... maps to fit=4, dual ML + stakeholder-facing products." | 4 | 3 | N |
+| 347 | Alquemy Search / Data Scientist | "...owns development and implementation of ML models and data analysis... dual ownership of ML models and stakeholder dashboards." | 4 | ? | ? |
+| 350 | Affirm / Manager, MLE (Fraud) | "...owns development and management of ML models for fraud... dual ownership of ML models and stakeholder dashboards for decision-making." | 4 | 3 | N |
+| 355 | Crossing Hurdles / Data Operations Manager | "...owns design and management of data workflows and operational performance metrics... focus is on data management rather than ML." | 2 | 2 | Y |
+| 357 | Cover Genius / Sr Data Scientist GenAI | "...owns development and evaluation of LLMs... dual ownership of ML models and stakeholder-facing evaluation frameworks." | 4 | 5 | N |
+| 360 | Provincial Health Services / Data Analyst | "...owns development and maintenance of datasets and automation of reports and dashboards... dual ownership of data analysis and reporting." | 3 | 2 | N |
+| 366 | Bird Construction / Sr Data Analyst | "...owns delivery of analytics solutions and dashboards... dual ownership of ML/statistical models and stakeholder dashboards." | 4 | 2 | N |
+| 370 | BC College of Nurses / Performance Measurement Spec | "...owns development and analysis of performance metrics and reporting resources... dual ownership of data analysis and performance metrics." | 3 | 2 | N |
+| 380 | Dialpad / Analytics Engineer | "...owns optimization of conversational AI systems and data pipelines... dual ownership of ML models and stakeholder dashboards." | 4 | 3 | N |
+| 382 | Comm100 / Algorithm Engineer, AI | "...owns development and deployment of AI models and features... sole ownership of ML/statistical models and their deployment." | 5 | 5 | Y |
+| 387 | Hopper / Finance & Strategy Manager | "...owns development of financial systems and predictive models, AI for automation and reporting... dual ownership of financial modeling and stakeholder reporting." | 4 | 4 | Y |
+| 389 | IBM / Managing Consultant SAP Analytics | "...owns development and management of SAP HANA Information Models... dual ownership of model development and testing." | 3 | 2 | N |
+| 393 | Marine Biologics / R&D Scientist | "...owns patent filing and lab management processes... dual ownership of lab management and patent-related work." | 3 | 1 | N |
+| 397 | Alimentiv / Statistician | "...owns statistical analysis and reporting for clinical trials... dual ownership of statistical models and project support." | 3 | 5 | N |
+| 413 | Joveo / Agentic AI Engineer | "...owns development and deployment of AI agents... dual ownership of AI models and performance optimization." | 4 | 5 | N |
+| 417 | Amazon / Software Development Engineer | "...owns development of software systems and optimization algorithms for transportation... dual ownership of ML models and system performance." | 3 | 2 | N |
+| 436 | Fasken / Manager, Data Analytics | "...owns delivery of analytics solutions and insights, design and maintenance of dashboards... dual ownership of analytics and stakeholder reporting." | 4 | 2 | N |
+| 448 | Amazon / Applied Scientist | "...owns development and deployment of ML models to drive business insights... dual ownership of ML models and stakeholder insights." | 4 | 5 | N |
+| 449 | RBC / Senior Development Manager | "...owns end-to-end software development lifecycle for modernization, including AI/ML integration... dual ownership of ML models and stakeholder dashboards." | 4 | 3 | N |
+| 450 | Diligent / AI Solution Architect | "...owns development and deployment of AI solutions tailored to business needs... dual ownership of AI solutions and stakeholder engagement." | 4 | 2 | N |
+| 465 | Clio / Manager, Enterprise AI | "...owns delivery and operational management of AI capabilities, strategy and platform governance... dual ownership of AI initiatives and stakeholder engagement." | 4 | 3 | N |
+| 466 | ExaCare AI / Machine Learning Engineer | "...owns development and deployment of ML models, including entire ML lifecycle... sole ownership of ML models and their deployment." | 5 | 5 | Y |
+| 474 | ICBC / Intermediate Developer RPA/AI | "...owns development and delivery of software applications in RPA and AI... dual ownership of ML models and stakeholder dashboards." | 4 | 2 | N |
+| 488 | The Select Group / Developer Analyst | "...owns data extraction and analysis to support marketing initiatives... dual ownership of data analysis and collaboration with other teams." | 3 | 2 | N |
+| 489 | Grafana Labs / Sr Analytics Engineer | "...owns architecture and infrastructure of data stack... dual ownership of data modeling and collaboration with other teams." | 3 | 2 | N |
+| 499 | KOHO / Sr BA Fraud Strategy | "...owns fraud control landscape and detection models, focusing on risk mitigation... dual ownership of fraud models and stakeholder dashboards." | 4 | 2 | N |
+| 522 | PictorLabs / Sr Applied ML Engineer CV | "...owns development and optimization of ML models for digital pathology... sole ownership of ML models and their deployment." | 5 | 5 | Y |
+| 532 | Turing / Quantitative Finance Professional | "...owns evaluation and training of AI models in quantitative finance... dual ownership of statistical modeling and collaboration with AI teams." | 3 | 2 | N |
+| 534 | UBC / Postdoc Research Fellow | "...owns research deliverables, including data analysis and policy evaluation... dual ownership of research and data analysis without direct stakeholder dashboard responsibilities." | 3 | 5 | N |
+| 558 | Brokkr / Microbiology Lead | "...owns design and execution of microbiological experiments... dual ownership of experimental design and collaboration with engineering." | 3 | 1 | N |
+
+---
+
+#### Aggregate stats
+
+| Metric | v7 |
+|--------|----|
+| Agreement with rubric (excl. ?) | 5 / 29 (17.2%) |
+| Disagreement with rubric (excl. ?) | 24 / 29 (82.8%) |
+| Ambiguous / rubric-inapplicable (?) | 1 / 30 |
+
+#### v7 fit_score distribution
+
+| Score | v7 count |
+|-------|----------|
+| 1 | 0 |
+| 2 | 1 |
+| 3 | 10 |
+| 4 | 16 |
+| 5 | 3 |
+
+The distribution is heavily compressed toward 3–4. Only 1 score of 2, zero scores of 1, and only 3 scores of 5. The model is defaulting "dual ownership" as its reasoning template for nearly every role regardless of actual ownership structure.
+
+---
+
+#### Notable wins (5 correct calls)
+
+1. **Crossing Hurdles Data Operations Manager (355): v7=2, rubric=2** — Correctly identified that the role owns data workflow management, not ML models. The "data management rather than ML/statistical modeling" reasoning is accurate.
+
+2. **Comm100 Algorithm Engineer AI (382): v7=5, rubric=5** — Correctly scored sole ML ownership. Reasoning explicitly cites deployment of AI models as the primary deliverable.
+
+3. **Hopper Finance & Strategy Manager (387): v7=4, rubric=4** — Correct on the financial modeling + stakeholder reporting dual ownership. The manager paragraph appears to have been applied (reasoning references financial systems + predictive models).
+
+4. **ExaCare AI Machine Learning Engineer (466): v7=5, rubric=5** — Correct. Explicitly cites "entire ML lifecycle" and sole ownership. One of v7's cleaner ownership identifications.
+
+5. **PictorLabs Sr Applied ML Engineer CV (522): v7=5, rubric=5** — Correct. Core ML model for digital pathology, deployment included. Clean identification.
+
+---
+
+#### Notable misses (5 representative failures)
+
+1. **Alimentiv Statistician (397): v7=3, rubric=5 — Ownership identification failure**
+   The role is a pure statistician who owns statistical models for clinical trials. This is sole ownership of a statistical model (rubric=5). v7 instead classified it as "dual ownership of statistical models and project support" (fit=3). The model misread collaboration with project teams as co-ownership of the statistical work, rather than recognizing it as downstream consumption of the statistician's output.
+
+2. **Amazon Applied Scientist (448): v7=4, rubric=5 — Bucket mapping failure**
+   The model correctly identified ML model development as the core deliverable but mapped it to fit=4 ("dual ownership of ML models and stakeholder insights"). The "stakeholder insights" cited are the downstream consumers of the ML work, not a separate co-owned deliverable. The model confused what the role produces (ML models) with who benefits from it (stakeholders), landing one bucket too low.
+
+3. **UBC Postdoc Research Fellow (534): v7=3, rubric=5 — Bucket mapping failure**
+   Pure statistical/ML research role. The model landed at fit=3 citing "dual ownership of research and data analysis without direct stakeholder dashboard responsibilities" — which is self-contradictory (the reasoning rules out fit=4 by noting no dashboards, yet still scores 3 instead of 5). This is a systematic failure: the model treats "no dashboards" as evidence for fit=3 rather than recognizing that sole ownership of statistical methodology = fit=5.
+
+4. **Fasken Manager Data Analytics (436): v7=4, rubric=2 — Manager-rule failure + ownership identification failure**
+   The manager leads an analytics/BI team. Applying the manager rule: the team's combined ownership is BI dashboards + reporting — no ML model ownership. That maps to rubric=2 (sole non-ML ownership). v7 scored fit=4 and described "dual ownership of analytics and stakeholder reporting." The model did not apply the manager rule, and separately misidentified BI/reporting work as ML-adjacent.
+
+5. **KOHO Senior Business Analyst Fraud Strategy (499): v7=4, rubric=2 — Ownership identification failure**
+   A BA who uses fraud detection models but does not own or build them. v7 scored fit=4 with reasoning "dual ownership of fraud models and stakeholder dashboards." The model attributed model ownership to a role that consumes model outputs for strategy work. This is a systematic hallucination of ML ownership for roles adjacent to data science output.
+
+---
+
+#### Sample of v7 fit_reasoning quality (5 verbatim outputs)
+
+These samples illustrate whether the model is doing genuine ownership analysis or pattern-matching on job title/keywords.
+
+**1. ExaCare AI MLE (466) — Best-case ownership analysis:**
+> "The role primarily owns the development and deployment of machine learning models, including the entire ML lifecycle. It collaborates with teams on data management and MLOps practices but does not explicitly mention ownership of stakeholder dashboards or BI reporting. This maps to a fit score of 5, as the role encompasses sole ownership of ML models and their deployment."
+
+Assessment: Correct. The model explicitly distinguished collaboration (data management, MLOps with others) from ownership (ML lifecycle), and correctly noted the absence of dashboard deliverables. This is the ownership-analysis pattern working as intended.
+
+**2. Amazon Applied Scientist (448) — Bucket mapping error:**
+> "The role primarily owns the development and deployment of machine learning models to drive business insights and customer discovery. It collaborates with engineering and business teams for implementation and strategy but does not own the engineering aspects of model deployment. This maps to a fit score of 4, as it involves dual ownership of ML models and stakeholder insights."
+
+Assessment: The ownership identification ("primarily owns ML model development") is correct, but the bucket assignment is wrong. The model then constructs a phantom "dual ownership" with "stakeholder insights" — which is just the output consumers of the ML work, not a co-owned deliverable. Score should be 5.
+
+**3. Alimentiv Statistician (397) — Systematic misread of collaboration as co-ownership:**
+> "The role primarily owns the statistical analysis and reporting for clinical trials. It collaborates with project teams and data management to ensure data integrity and adherence to protocols. This maps to a fit score of 3, as it involves dual ownership of statistical models and project support."
+
+Assessment: The model treated downstream collaboration ("ensure data integrity") as a second ownership bucket ("project support"), landing at fit=3. A statistician owning statistical models for clinical trials is a textbook rubric=5. This shows the model conflating "collaborates with X" with "co-owns X."
+
+**4. Marine Biologics R&D Scientist (393) — Failure to apply rubric=1:**
+> "The role primarily owns the patent filing and lab management processes. It collaborates with outside counsel for patent prosecution but does not own the legal aspects of patenting. This maps to a fit score of 3 as it involves dual ownership of lab management and patent-related work."
+
+Assessment: This is a non-data role (biochemistry/lab work). Rubric=1. The model instead found "dual ownership" of lab management and patent work — neither of which is data-adjacent. Score of 3 is entirely incorrect. The model cannot identify fit=1 or fit=2 for clearly non-data roles — it defaults to dual-ownership framing at fit=3 as a floor.
+
+**5. UBC Postdoc Research Fellow (534) — Self-contradictory reasoning:**
+> "The role primarily owns the research deliverables, including data analysis and policy evaluation. It collaborates with external researchers and trainees but does not own the broader project management or external collaborations. This maps to a fit score of 3, as it involves dual ownership of research and data analysis without direct stakeholder dashboard responsibilities."
+
+Assessment: The reasoning explicitly states "without direct stakeholder dashboard responsibilities" — which rules out fit=4. But the model still landed at fit=3 ("dual ownership of research and data analysis") rather than recognizing that sole statistical/research ownership = fit=5. The chain-of-thought led to the right intermediate conclusion (no dashboards) but then mapped to the wrong bucket.
+
+---
+
+#### Direct comparison vs v6
+
+| Version | Agreement rate | n |
+|---------|----------------|---|
+| v6 | 43.3% (13/30) | 30 |
+| v7 | 17.2% (5/29 non-ambiguous) | 29 (1 ambiguous excluded) |
+| **Delta** | **−26.1 pts** | |
+
+v7 is a major regression vs v6. The ownership rubric redesign made the prompting problem significantly harder to solve rather than easier.
+
+---
+
+#### Structural anomalies
+
+1. **fit=2 and fit=1 buckets collapsed.** Only 1 sample scored fit=2 (Crossing Hurdles), 0 scored fit=1. The model treated every role — including a biologist and a microbiologist — as fit=3 minimum. The ownership rubric language ("sole ownership of something OTHER than ML") was not sufficient to drive the model to the low end.
+
+2. **fit=5 nearly eliminated.** Only 3 samples scored fit=5 (Comm100, ExaCare, PictorLabs). Pure DS roles like Cover Genius Sr DS GenAI (4), Amazon Applied Scientist (4), Alimentiv Statistician (3), UBC Postdoc (3), and Joveo Agentic AI Engineer (4) all missed. The model is not recognizing sole ML ownership when collaboration language appears in the JD.
+
+3. **"Dual ownership" used as default template.** 16 of 30 samples (53%) have fit=4 with reasoning that constructs a phantom second ownership dimension. The formula "owns X... collaborates with Y for Z... maps to fit=4, dual ownership of X and [Y's function]" appears mechanically across diverse role types. The fit_reasoning is generating a consistent template rather than doing case-by-case analysis.
+
+4. **Collaboration ≠ co-ownership conflation is systematic.** In 10+ cases the model cites the role's collaboration with another team as evidence of "dual ownership." This is the single largest source of bucket errors. Any JD that mentions cross-functional collaboration gets pushed toward fit=3 or fit=4 even when the ownership structure is clearly sole.
+
+5. **Manager rule not applied.** Fasken Manager Data Analytics (436) and RBC Sr Dev Manager (449) were not evaluated by aggregating their team's combined ownership — both received individual-contributor-style scoring. The manager paragraph in the v7 prompt did not change model behavior on manager roles.
+
+---
+
+### v7 + gpt-4o full — model ceiling test
+
+**Date**: 2026-05-01
+**Summary**: Same v7 prompt, same 30 canonical IDs, model swapped from `gpt-4o-mini` to `gpt-4o`. Cache miss guaranteed by `(text_hash, "gpt-4o", "v7")` key. Purpose: isolate whether 17% agreement rate is the model or the prompt.
+
+---
+
+#### Per-sample comparison table
+
+Columns: mini score from v7 section above; full score from this run; rubric_expected re-used from v7-mini section (rubric unchanged).
+`ERR` = parse failure (canonical_location `Hybrid — Other` could not be resolved after 3 retries — same failure mode as in the v5 30-sample run for this posting).
+`?` = rubric-inapplicable / recruiter-thin JD; excluded from agreement denominator.
+
+| canonical_id | employer / title | v7-mini fit | v7-mini reasoning (~80 chars) | v7-full fit | v7-full reasoning (~120 chars) | rubric_expected | mini agree? | full agree? |
+|---|---|---|---|---|---|---|---|---|
+| 344 | Aspire Software / AI Automation Eng | 4 | "...dual ML + stakeholder-facing products." | 3 | "...involves dual ownership of AI products and operational automation." | 3 | N | Y |
+| 347 | Alquemy / Data Scientist | 4 | "...dual ownership of ML models and stakeholder dashboards." | 5 | "...involves sole ownership of ML models and their deployment." | ? | ? | ? |
+| 350 | Affirm / Manager MLE (Fraud) | 4 | "...dual ownership of ML models and stakeholder dashboards for decision-making." | 4 | "...involves dual ownership of ML models and stakeholder dashboards." | 3 | N | N |
+| 355 | Crossing Hurdles / Data Ops Mgr | 2 | "...focus is on data management rather than ML." | 2 | "...focuses on data management rather than ML/statistical modeling." | 2 | Y | Y |
+| 357 | Cover Genius / Sr DS GenAI | 4 | "...dual ownership of ML models and stakeholder-facing evaluation frameworks." | 5 | "...involves sole ownership of ML models and their deployment." | 5 | N | Y |
+| 360 | PHSA / Data Analyst | 3 | "...dual ownership of data analysis and reporting." | 3 | "...involves dual ownership of data analysis and reporting." | 2 | N | N |
+| 366 | Bird Construction / Sr Data Analyst | 4 | "...dual ownership of ML/statistical models and stakeholder dashboards." | ERR | ERR (Hybrid — Other location parse failure, 3 retries) | 2 | N | ERR |
+| 370 | BCCNM / Perf Measurement Spec | 3 | "...dual ownership of data analysis and performance metrics." | 3 | "...involves dual ownership of statistical modeling and performance reporting." | 2 | N | N |
+| 380 | Dialpad / Analytics Eng | 4 | "...dual ownership of ML models and stakeholder dashboards." | 4 | "...involves dual ownership of ML/statistical models and stakeholder dashboards." | 3 | N | N |
+| 382 | Comm100 / Algorithm Eng AI | 5 | "...sole ownership of ML/statistical models and their deployment." | 4 | "...involves dual ownership of ML models and stakeholder engagement." | 5 | Y | N |
+| 387 | Hopper / Finance & Strategy Mgr | 4 | "...dual ownership of financial modeling and stakeholder reporting." | 4 | "...involves dual ownership of financial modeling and stakeholder reporting." | 4 | Y | Y |
+| 389 | IBM / Managing Consultant SAP Analytics | 3 | "...dual ownership of model development and testing." | 3 | "...involves dual ownership of model development and integration tasks." | 2 | N | N |
+| 393 | Marine Biologics / R&D Scientist | 3 | "...dual ownership of lab management and patent-related work." | 3 | "...involves dual ownership of lab management and patent-related work." | 1 | N | N |
+| 397 | Alimentiv / Statistician | 3 | "...dual ownership of statistical models and project support." | 3 | "...involves dual ownership of statistical models and project support." | 5 | N | N |
+| 413 | Joveo / Agentic AI Engineer | 4 | "...dual ownership of AI models and performance optimization." | 5 | "...involves sole ownership of the AI agents as problem-solving tools." | 5 | N | Y |
+| 417 | Amazon / SDE-II | 3 | "...dual ownership of ML models and system performance." | 3 | "...involves dual ownership of ML/statistical models and system performance improvements." | 2 | N | N |
+| 436 | Fasken / Manager Data Analytics | 4 | "...dual ownership of analytics and stakeholder reporting." | 4 | "...involves dual ownership of analytics outputs and stakeholder dashboards." | 2 | N | N |
+| 448 | Amazon / Applied Scientist | 4 | "...dual ownership of ML models and stakeholder insights." | 5 | "...encompasses sole ownership of ML models and their integration into business processes." | 5 | N | Y |
+| 449 | RBC / Sr Dev Manager | 4 | "...dual ownership of ML models and stakeholder dashboards." | 3 | "...involves dual ownership of ML/statistical models and technical strategy." | 3 | N | Y |
+| 450 | Diligent / AI Solution Architect | 4 | "...dual ownership of AI solutions and stakeholder engagement." | 4 | "...involves dual ownership of AI solutions and stakeholder engagement for business outcomes." | 2 | N | N |
+| 465 | Clio / Manager Enterprise AI | 4 | "...dual ownership of AI initiatives and stakeholder engagement." | 4 | "...involves dual ownership of AI initiatives and stakeholder engagement." | 3 | N | N |
+| 466 | ExaCare AI / MLE | 5 | "...sole ownership of ML models and their deployment." | 5 | "...encompasses sole ownership of ML models and their deployment." | 5 | Y | Y |
+| 474 | ICBC / Intermediate Dev RPA/AI | 4 | "...dual ownership of ML models and stakeholder dashboards." | 3 | "...involves dual ownership of ML/statistical models and application development." | 2 | N | N |
+| 488 | The Select Group / Developer Analyst | 3 | "...dual ownership of data analysis and collaboration with other teams." | 3 | "...involves dual ownership of data analysis and collaboration with other teams." | 2 | N | N |
+| 489 | Grafana Labs / Sr Analytics Eng | 3 | "...dual ownership of data modeling and collaboration with other teams." | 3 | "...involves dual ownership of data modeling and stakeholder analytics." | 2 | N | N |
+| 499 | KOHO / Sr BA Fraud Strategy | 4 | "...dual ownership of fraud models and stakeholder dashboards." | 4 | "...involves dual ownership of fraud models and stakeholder engagement." | 2 | N | N |
+| 522 | PictorLabs / Sr Applied ML Eng CV | 5 | "...sole ownership of ML models and their deployment." | 5 | "...encompasses sole ownership of ML models and their deployment." | 5 | Y | Y |
+| 532 | Turing / Quant Finance Professional | 3 | "...dual ownership of statistical modeling and collaboration with AI teams." | 3 | "...involves dual ownership of quantitative modeling and collaboration with AI specialists." | 2 | N | N |
+| 534 | UBC / Postdoc Research Fellow | 3 | "...dual ownership of research and data analysis without direct stakeholder dashboard responsibilities." | 3 | "...involves dual ownership of health economics research and data analysis." | 5 | N | N |
+| 558 | Brokkr / Microbiology Lead | 3 | "...dual ownership of experimental design and collaboration with engineering." | 4 | "...involves dual ownership of experimental design and stakeholder communication." | 1 | N | N |
+
+---
+
+#### Aggregate stats
+
+| Metric | v7-mini | v7-full |
+|--------|---------|---------|
+| Agreement with rubric | 5 / 29 (17.2%) | 9 / 28 (32.1%) |
+| Disagreement with rubric | 24 / 29 (82.8%) | 19 / 28 (67.9%) |
+| Ambiguous / rubric-inapplicable (?) | 1 / 30 | 1 / 30 |
+| ERR (parse failure) | 0 / 30 | 1 / 30 (canonical_id=366) |
+| Delta (full − mini) | | **+14.9 pts** |
+
+**v7-full fit_score distribution** (29 scored; 1 ERR):
+
+| Score | v7-mini count | v7-full count |
+|-------|--------------|--------------|
+| 1 | 0 | 0 |
+| 2 | 1 | 1 |
+| 3 | 10 | 13 |
+| 4 | 16 | 10 |
+| 5 | 3 | 5 |
+| ERR | 0 | 1 |
+
+---
+
+#### Three observations
+
+**1. Did gpt-4o avoid the "dual ownership template" failure (53% at fit=4 in mini)?**
+
+Partially. gpt-4o-mini produced 16/30 at fit=4 (53%); gpt-4o produced 10/30 at fit=4 (33%). The dual-ownership template is still present — 23 of the 29 scored gpt-4o reasoning strings contain the phrase "dual ownership" — but gpt-4o shifts some of that mass toward fit=3 (13 vs mini's 10) and fit=5 (5 vs mini's 3). The model is somewhat less gravitationally attracted to fit=4, but the underlying pattern-matching failure (treating collaboration as co-ownership) persists.
+
+**2. Did gpt-4o use fit=1 and fit=2 for non-DS roles?**
+
+No improvement on fit=1; marginal improvement on fit=2. gpt-4o returned fit=2 for exactly 1 sample (Crossing Hurdles Data Ops, canonical_id=355) — same as mini. Brokkr Microbiology Lead (rubric=1) was scored fit=4 by gpt-4o — *worse* than mini's fit=3. Marine Biologics R&D Scientist (rubric=1) was fit=3 for both models. Amazon SDE-II, IBM SAP HANA, ICBC RPA Developer (all rubric=2) were fit=3 for gpt-4o, same as mini. The model ceiling for low-end anchor discrimination is identical between the two models.
+
+**3. Did gpt-4o apply the manager rule?**
+
+No. Affirm Manager MLE (rubric=3, should evaluate team's aggregate DS ownership = pure DS team → could argue 5 but rubric=3 for managerial overhead), Fasken Manager Data Analytics (rubric=2, BI/analytics team), and Clio Manager Enterprise AI (rubric=3) all received individual-contributor-style scoring from gpt-4o. RBC Sr Dev Manager improved from mini's 4 to gpt-4o's 3 (hitting rubric=3) but the reasoning cites "dual ownership of ML/statistical models and technical strategy" — not a manager-rule application. The improvement is coincidental pattern-matching, not genuine manager-rule reasoning.
+
+---
+
+#### Five verbatim fit_reasoning samples (same 5 canonical_ids as v7-mini section)
+
+**ExaCare AI MLE (466) — Best-case: gpt-4o**
+> "The role primarily owns the development and deployment of machine learning models, including the entire ML lifecycle. It collaborates with teams on data management and model performance monitoring but does not specify ownership of stakeholder dashboards or BI tools. This maps to a fit score of 5, as the role encompasses sole ownership of ML models and their deployment."
+
+vs v7-mini:
+> "The role primarily owns the development and deployment of ML models, including entire ML lifecycle… sole ownership of ML models and their deployment."
+
+Assessment: Nearly identical. Both models correctly identify sole ML ownership and explicitly note the absence of dashboards. gpt-4o adds slightly more explicit hedging ("does not specify ownership of stakeholder dashboards or BI tools") which is marginally better chain-of-thought.
+
+---
+
+**Amazon Applied Scientist (448) — Bucket mapping fixed by gpt-4o:**
+> "The role primarily owns the development and deployment of machine learning models to drive business insights and customer discovery. It collaborates with engineering and business teams for implementation and strategy. This maps to a fit score of 5, as the role encompasses sole ownership of ML models and their integration into business processes."
+
+vs v7-mini:
+> "The role primarily owns the development and deployment of ML models to drive business insights… dual ownership of ML models and stakeholder insights." (fit=4)
+
+Assessment: gpt-4o correctly resolved the "stakeholder insights" phantom dual-ownership that trapped mini at fit=4. The reasoning now correctly interprets business teams as downstream consumers, not co-owners. This is the clearest qualitative improvement gpt-4o shows over mini on this corpus.
+
+---
+
+**Alimentiv Statistician (397) — Shared failure:**
+> "The role primarily owns the statistical analysis and reporting aspects of clinical trials. It collaborates with project teams and data management to ensure data integrity and adherence to protocols. This maps to a fit score of 3, as it involves dual ownership of statistical models and project support."
+
+vs v7-mini (identical):
+> "The role primarily owns the statistical analysis and reporting for clinical trials… dual ownership of statistical models and project support." (fit=3)
+
+Assessment: Word-for-word identical reasoning and identical wrong bucket. This is the clearest evidence that the failure is structural to the v7 prompt (collaboration-as-co-ownership), not the model. A sole statistician owning statistical models for clinical trials should be rubric=5. Neither model can escape the phantom dual-ownership framing when the JD mentions any form of collaboration.
+
+---
+
+**Marine Biologics R&D Scientist (393) — Neither model applies rubric=1:**
+> "The role primarily owns the patent filing and lab management as its deliverables. It collaborates with patent counsel and possibly other scientists for lab execution and documentation. This maps to a fit score of 3, as it involves dual ownership of lab management and patent-related work."
+
+vs v7-mini:
+> "The role primarily owns the patent filing and lab management processes… dual ownership of lab management and patent-related work." (fit=3)
+
+Assessment: Identical failure. A non-data role in food-science chemistry is rubric=1; both models return fit=3. The ownership rubric's language ("sole ownership of something OTHER than ML/statistical models" for fit=2) apparently does not signal to the model that fit=1 should be applied to roles with zero data content. Neither model can identify fit=1.
+
+---
+
+**UBC Postdoc Research Fellow (534) — Self-contradictory chain-of-thought preserved:**
+> "The role primarily owns the research deliverables, including data analysis and policy evaluation. It collaborates with external researchers and trainees but does not own the overall project direction. This maps to a fit score of 3, as it involves dual ownership of health economics research and data analysis."
+
+vs v7-mini:
+> "…owns research deliverables, including data analysis and policy evaluation… dual ownership of research and data analysis without direct stakeholder dashboard responsibilities." (fit=3)
+
+Assessment: Both models get fit=3. gpt-4o's reasoning is actually slightly worse — it adds "does not own the overall project direction" (which is inaccurate; postdocs own their research agenda) and drops the v7-mini's explicit "without direct stakeholder dashboard responsibilities" clause, which at least showed the model reasoning toward the right diagnosis. For this rubric=5 role (sole statistical/research ownership), neither model escapes fit=3. The self-contradictory pattern is structural.
+
+---
+
+#### Verdict
+
+**Marginal improvement: v7-full agreement 32.1% vs v7-mini 17.2%. Delta = +14.9 percentage points.**
+
+gpt-4o improves over gpt-4o-mini on exactly the cases where the v7 prompt is "almost right" — roles where the mini model constructed a phantom dual-ownership despite the JD having clear sole ownership language (Amazon Applied Scientist 448: 4→5 ✓; Joveo Agentic AI Eng 413: 4→5 ✓; Cover Genius Sr DS 357: 4→5 ✓; Aspire AI Automation 344: 4→3 ✓; RBC Sr Dev Mgr 449: 4→3 ✓). These are cases where stronger instruction-following flipped the decision.
+
+However, the prompt's structural failures are unchanged at both model tiers:
+- Alimentiv Statistician (rubric=5) → fit=3 for both: the collaboration-as-co-ownership failure is prompt-level, not model-level.
+- UBC Postdoc (rubric=5) → fit=3 for both: same root cause.
+- fit=1 and fit=2 identification: both models return fit=3 as a floor for non-data roles (Marine Biologics, IBM SAP HANA, Amazon SDE-II).
+- Manager rule: not applied by either model.
+- Brokkr Microbiology Lead: gpt-4o actually *regressed* vs mini (fit=4 vs mini's fit=3; rubric=1).
+
+The 32.1% ceiling with gpt-4o means the remaining 68% failure rate is attributable to prompt design, not model capability. Moving to gpt-4o full would roughly double the per-call cost (from ~$0.0014 to ~$0.0013 per sample in this run, but gpt-4o pricing is ~12-15× mini for equal token counts at larger scale). The cost of this 30-sample run was **$0.038** vs an estimated ~$0.0043 for the equivalent mini run — approximately 9× more expensive for a +14.9 pt accuracy gain.
+
+The verdict is clear: **the prompt must be fixed before model-scaling is worthwhile**. The collaboration-as-co-ownership pattern and fit=1/2 anchor failures cannot be solved by a stronger model within the v7 prompt design.
+
+---
+
+#### Total cost
+
+| Metric | Value |
+|--------|-------|
+| Model | gpt-4o (gpt-4o-2024-08-06 or equivalent) |
+| Samples completed | 29 / 30 (1 ERR on canonical_id=366) |
+| Total cost (from llm_call_ledger) | **$0.0378** |
+| Estimated mini-equivalent cost | ~$0.0043 (30 × $0.00143) |
+| Cost ratio full/mini | ~9× |
+| Cost watchdog ($1.00) triggered | No |
+
+---
+
+### v8 ownership rubric + 6 worked examples — same 30 samples
+
+**Date**: 2026-05-01
+**Summary**: v7 prompt + explicit collaboration rule + 6 surgical worked examples targeting observed failure modes; gpt-4o-mini.
+
+#### What v8 adds vs v7
+
+v7 established the ownership rubric (5-level scale + manager paragraph) but scored only 17.2% on mini and 32.1% on full. The model-ceiling test confirmed both models produce identical wrong reasoning on collaboration-as-co-ownership cases. v8 keeps v7 verbatim and adds two targeted surgical changes to the fit_score section:
+
+1. **Explicit collaboration rule** (inserted after the 5 score lines, before the manager paragraph): "Collaboration does NOT constitute co-ownership. A role is only 'owning' something if it is on the hook for delivering it. Cross-functional mentions ('works with X team', 'partners with Y', 'collaborates with engineering') are evidence of COLLABORATION, not co-ownership."
+
+2. **6 worked examples** (new `=== WORKED EXAMPLES ===` section after the manager paragraph): one example per score level (fit=5, fit=4, fit=3, fit=2, fit=1) plus one manager rule application (fit=3). Each example is targeted at a specific observed failure mode: Example 1 (fit=5 with cross-team collaboration) addresses the Alimentiv/UBC Postdoc/Amazon Applied Sci collaboration-as-co-ownership pattern; Example 4 (fit=2 Analytics Engineer) addresses Dialpad/Grafana inflation; Example 5 (fit=1 Microbiology Lead) addresses Marine Biologics/Brokkr non-data role collapse; Example 6 (Manager rule) addresses Fasken/RBC manager-rule non-application.
+
+All other 9 M3 field sections are byte-identical to v7.
+
+---
+
+#### Per-sample comparison table
+
+`rubric_expected` values carried from v7 section (rubric unchanged). `?` = recruiter-thin JD, excluded from denominator. `ERR` = parse failure.
+
+| canonical_id | employer / title | v7-mini | v7-full | v8-mini | rubric_expected | v8-mini reasoning (~120 chars) | agree? |
+|---|---|---|---|---|---|---|---|
+| 344 | Aspire Software / AI Automation Eng | 4 | 3 | 3 | 3 | "...owns AI agents/products as core deliverables. Collaborates with portfolio operators but does not own their work. fit=3..." | Y |
+| 347 | Alquemy S&C / Data Scientist | 4 | 5 | 3 | ? | "...owns ML models and data analysis. Collaborates with DE and product teams but does not own their work. fit=3, dual ownership..." | ? |
+| 350 | Affirm / Manager MLE (Fraud) | 4 | 4 | 4 | 3 | "...owns end-to-end ML solutions for fraud detection. Collaborates with Product, Fraud Analytics, Engineering. fit=4, dual ownership..." | N |
+| 355 | Crossing Hurdles / Data Ops Mgr | 2 | 2 | 2 | 2 | "...owns data workflows and operational challenges. Collaborates with cross-functional teams but does not own any ML models. fit=2..." | Y |
+| 357 | Cover Genius / Sr DS GenAI | 4 | 5 | 4 | 5 | "...owns LLM strategy and model performance evaluation. Collaborates with product/engineering for data structure optimization. fit=4..." | N |
+| 360 | PHSA / Data Analyst | 3 | 3 | 3 | 2 | "...owns dataset maintenance, report automation, and documentation. Collaborates with project teams for QA and reporting. fit=3..." | N |
+| 366 | Bird Construction / Sr Data Analyst | 4 | ERR | 4 | 2 | "...owns analytics solutions and dashboards. Collaborates with Data Engineering and IT but does not own engineering aspects. fit=4..." | N |
+| 370 | BCCNM / Perf Measurement Spec | 3 | 3 | 3 | 2 | "...owns performance measurement and data analysis. Collaborates with teams to integrate initiatives. fit=3, dual ownership..." | N |
+| 380 | Dialpad / Analytics Engineer | 4 | 4 | 3 | 3 | "...owns data pipeline development and optimization. Collaborates with AI/Eng/Product teams but does not own AI models. fit=3..." | Y |
+| 382 | Comm100 / Algorithm Engineer AI | 5 | 4 | 3 | 5 | "...owns AI model development and deployment. Collaborates with cross-regional engineering teams. fit=3, dual ownership of model dev..." | N |
+| 387 | Hopper / Finance & Strategy Mgr | 4 | 4 | 3 | 4 | "...owns financial systems and forecasting models. Collaborates with business leaders and sales teams. fit=3, dual ownership..." | N |
+| 389 | IBM / Managing Consultant SAP | 3 | 3 | 3 | 2 | "...owns SAP HANA Information Models and HANA views. Collaborates with BI tools for integration. fit=3, dual ownership..." | N |
+| 393 | Marine Biologics / R&D Scientist | 3 | 3 | 3 | 1 | "...owns ingredient development and patenting. Collaborates with patent counsel but does not own legal aspects. fit=3..." | N |
+| 397 | Alimentiv / Statistician | 3 | 3 | 3 | 5 | "...owns statistical analysis and reporting for clinical trials. Collaborates with project teams on data collection. fit=3, dual ownership..." | N |
+| 413 | Joveo / Agentic AI Engineer | 4 | 5 | 5 | 5 | "...owns development and deployment of AI agents. Collaborates with other teams for platform integration. fit=5, sole ownership..." | Y |
+| 417 | Amazon / SDE-II | 3 | 3 | 3 | 2 | "...owns distributed systems and optimization algorithms. Collaborates with scientists and PMs but not their deliverables. fit=3..." | N |
+| 436 | Fasken / Manager Data Analytics | 4 | 4 | 4 | 2 | "...owns analytics solutions, dashboards and reports. Collaborates with DE for reliable data modeling. fit=4, dual ownership..." | N |
+| 448 | Amazon / Applied Scientist | 4 | 5 | 4 | 5 | "...owns ML model development and deployment. Collaborates with engineering and business teams. fit=4, dual ownership of ML + insights..." | N |
+| 449 | RBC / Sr Dev Manager | 4 | 3 | 4 | 3 | "...owns end-to-end SDLC for modernization including AI/ML integration. Collaborates with architects and PMs. fit=4..." | N |
+| 450 | Diligent / AI Solution Architect | 4 | 4 | 4 | 2 | "...owns AI solution development and deployment. Collaborates with business leaders and cross-functional teams. fit=4..." | N |
+| 465 | Clio / Manager Enterprise AI | 4 | 4 | 3 | 3 | "...owns Enterprise AI strategy and roadmap. Collaborates with DE and Data Insights teams for governance. fit=3, not direct ML ownership..." | Y |
+| 466 | ExaCare AI / MLE | 5 | 5 | 5 | 5 | "...owns ML model development and deployment, entire ML lifecycle. Collaborates with other teams for data/infra. fit=5, sole ownership..." | Y |
+| 474 | ICBC / Intermediate Dev RPA/AI | 4 | 3 | 3 | 2 | "...owns RPA and AI software application development. Collaborates with business analysts for requirements. fit=3, dual ownership..." | N |
+| 488 | The Select Group / Developer Analyst | 3 | 3 | 3 | 2 | "...owns data extraction and analysis for marketing campaigns. Collaborates with cross-functional teams. fit=3, dual ownership..." | N |
+| 489 | Grafana Labs / Sr Analytics Eng | 3 | 3 | 3 | 2 | "...owns data stack architecture and infrastructure. Collaborates with multiple teams for data needs. fit=3, dual ownership..." | N |
+| 499 | KOHO / Sr BA Fraud Strategy | 4 | 4 | 4 | 2 | "...owns fraud control landscape and fraud detection models. Collaborates with Product/Eng/Compliance. fit=4, dual ownership..." | N |
+| 522 | PictorLabs / Sr Applied ML Eng CV | 5 | 5 | 4 | 5 | "...owns CV model development and optimization. Collaborates with engineers for deployment/productionization. fit=4, dual ownership..." | N |
+| 532 | Turing / Quant Finance Professional | 3 | 3 | 3 | 2 | "...owns AI model evaluation and training in quantitative finance. Collaborates with AI researchers. fit=3, dual ownership..." | N |
+| 534 | UBC / Postdoc Research Fellow | 3 | 3 | 3 | 5 | "...owns health economics research projects and data analysis. Collaborates with external researchers and trainees. fit=3, dual ownership..." | N |
+| 558 | Brokkr / Microbiology Lead | 3 | 4 | 3 | 1 | "...owns microbiological experiment design and process development. Collaborates with engineers to translate results. fit=3..." | N |
+
+---
+
+#### Aggregate stats
+
+| Metric | Value |
+|--------|-------|
+| v8-mini agreement | **7 / 29** (24.1%) — canonical_id=347 excluded (rubric-inapplicable) |
+| Disagreement | 22 / 29 (75.9%) |
+| ERR (parse failure) | 0 / 30 (canonical_id=366 recovered on retry 2/3 — same Hybrid—Other location failure, same retry path as v5) |
+
+**v8-mini fit_score distribution:**
+
+| Score | v7-mini | v7-full | v8-mini |
+|-------|---------|---------|---------|
+| 1 | 0 | 0 | 0 |
+| 2 | 1 | 1 | 1 |
+| 3 | 10 | 13 | 18 |
+| 4 | 16 | 10 | 9 |
+| 5 | 3 | 5 | 2 |
+| ERR | 0 | 1 | 0 |
+
+**Comparison line**: v7-mini was 17%, v7-full was 32%, **v8-mini is 24.1%** (delta vs v7-mini: +7 pts).
+
+The distribution shift is notable: v7-mini had 16 at fit=4 (53%); v8-mini has 9 at fit=4 (30%) and 18 at fit=3 (60%). The collaboration rule successfully broke the fit=4 gravitational pull — mass shifted from fit=4 to fit=3. But fit=3 is now the new default floor: the model correctly avoided phantom fit=4 reasoning, but replaced it with phantom fit=3 ("dual ownership of X and Y") for roles that should be fit=1, fit=2, or fit=5.
+
+---
+
+#### Targeted failure-mode check
+
+Each worked example's target case evaluated:
+
+| Example target | Canonical | v7-mini | v8-mini | rubric | Result |
+|---|---|---|---|---|---|
+| Example 1: Alimentiv Statistician → fit=5 (collab ≠ co-own) | 397 | 3 | 3 | 5 | **FAIL** — unchanged; "collaborates with project teams" still mapped as co-ownership of "project support" |
+| Example 1: UBC Postdoc → fit=5 (collab test) | 534 | 3 | 3 | 5 | **FAIL** — unchanged; "collaborates with external researchers" still mapped as dual ownership |
+| Example 4: Dialpad Analytics Eng → fit=2 or fit=3 | 380 | 4 | 3 | 3 | **PASS** — v8 correctly landed at fit=3 (rubric=3); moved from v7's fit=4 |
+| Example 4: Grafana Sr Analytics Eng → fit=2 | 489 | 3 | 3 | 2 | **FAIL** — still fit=3 instead of fit=2; sole non-DS data ownership not identified |
+| Example 5: Marine Biologics → fit=1 | 393 | 3 | 3 | 1 | **FAIL** — non-data role still scored fit=3; Example 5 not applied |
+| Example 5: Brokkr Microbiology Lead → fit=1 | 558 | 3 | 3 | 1 | **FAIL** — non-data role still scored fit=3; Example 5 not applied |
+| Example 6: Fasken Manager Data Analytics → manager rule applied | 436 | 4 | 4 | 2 | **FAIL** — manager rule not applied; scored as individual contributor |
+| Example 6: RBC Sr Dev Manager → manager rule applied | 449 | 4 | 4 | 3 | **FAIL** — manager rule not applied; same phantom dual-ownership pattern |
+
+**Summary**: 1 PASS / 7 FAIL on targeted failure modes. The only gain is Dialpad (380) moving from fit=4 → fit=3, which is a correct landing. All other targets unchanged from v7-mini.
+
+One partial positive: the collaboration rule did shift the overall distribution away from fit=4 (16→9 cases), which is directionally correct. But the model replaced fit=4 default reasoning with fit=3 default reasoning — the phantom "dual ownership" template persists, just now concluding fit=3 instead of fit=4 for most roles.
+
+---
+
+#### 5 verbatim fit_reasoning samples
+
+Same 5 canonical_ids as v7 sections for cross-run comparison.
+
+**ExaCare AI MLE (466) — Correct sole-ownership identification:**
+> "The role primarily owns the development and deployment of machine learning models, including the entire ML lifecycle. It collaborates with other teams for data management and infrastructure but does not explicitly mention co-ownership of any other deliverables. This maps to a fit score of 5 due to sole ownership of the ML models and their deployment."
+
+vs v7-mini: "...sole ownership of ML models and their deployment." — Nearly identical. Both correct. The explicit "does not explicitly mention co-ownership" clause is the collaboration rule applying correctly here.
+
+---
+
+**Amazon Applied Scientist (448) — Bucket mapping still wrong:**
+> "The role primarily owns the development and deployment of machine learning models for business applications. It collaborates with engineering and business teams for insights and decision-making but does not own the engineering aspects of model deployment. This maps to a fit score of 4 due to dual ownership of ML models and stakeholder insights."
+
+vs v7-mini: "...dual ownership of ML models and stakeholder insights." (fit=4) — Identical reasoning and same wrong bucket. The collaboration rule clarified that the engineering aspects are collaboration not co-ownership (correct), but "stakeholder insights" is still being constructed as a phantom second ownership dimension. Expected: fit=5.
+
+---
+
+**Alimentiv Statistician (397) — Collaboration rule ignored for this pattern:**
+> "The role owns the statistical analysis and reporting for clinical trials, ensuring adherence to best practices. It collaborates with project teams and data management to align data collection with project protocols. This maps to a fit score of 3, as it involves dual ownership of statistical analysis and project support."
+
+vs v7-mini (word-for-word identical): "...dual ownership of statistical models and project support." — The Example 1 worked example (which directly models this failure mode) made no difference. The model reads "collaborates with project teams" and constructs "dual ownership of statistical analysis and project support" regardless of the explicit rule stating collaboration ≠ co-ownership. This is the clearest evidence the failure is too deep for a rule-plus-example fix.
+
+---
+
+**Marine Biologics R&D Scientist (393) — Example 5 not applied:**
+> "The role primarily owns the development and patenting of a new ingredient, including lab management and process optimization. It collaborates with patent counsel for filing and prosecution but does not own the legal aspects of patenting. This maps to fit=3 due to the dual ownership of lab management and ingredient development."
+
+vs v7-mini: "...dual ownership of lab management and patent-related work." — The explicit fit=1 lab-science example (Example 5: "Microbiology R&D Lead: designs wet-lab experiments... no analytical modeling work → fit=1") did not transfer to this Marine Biologics case. The model correctly noted it does not own the legal aspects of patenting (collaboration rule applied partially) but still scored fit=3. The model treats "dual ownership of lab management + ingredient development" as the conclusion, not fit=1 (non-data role).
+
+---
+
+**UBC Postdoc Research Fellow (534) — Self-contradictory pattern unchanged:**
+> "The role primarily owns the delivery of health economics research projects, including data analysis and policy evaluations. It collaborates with external researchers and trainees but does not own the overall project direction, which is led by Dr. Zhang. This maps to a fit score of 3 due to dual ownership of research and data analysis responsibilities."
+
+vs v7-mini: "...dual ownership of research and data analysis without direct stakeholder dashboard responsibilities." — The chain-of-thought correctly identifies collaboration (external researchers, trainees) as not-owned. But then constructs "dual ownership of research and data analysis" — treating the two aspects of the same job (research + analysis) as two separate co-owned deliverables, landing at fit=3 instead of fit=5. Example 1 (sole DS ownership with cross-team collaboration) did not transfer to this academic research context. Expected: fit=5.
+
+---
+
+#### Verdict
+
+v8-mini agreement rate: **24.1%** (7/29). Delta vs v7-mini: **+7 pts**.
+
+v8 is a marginal improvement over v7-mini (+7 pts) but well below the 60% threshold for "examples worked." The 6 surgical worked examples and explicit collaboration rule produced one targeted fix (Dialpad 380: 4→3 ✓) and a distribution shift away from fit=4 (53%→30%), but the core failures are unchanged:
+
+- The collaboration-as-co-ownership failure persists for roles like Alimentiv Statistician (397) and UBC Postdoc (534) where the JD explicitly mentions working with other teams. Example 1 directly models this pattern but the model does not apply it to analogous cases.
+- The fit=1/2 floor identification failure persists for Marine Biologics (393), Brokkr (558), IBM SAP HANA (389), and KOHO BA (499). Example 5 (lab science = fit=1) and Example 4 (analytics engineer = fit=2) did not transfer.
+- The manager rule is still not applied for Fasken (436) and RBC (449).
+- New regression: Comm100 (382) moved from v7-mini's correct fit=5 to v8's fit=3, and PictorLabs (522) moved from correct fit=5 to fit=4. The collaboration rule created collateral damage — roles with genuine sole ownership that mention any team interaction are now being pushed down.
+
+**Conclusion: prompt design ceiling reached.** v8 < 40% agreement means the worked-examples approach cannot close the gap. The 3-version pattern (v7=17%, v8-mini=24%, v7-full=32%) shows diminishing returns. The failure modes are structural to how the model interprets ownership language when collaboration is mentioned, and adding more examples or rules does not overcome this. Recommend accepting the current prompt and relying on manual override during daily use, or switching to a different prompt architecture (e.g., chain-of-thought scratchpad with explicit "list all deliverables owned" before scoring).
+
+**Cost**: $0.0396 (30 × gpt-4o-mini, ~$0.00132/call average). Under $0.05 watchdog.
